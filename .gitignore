@@ -18,7 +18,9 @@ out
 firestore-debug.log
 ui-debug.log
 firebase-debug.log
-*.json
+# *.json - changed to specific ignores to allow package.json
+billflow-*.json
+service-account.json
 
 # OS files
 .DS_Store
