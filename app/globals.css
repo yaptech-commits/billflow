@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { box-sizing: border-box; }
+  body { font-family: var(--font-inter), sans-serif; }
+  h1, h2, h3, h4 { font-family: var(--font-grotesk), sans-serif; }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-gold text-black font-semibold text-sm px-4 py-2 rounded-lg hover:bg-yellow-400 transition-all duration-150 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-ghost {
+    @apply bg-border text-surface font-medium text-sm px-4 py-2 rounded-lg hover:bg-[#2a2a3e] transition-all duration-150 flex items-center gap-1.5;
+  }
+  .btn-danger {
+    @apply bg-red/10 text-red font-medium text-sm px-4 py-2 rounded-lg hover:bg-red/20 transition-all;
+  }
+  .card {
+    @apply bg-card border border-border rounded-xl p-5;
+  }
+  .input {
+    @apply w-full bg-deep border border-border rounded-lg px-3.5 py-2.5 text-sm text-surface placeholder:text-muted focus:outline-none focus:border-gold transition-colors;
+  }
+  .label {
+    @apply block text-[11px] font-medium text-muted uppercase tracking-wide mb-1.5;
+  }
+  .badge-paid   { @apply inline-flex items-center gap-1 text-green bg-green/10 text-[11px] font-semibold px-2.5 py-0.5 rounded-full; }
+  .badge-pending { @apply inline-flex items-center gap-1 text-gold bg-gold/10 text-[11px] font-semibold px-2.5 py-0.5 rounded-full; }
+  .badge-overdue { @apply inline-flex items-center gap-1 text-red bg-red/10 text-[11px] font-semibold px-2.5 py-0.5 rounded-full; }
+  .badge-draft  { @apply inline-flex items-center gap-1 text-muted bg-border text-[11px] font-semibold px-2.5 py-0.5 rounded-full; }
+}
+
+/* Branded document printing (POS receipts, invoices): hide the app chrome
+   and only render the branded document itself. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #pos-receipt, #pos-receipt *,
+  #branded-doc, #branded-doc * {
+    visibility: visible;
+  }
+  #pos-receipt, #branded-doc {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    color: #000;
+  }
+}

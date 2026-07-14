@@ -1,0 +1,141 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helpers ────────────────────────────────────────────────────────────
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Firestore rules can't run where() queries, only direct doc lookups
+    // (get()/exists() by path). So business membership for staff is checked
+    // via a per-uid index doc at /staffIndex/{uid} -> { businessId, role, status },
+    // which lib/db.ts keeps in sync whenever a staff invite is claimed or removed.
+    //
+    // A user may access a businessId-scoped document if EITHER:
+    //   (a) businessId == request.auth.uid  (they are the owner), OR
+    //   (b) /staffIndex/{their uid} exists, is "active", and its businessId matches.
+    function isOwner(businessId) {
+      return request.auth.uid == businessId;
+    }
+
+    function staffIndexDoc() {
+      return get(/databases/$(database)/documents/staffIndex/$(request.auth.uid));
+    }
+
+    function isActiveStaffFor(businessId) {
+      return exists(/databases/$(database)/documents/staffIndex/$(request.auth.uid))
+        && staffIndexDoc().data.businessId == businessId
+        && staffIndexDoc().data.status == 'active';
+    }
+
+    function isBusinessMember(businessId) {
+      return isSignedIn() && (isOwner(businessId) || isActiveStaffFor(businessId));
+    }
+
+    function isBusinessOwner(businessId) {
+      return isSignedIn() && isOwner(businessId);
+    }
+
+    // ── staffIndex ────────────────────────────────────────────────────────
+    // One doc per staff user, keyed by their uid: { businessId, role, status }.
+    // Kept in sync by the app whenever a staff invite is claimed (see note
+    // in README / TODO — resolveBusinessContext should upsert this doc).
+    // Only the business owner can write it; a staff member may read their own.
+    match /staffIndex/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || isBusinessOwner(resource.data.businessId));
+      allow write: if isSignedIn() && isBusinessOwner(request.resource.data.businessId);
+    }
+
+    // ── staff (invites/roster) ───────────────────────────────────────────
+    match /staff/{staffId} {
+      allow read: if isSignedIn() && (
+        isBusinessMember(resource.data.businessId) ||
+        resource.data.email == request.auth.token.email
+      );
+      allow create: if isSignedIn() && isBusinessOwner(request.resource.data.businessId);
+      // Allow a pending invite to be claimed by the invited user (sets staffUid/status),
+      // or the owner to update/remove staff.
+      allow update: if isSignedIn() && (
+        isBusinessOwner(resource.data.businessId) ||
+        (resource.data.status == 'pending' && resource.data.email == request.auth.token.email)
+      );
+      allow delete: if isSignedIn() && isBusinessOwner(resource.data.businessId);
+    }
+
+    // ── businessId-scoped collections shared by the whole business ─────────
+    match /products/{id} {
+      allow read: if isBusinessMember(resource.data.businessId);
+      allow create: if isBusinessMember(request.resource.data.businessId);
+      allow update, delete: if isBusinessMember(resource.data.businessId);
+    }
+
+    match /clients/{id} {
+      allow read: if isBusinessMember(resource.data.businessId);
+      allow create: if isBusinessMember(request.resource.data.businessId);
+      allow update, delete: if isBusinessMember(resource.data.businessId);
+    }
+
+    match /invoices/{id} {
+      allow read: if isBusinessMember(resource.data.businessId);
+      allow create: if isBusinessMember(request.resource.data.businessId);
+      allow update, delete: if isBusinessMember(resource.data.businessId);
+    }
+
+    match /suppliers/{id} {
+      allow read: if isBusinessMember(resource.data.businessId);
+      allow create: if isBusinessMember(request.resource.data.businessId);
+      allow update, delete: if isBusinessMember(resource.data.businessId);
+    }
+
+    match /purchaseOrders/{id} {
+      allow read: if isBusinessMember(resource.data.businessId);
+      allow create: if isBusinessMember(request.resource.data.businessId);
+      allow update, delete: if isBusinessMember(resource.data.businessId);
+    }
+
+    match /creditNotes/{id} {
+      allow read: if isBusinessMember(resource.data.businessId);
+      allow create: if isBusinessMember(request.resource.data.businessId);
+      allow update, delete: if isBusinessMember(resource.data.businessId);
+    }
+
+    // Invoice/receipt branding. Readable by any business member (staff need
+    // it to render receipts too), writable only by the owner.
+    match /businessProfiles/{businessId} {
+      allow read: if isBusinessMember(businessId);
+      allow write: if isBusinessOwner(businessId);
+    }
+
+    // Append-only audit log. Members can read their business's history;
+    // writes only ever happen as part of stock-changing transactions
+    // (invoice creation, PO receiving, manual adjustment, credit notes),
+    // so creates are allowed but updates/deletes are not — the log should
+    // never be edited after the fact.
+    match /stockMovements/{id} {
+      allow read: if isBusinessMember(resource.data.businessId);
+      allow create: if isBusinessMember(request.resource.data.businessId);
+      allow update, delete: if false;
+    }
+
+    // ── businessId-scoped collections shared by the whole business ─────────
+    match /vouchers/{id} {
+      allow read: if isBusinessMember(resource.data.businessId);
+      allow create: if isBusinessMember(request.resource.data.businessId);
+      allow update, delete: if isBusinessMember(resource.data.businessId);
+    }
+
+    match /payments/{id} {
+      allow read: if isBusinessMember(resource.data.businessId);
+      allow create: if isBusinessMember(request.resource.data.businessId);
+      allow update, delete: if isBusinessMember(resource.data.businessId);
+    }
+
+    // Deny everything else by default.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

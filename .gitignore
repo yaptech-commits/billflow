@@ -1,0 +1,25 @@
+# Dependencies
+node_modules
+.pnpm-debug.log*
+
+# Next.js
+.next
+out
+
+# Environment Variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Firebase
+.firebase
+firestore-debug.log
+ui-debug.log
+firebase-debug.log
+*.json
+
+# OS files
+.DS_Store
+Thumbs.db

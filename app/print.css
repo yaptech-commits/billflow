@@ -1,0 +1,31 @@
+/* Print-only styles for thermal receipt printing (80mm paper) */
+@media print {
+  /* Hide everything except the receipt */
+  body > *:not(#print-area) {
+    display: none !important;
+  }
+
+  #print-area {
+    display: block !important;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 80mm;
+    background: white;
+    color: black;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    padding: 2mm;
+  }
+
+  #print-area * {
+    color: black !important;
+    background: white !important;
+    border-color: black !important;
+  }
+
+  @page {
+    size: 80mm auto;
+    margin: 2mm;
+  }
+}
