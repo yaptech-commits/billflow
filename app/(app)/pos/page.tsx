@@ -57,13 +57,20 @@ export default function PosPage() {
   const load = async () => {
     if (!businessId) return;
     try {
+      // Use a simpler query for POS to avoid index issues
       const [productData, clientData, profileData] = await Promise.all([
         getProducts(businessId),
         getClients(businessId),
         getBusinessProfile(businessId),
       ]);
-      console.log("POS DEBUG: Products loaded:", productData.length);
-      setProducts(productData);
+      
+      // Sort in memory instead of using Firestore orderBy to avoid composite index requirement
+      const sortedProducts = [...productData].sort((a, b) => 
+        (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0)
+      );
+
+      console.log("POS DEBUG: Products loaded and sorted:", sortedProducts.length);
+      setProducts(sortedProducts);
       setClients(clientData);
       setProfile(profileData);
 
@@ -74,6 +81,7 @@ export default function PosPage() {
       }
     } catch (err) {
       console.error("POS DEBUG: Load error:", err);
+      toast.error("Failed to load products. Check console.");
     } finally {
       setLoading(false);
     }
