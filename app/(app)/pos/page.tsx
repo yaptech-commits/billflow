@@ -56,22 +56,27 @@ export default function PosPage() {
 
   const load = async () => {
     if (!businessId) return;
-    const [productData, clientData, profileData] = await Promise.all([
-      getProducts(businessId),
-      getClients(businessId),
-      getBusinessProfile(businessId),
-    ]);
-    setProducts(productData);
-    setClients(clientData);
-    setProfile(profileData);
+    try {
+      const [productData, clientData, profileData] = await Promise.all([
+        getProducts(businessId),
+        getClients(businessId),
+        getBusinessProfile(businessId),
+      ]);
+      console.log("POS DEBUG: Products loaded:", productData.length);
+      setProducts(productData);
+      setClients(clientData);
+      setProfile(profileData);
 
-    if (user) {
-      const shift = await getActiveShift(businessId, user.uid);
-      setActiveShift(shift);
-      if (!shift) setShiftModalOpen(true);
+      if (user) {
+        const shift = await getActiveShift(businessId, user.uid);
+        setActiveShift(shift);
+        if (!shift) setShiftModalOpen(true);
+      }
+    } catch (err) {
+      console.error("POS DEBUG: Load error:", err);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   useEffect(() => { load(); }, [user, businessId]);
@@ -304,13 +309,17 @@ export default function PosPage() {
                 key={p.id}
                 onClick={() => addToCart(p)}
                 disabled={p.stockQty <= 0}
-                className="card text-left p-3.5 hover:border-gold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className={`card text-left p-3.5 hover:border-gold transition-colors ${
+                  p.stockQty <= 0 ? "opacity-50 border-red/20" : ""
+                }`}
               >
                 <p className="text-sm font-medium text-surface truncate">{p.name}</p>
                 <p className="text-xs text-muted mt-0.5">{p.sku || "—"}</p>
                 <div className="flex items-center justify-between mt-2">
                   <span className="font-grotesk font-semibold text-gold">{formatMoney(p.price)}</span>
-                  <span className="text-[11px] text-muted">{p.stockQty} in stock</span>
+                  <span className={`text-[11px] ${p.stockQty <= 0 ? "text-red font-bold" : "text-muted"}`}>
+                    {p.stockQty <= 0 ? "OUT OF STOCK" : `${p.stockQty} in stock`}
+                  </span>
                 </div>
               </button>
             ))}
