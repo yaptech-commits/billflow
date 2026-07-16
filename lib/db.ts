@@ -1007,7 +1007,18 @@ export async function getStockMovements(businessId: string, opts?: { productId?:
 // ─── BUSINESS PROFILE (INVOICE / RECEIPT BRANDING) ────────────────────────────
 
 /** businessId doubles as the document ID here — one profile per business, fetched directly by key. */
-export async function getBusinessProfile(businessId: string): Promise<BusinessProfile | null> {
+export async function getBusinessProfile(businessId: string, role?: string): Promise<BusinessProfile | null> {
+  if (role === "superadmin" && (businessId === "admin" || !businessId)) {
+    return {
+      businessId: "admin",
+      businessName: "Super Admin Portal",
+      email: "admin@billflow.com",
+      currency: "GHS",
+      taxRate: 0,
+      taxLabel: "VAT",
+      taxInclusive: false
+    } as BusinessProfile;
+  }
   const snap = await getDoc(doc(db, "businessProfiles", businessId));
   return snap.exists() ? (snap.data() as BusinessProfile) : null;
 }
