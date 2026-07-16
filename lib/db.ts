@@ -642,8 +642,16 @@ export async function createProduct(data: Omit<Product, "id">) {
 }
 
 export async function getProducts(businessId: string): Promise<Product[]> {
-  const snap = await getDocs(businessQuery("products", businessId));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Product));
+  console.log("DEBUG: Fetching products for businessId:", businessId);
+  try {
+    const q = businessQuery("products", businessId);
+    const snap = await getDocs(q);
+    console.log("DEBUG: Found products count:", snap.docs.length);
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Product));
+  } catch (error) {
+    console.error("DEBUG: Error fetching products:", error);
+    throw error;
+  }
 }
 
 export async function updateProduct(id: string, data: Partial<Product>) {
