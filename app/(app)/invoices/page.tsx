@@ -42,7 +42,7 @@ export default function InvoicesPage() {
   const [saving, setSaving] = useState(false);
 
   const [form, setForm] = useState({
-    clientId: "", dueDate: "", notes: "", paymentMethod: "momo" as "momo" | "card",
+    clientId: "", dueDate: "", notes: "", paymentMethod: "momo" as PaymentMethod,
   });
   const [lines, setLines] = useState<DraftLine[]>([emptyLine()]);
 
@@ -470,8 +470,8 @@ export default function InvoicesPage() {
             </div>
             <div>
               <label className="label">Method</label>
-              <div className="grid grid-cols-2 gap-3">
-                {(["momo", "card"] as const).map(m => (
+              <div className="grid grid-cols-3 gap-3">
+                {(["momo", "card", "cash"] as const).map(m => (
                   <button
                     key={m}
                     onClick={() => setPayMethod(m)}
@@ -479,8 +479,8 @@ export default function InvoicesPage() {
                       payMethod === m ? "border-gold bg-gold/5" : "border-border hover:border-muted"
                     }`}
                   >
-                    <div className="text-2xl mb-1">{m === "momo" ? "📱" : "💳"}</div>
-                    <div className="text-xs font-semibold text-surface">{m === "momo" ? "Mobile Money" : "Card Payment"}</div>
+                    <div className="text-2xl mb-1">{m === "momo" ? "📱" : m === "card" ? "💳" : "💵"}</div>
+                    <div className="text-xs font-semibold text-surface">{m === "momo" ? "Mobile Money" : m === "card" ? "Card" : "Cash"}</div>
                   </button>
                 ))}
               </div>

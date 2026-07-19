@@ -74,7 +74,7 @@ export default function BrandedDocument({
         <p className="text-xs text-muted">Billed to</p>
         <p className="text-surface">{clientName}</p>
         {meta && <p className="text-xs text-muted mt-1">{meta}</p>}
-        {paymentMethod && <p className="text-xs text-muted">Payment: {paymentMethod === "momo" ? "Mobile Money" : "Card"}</p>}
+        {paymentMethod && <p className="text-xs text-muted">Payment: {paymentMethod === "momo" ? "Mobile Money" : paymentMethod === "card" ? "Card" : "Cash"}</p>}
       </div>
 
       <div className="space-y-1.5 border-b border-dashed border-border pb-3">

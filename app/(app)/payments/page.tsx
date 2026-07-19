@@ -1,8 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { getPayments, createPayment, getClients, Payment, Client } from "@/lib/db";
-import { formatCedi } from "@/lib/utils";
+import { getPayments, createPayment, getClients, Payment, Client, PaymentMethod } from "@/lib/db";
+import { formatCedi, formatMoney } from "@/lib/utils";
 import { Timestamp } from "firebase/firestore";
 import Modal from "@/components/ui/Modal";
 import Badge from "@/components/ui/Badge";
@@ -16,7 +16,7 @@ export default function PaymentsPage() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ clientId: "", method: "momo" as "momo" | "card", reference: "", amount: "" });
+  const [form, setForm] = useState({ clientId: "", method: "momo" as PaymentMethod, reference: "", amount: "" });
 
   const load = async () => {
     if (!user || !businessId) return;
@@ -30,6 +30,7 @@ export default function PaymentsPage() {
 
   const momoTotal = payments.filter(p => p.method === "momo" && p.status === "success").reduce((s, p) => s + p.amount, 0);
   const cardTotal = payments.filter(p => p.method === "card" && p.status === "success").reduce((s, p) => s + p.amount, 0);
+  const cashTotal = payments.filter(p => p.method === "cash" && p.status === "success").reduce((s, p) => s + p.amount, 0);
 
   const handleRecord = async () => {
     if (!user || !businessId || !form.clientId || !form.amount) { toast.error("Fill all required fields"); return; }
@@ -56,18 +57,21 @@ export default function PaymentsPage() {
   return (
     <div>
       {/* Summary cards */}
-      <div className="grid grid-cols-2 gap-5 mb-7">
+      <div className="grid grid-cols-3 gap-5 mb-7">
         <div className="card text-center py-6">
-          <p className="text-3xl mb-2">📱</p>
-          <p className="font-grotesk text-2xl font-bold text-gold">{formatCedi(momoTotal)}</p>
-          <p className="text-xs text-muted mt-1">Mobile Money</p>
-          <p className="text-[11px] text-green mt-1">MTN · Vodafone · AirtelTigo</p>
+          <p className="text-2xl mb-2">📱</p>
+          <p className="font-grotesk text-xl font-bold text-gold">{formatMoney(momoTotal)}</p>
+          <p className="text-[10px] text-muted mt-1">Mobile Money</p>
         </div>
         <div className="card text-center py-6">
-          <p className="text-3xl mb-2">💳</p>
-          <p className="font-grotesk text-2xl font-bold text-surface">{formatCedi(cardTotal)}</p>
-          <p className="text-xs text-muted mt-1">Card Payments</p>
-          <p className="text-[11px] text-green mt-1">Paystack · Flutterwave</p>
+          <p className="text-2xl mb-2">💳</p>
+          <p className="font-grotesk text-xl font-bold text-surface">{formatMoney(cardTotal)}</p>
+          <p className="text-[10px] text-muted mt-1">Card Payments</p>
+        </div>
+        <div className="card text-center py-6">
+          <p className="text-2xl mb-2">💵</p>
+          <p className="font-grotesk text-xl font-bold text-green">{formatMoney(cashTotal)}</p>
+          <p className="text-[10px] text-muted mt-1">Cash Payments</p>
         </div>
       </div>
 
@@ -98,7 +102,7 @@ export default function PaymentsPage() {
                 <tr key={p.id} className="border-t border-border hover:bg-white/[0.02]">
                   <td className="py-3 text-muted text-xs">{p.createdAt?.toDate().toLocaleDateString("en-GH")}</td>
                   <td className="py-3 font-medium text-surface">{p.clientName}</td>
-                  <td className="py-3 text-sm">{p.method === "momo" ? "📱 MoMo" : "💳 Card"}</td>
+                  <td className="py-3 text-sm">{p.method === "momo" ? "📱 MoMo" : p.method === "card" ? "💳 Card" : "💵 Cash"}</td>
                   <td className="py-3 text-muted text-xs font-grotesk">{p.reference}</td>
                   <td className="py-3 font-grotesk font-semibold text-green">+{formatCedi(p.amount)}</td>
                   <td className="py-3"><Badge status={p.status} /></td>
@@ -113,12 +117,12 @@ export default function PaymentsPage() {
         <div className="space-y-4">
           <div>
             <label className="label">Payment Method</label>
-            <div className="grid grid-cols-2 gap-3">
-              {(["momo", "card"] as const).map(m => (
+            <div className="grid grid-cols-3 gap-3">
+              {(["momo", "card", "cash"] as const).map(m => (
                 <button key={m} onClick={() => setForm(f => ({ ...f, method: m }))}
                   className={`border-2 rounded-xl p-3 text-center transition-all ${form.method === m ? "border-gold bg-gold/5" : "border-border hover:border-muted"}`}>
-                  <div className="text-2xl mb-1">{m === "momo" ? "📱" : "💳"}</div>
-                  <div className="text-xs font-semibold text-surface">{m === "momo" ? "Mobile Money" : "Card"}</div>
+                  <div className="text-2xl mb-1">{m === "momo" ? "📱" : m === "card" ? "💳" : "💵"}</div>
+                  <div className="text-xs font-semibold text-surface">{m === "momo" ? "MoMo" : m === "card" ? "Card" : "Cash"}</div>
                 </button>
               ))}
             </div>
