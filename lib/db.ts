@@ -180,7 +180,7 @@ export interface StockMovement {
   createdAt?: Timestamp | null;
 }
 export type StaffStatus = "pending" | "active";
-export type StaffRole = "owner" | "salesperson";
+export type StaffRole = "owner" | "salesperson" | "super_admin";
 
 export interface Staff {
   id?: string;
@@ -290,8 +290,13 @@ const userQuery = (colName: string, uid: string) =>
   query(col(colName), where("userId", "==", uid), orderBy("createdAt", "desc"));
 
 /** Scoped to the whole business (owner + all staff share this data) — used for clients & products. */
-const businessQuery = (colName: string, businessId: string) =>
-  query(col(colName), where("businessId", "==", businessId), orderBy("createdAt", "desc"));
+const businessQuery = (colName: string, businessId: string) => {
+  // Super admins see everything across all businesses
+  if (businessId === "SUPER_ADMIN") {
+    return query(col(colName), orderBy("createdAt", "desc"));
+  }
+  return query(col(colName), where("businessId", "==", businessId), orderBy("createdAt", "desc"));
+};
 
 // ─── INVOICES ─────────────────────────────────────────────────────────────────
 
@@ -854,6 +859,11 @@ export async function resolveBusinessContext(
   uid: string,
   email: string
 ): Promise<{ businessId: string; role: StaffRole; staffId?: string; permissions?: string[] }> {
+  // Super Admin Check
+  if (email === "yapmultimedia.tech@gmail.com") {
+    return { businessId: "SUPER_ADMIN", role: "super_admin" };
+  }
+
   // Already-claimed staff record for this uid takes priority.
   const claimedSnap = await getDocs(
     query(col("staff"), where("staffUid", "==", uid))

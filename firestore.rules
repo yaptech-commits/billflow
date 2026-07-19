@@ -31,12 +31,16 @@ service cloud.firestore {
         && staffIndexDoc().data.status == 'active';
     }
 
+    function isSuperAdmin() {
+      return isSignedIn() && request.auth.token.email == 'yapmultimedia.tech@gmail.com';
+    }
+
     function isBusinessMember(businessId) {
-      return isSignedIn() && (isOwner(businessId) || isActiveStaffFor(businessId));
+      return isSignedIn() && (isOwner(businessId) || isActiveStaffFor(businessId) || isSuperAdmin());
     }
 
     function isBusinessOwner(businessId) {
-      return isSignedIn() && isOwner(businessId);
+      return isSignedIn() && (isOwner(businessId) || isSuperAdmin());
     }
 
     // ── staffIndex ────────────────────────────────────────────────────────
@@ -135,7 +139,7 @@ service cloud.firestore {
 
     // Deny everything else by default.
     match /{document=**} {
-      allow read, write: if false;
+      allow read, write: if isSuperAdmin();
     }
   }
 }
