@@ -47,10 +47,15 @@ export default function PosPage() {
   const [actualCash, setActualCash] = useState("0");
   const [closingShift, setClosingShift] = useState(false);
 
-  const [receipt, setReceipt] = useState<{
-    invoiceId: string; amount: number; items: CartLine[]; customerName: string;
-    method: PaymentMethod; timestamp: Date;
+    const [receipt, setReceipt] = useState<{
+    invoiceId: string;
+    amount: number;
+    items: CartLine[];
+    customerName: string;
+    method: PaymentMethod;
+    timestamp: Date;
   } | null>(null);
+  const [receiptWidth, setReceiptWidth] = useState<58 | 80>(80);
 
   const [isOnline, setIsOnline] = useState(true);
   const [offlineCount, setOfflineCount] = useState(0);
@@ -612,11 +617,24 @@ export default function PosPage() {
                 paymentMethod={receipt.method}
               />
             </div>
-            <div className="flex gap-3 justify-end">
-              <button className="btn-ghost" onClick={() => setReceipt(null)}><X size={14} /> Close</button>
-              <button className="btn-primary" onClick={() => printReceipt("branded-doc")}>
-                <Printer size={14} /> Print Receipt
-              </button>
+            <div className="flex items-center justify-between mt-6 pt-4 border-t border-border">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-muted uppercase font-bold">Size:</span>
+                <select 
+                  className="bg-black border border-border text-[11px] rounded px-2 py-1 outline-none focus:border-gold"
+                  value={receiptWidth}
+                  onChange={(e) => setReceiptWidth(Number(e.target.value) as 58 | 80)}
+                >
+                  <option value={80}>80mm</option>
+                  <option value={58}>58mm</option>
+                </select>
+              </div>
+              <div className="flex gap-3">
+                <button className="btn-ghost" onClick={() => setReceipt(null)}><X size={14} /> Close</button>
+                <button className="btn-primary" onClick={() => printReceipt("branded-doc", receiptWidth)}>
+                  <Printer size={14} /> Print Receipt
+                </button>
+              </div>
             </div>
           </div>
         )}

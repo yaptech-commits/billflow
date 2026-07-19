@@ -27,6 +27,8 @@ interface BrandedDocumentProps {
   /** Extra line for context, e.g. "Due: 12 Aug 2026" */
   meta?: string;
   currencyCode?: string;
+  /** Receipt width in mm, e.g. 58 or 80. Defaults to 80. */
+  width?: 58 | 80;
 }
 
 /**
@@ -36,7 +38,7 @@ interface BrandedDocumentProps {
  * than BillFlow's.
  */
 export default function BrandedDocument({
-  profile, docType, docNumber, date, clientName, items, amount, subtotal, taxAmount, taxRate, taxLabel, discountAmount, amountPaid, paymentMethod, meta, currencyCode,
+  profile, docType, docNumber, date, clientName, items, amount, subtotal, taxAmount, taxRate, taxLabel, discountAmount, amountPaid, paymentMethod, meta, currencyCode, width = 80,
 }: BrandedDocumentProps) {
   const accent = profile?.accentColor || DEFAULT_ACCENT_COLOR;
   const businessName = profile?.businessName || "Your Business";
@@ -77,11 +79,16 @@ export default function BrandedDocument({
         {paymentMethod && <p className="text-xs text-muted">Payment: {paymentMethod === "momo" ? "Mobile Money" : paymentMethod === "card" ? "Card" : "Cash"}</p>}
       </div>
 
-      <div className="space-y-1.5 border-b border-dashed border-border pb-3">
+      <div className="space-y-2 border-b border-dashed border-border pb-3">
         {items.map((li, i) => (
-          <div key={i} className="flex justify-between text-surface">
-            <span>{li.productName} ×{li.quantity}</span>
-            <span>{formatMoney(li.unitPrice * li.quantity, currencyCode)}</span>
+          <div key={i} className="text-surface">
+            <div className="flex justify-between font-medium">
+              <span className="flex-1">{li.productName}</span>
+              <span className="ml-2">{formatMoney(li.unitPrice * li.quantity, currencyCode)}</span>
+            </div>
+            <div className="text-[10px] text-muted">
+              {li.quantity} × {formatMoney(li.unitPrice, currencyCode)}
+            </div>
           </div>
         ))}
       </div>
