@@ -32,6 +32,7 @@ export default function SettingsPage() {
     businessName: "", address: "", phone: "", email: "",
     accentColor: DEFAULT_ACCENT_COLOR, footerNote: "", currency: DEFAULT_CURRENCY,
     taxRate: DEFAULT_TAX_RATE, taxInclusive: false, taxLabel: DEFAULT_TAX_LABEL,
+    paystackPublicKey: "",
   });
   const [logoDataUrl, setLogoDataUrl] = useState<string | undefined>(undefined);
   const [brandLoading, setBrandLoading] = useState(true);
@@ -53,6 +54,7 @@ export default function SettingsPage() {
           taxRate: profile.taxRate ?? DEFAULT_TAX_RATE,
           taxInclusive: profile.taxInclusive ?? false,
           taxLabel: profile.taxLabel ?? DEFAULT_TAX_LABEL,
+          paystackPublicKey: profile.paystackPublicKey ?? "",
         });
         setLogoDataUrl(profile.logoDataUrl);
       }
@@ -282,6 +284,23 @@ export default function SettingsPage() {
       {/* Payment Gateways */}
       <div className="card">
         <h2 className="font-grotesk font-semibold text-white mb-5">Payment Gateways</h2>
+        <div className="space-y-4 mb-6">
+          <div>
+            <label className="label">Your Paystack Public Key</label>
+            <input 
+              className="input" 
+              type="text" 
+              placeholder="pk_live_..." 
+              value={brand.paystackPublicKey} 
+              onChange={e => setBrand(b => ({ ...b, paystackPublicKey: e.target.value }))} 
+            />
+            <p className="text-[11px] text-muted mt-1.5">Enter your Paystack Public Key to receive payments directly to your account.</p>
+          </div>
+          <button className="btn-primary w-full justify-center" onClick={handleSaveBrand} disabled={brandSaving}>
+            {brandSaving ? "Saving..." : "Save API Settings"}
+          </button>
+        </div>
+
         {[
           { key: "paystack", label: "Paystack", sub: "Card & MoMo payments" },
           { key: "flutterwave", label: "Flutterwave", sub: "Multi-currency payments" },
@@ -295,9 +314,6 @@ export default function SettingsPage() {
             <Toggle on={toggles[key as keyof typeof toggles]} onToggle={() => toggle(key as keyof typeof toggles)} />
           </div>
         ))}
-        <div className="mt-4 p-3 bg-gold/5 border border-gold/20 rounded-lg">
-          <p className="text-xs text-gold">📋 Add your Paystack public key to <code className="bg-black/30 px-1 rounded">.env.local</code> to go live.</p>
-        </div>
       </div>
 
       {/* Notifications */}

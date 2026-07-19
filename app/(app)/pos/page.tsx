@@ -236,21 +236,67 @@ export default function PosPage() {
       setShiftModalOpen(true);
       return;
     }
+
+    const items: InvoiceLineItem[] = cart.map(l => ({
+      productId: l.productId, productName: l.productName, quantity: l.quantity, unitPrice: l.unitPrice,
+    }));
+    
+    const saleData = {
+      userId: user.uid,
+      businessId,
+      clientId: "walk-in",
+      clientName: customerName || "Walk-in Customer",
+      items,
+      paymentMethod: payMethod,
+      discountAmount: discountVal,
+    };
+
+    // If online and using Card or MoMo, trigger Paystack if a key is provided
+    if (isOnline && (payMethod === "card" || payMethod === "momo") && profile?.paystackPublicKey) {
+      // @ts-ignore - PaystackPop is loaded via script in public/index.html or similar
+      if (typeof window !== "undefined" && (window as any).PaystackPop) {
+        const handler = (window as any).PaystackPop.setup({
+          key: profile.paystackPublicKey,
+          email: user.email || "customer@billflow.app",
+          amount: Math.round(total * 100), // in pesewas
+          currency: profile.currency || "GHS",
+          callback: async (response: any) => {
+            setCharging(true);
+            try {
+              const result = await createSale({ ...saleData, reference: response.reference });
+              setReceipt({
+                invoiceId: result.invoiceId,
+                amount: result.amount,
+                items: cart,
+                customerName: customerName || "Walk-in Customer",
+                method: payMethod,
+                timestamp: new Date(),
+              });
+              load();
+              setCheckoutOpen(false);
+              setCart([]);
+              toast.success("Payment successful!");
+            } catch (err: any) {
+              toast.error(err.message ?? "Payment succeeded but could not record sale");
+            } finally {
+              setCharging(false);
+            }
+          },
+          onClose: () => {
+            toast.error("Payment window closed");
+          }
+        });
+        handler.openIframe();
+        return;
+      } else {
+        toast.error("Payment gateway is still loading. Please wait a moment.");
+        return;
+      }
+    }
+
+    // Default flow for Cash or Offline
     setCharging(true);
     try {
-      const items: InvoiceLineItem[] = cart.map(l => ({
-        productId: l.productId, productName: l.productName, quantity: l.quantity, unitPrice: l.unitPrice,
-      }));
-      const saleData = {
-        userId: user.uid,
-        businessId,
-        clientId: "walk-in",
-        clientName: customerName || "Walk-in Customer",
-        items,
-        paymentMethod: payMethod,
-        discountAmount: discountVal,
-      };
-
       if (!isOnline) {
         const offlineSale = queueOfflineSale(saleData);
         toast.success("Sale saved offline. Will sync when online.");

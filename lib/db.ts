@@ -214,6 +214,8 @@ export interface BusinessProfile {
   taxInclusive?: boolean;
   /** Label for the tax, e.g. "VAT", "GST", "Sales Tax". Defaults to "VAT". */
   taxLabel?: string;
+  /** Custom Paystack Public Key for this business. */
+  paystackPublicKey?: string;
   nextInvoiceNumber?: number;
   updatedAt?: Timestamp | null;
 }
