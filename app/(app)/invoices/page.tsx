@@ -42,7 +42,7 @@ export default function InvoicesPage() {
   const [saving, setSaving] = useState(false);
 
   const [form, setForm] = useState({
-    clientId: "", dueDate: "", notes: "", paymentMethod: "momo" as PaymentMethod,
+    clientId: "", dueDate: "", notes: "", paymentMethod: "momo" as PaymentMethod, discountAmount: "",
   });
   const [lines, setLines] = useState<DraftLine[]>([emptyLine()]);
 
@@ -101,7 +101,9 @@ export default function InvoicesPage() {
       };
     });
 
-  const total = resolvedLines.reduce((sum, l) => sum + l.quantity * l.unitPrice, 0);
+  const lineTotal = resolvedLines.reduce((sum, l) => sum + l.quantity * l.unitPrice, 0);
+  const discountAmount = parseFloat(form.discountAmount) || 0;
+  const total = lineTotal - discountAmount;
   const hasOverStock = resolvedLines.some(l => l.overStock);
 
   const setLine = (i: number, patch: Partial<DraftLine>) => {
@@ -111,7 +113,7 @@ export default function InvoicesPage() {
   const removeLine = (i: number) => setLines(ls => ls.filter((_, idx) => idx !== i));
 
   const resetForm = () => {
-    setForm({ clientId: "", dueDate: "", notes: "", paymentMethod: "momo" });
+    setForm({ clientId: "", dueDate: "", notes: "", paymentMethod: "momo", discountAmount: "" });
     setLines([emptyLine()]);
   };
 
@@ -122,6 +124,7 @@ export default function InvoicesPage() {
       dueDate: invoice.dueAt ? invoice.dueAt.toDate().toISOString().split('T')[0] : "",
       notes: invoice.notes ?? "",
       paymentMethod: invoice.paymentMethod,
+      discountAmount: invoice.discountAmount ? String(invoice.discountAmount) : "",
     });
     setLines(invoice.items?.map(li => ({ productId: li.productId, quantity: String(li.quantity) })) ?? [emptyLine()]);
     setOpen(true);
@@ -147,6 +150,8 @@ export default function InvoicesPage() {
           clientId: form.clientId,
           clientName: client?.name ?? "Unknown",
           items,
+          subtotal: lineTotal,
+          discountAmount: discountAmount,
           amount: total,
           notes: form.notes,
           status,
@@ -161,6 +166,8 @@ export default function InvoicesPage() {
         clientId: form.clientId,
         clientName: client?.name ?? "Unknown",
         items,
+        subtotal: lineTotal,
+        discountAmount: discountAmount,
         amount: total,
         notes: form.notes,
         status,
@@ -418,9 +425,25 @@ export default function InvoicesPage() {
               <p className="text-xs text-muted mt-2">No products yet — add some in the Products page first.</p>
             )}
           </div>
-          <div className="flex items-center justify-between px-1">
-            <span className="text-xs text-muted">Total</span>
-            <span className="font-grotesk font-semibold text-surface">{formatMoney(total, currencyCode)}</span>
+          <div className="space-y-1 px-1 border-t border-dashed border-border pt-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted">Subtotal</span>
+              <span className="text-xs text-surface">{formatMoney(lineTotal, currencyCode)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <label className="text-xs text-muted">Discount</label>
+              <input
+                className="input-sm w-24 text-right"
+                type="number"
+                placeholder="0.00"
+                value={form.discountAmount}
+                onChange={e => setForm(f => ({ ...f, discountAmount: e.target.value }))}
+              />
+            </div>
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-sm font-bold text-surface">Total Due</span>
+              <span className="font-grotesk font-bold text-surface">{formatMoney(total, currencyCode)}</span>
+            </div>
           </div>
           <div>
             <label className="label">Payment Method</label>

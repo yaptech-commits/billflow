@@ -57,6 +57,7 @@ export default function PosPage() {
   const [isWholesale, setIsWholesale] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [discountAmount, setDiscountAmount] = useState<string>("");
 
   const load = async () => {
     if (!businessId) return;
@@ -167,7 +168,9 @@ export default function PosPage() {
   const removeLine = (productId: string) => setCart(prev => prev.filter(l => l.productId !== productId));
   const clearCart = () => setCart([]);
 
-  const total = cart.reduce((sum, l) => sum + l.quantity * l.unitPrice, 0);
+  const lineTotal = cart.reduce((sum, l) => sum + l.quantity * l.unitPrice, 0);
+  const discountVal = parseFloat(discountAmount) || 0;
+  const total = lineTotal - discountVal;
 
   const filteredProducts = useMemo(() => {
     let list = products;
@@ -245,6 +248,7 @@ export default function PosPage() {
         clientName: customerName || "Walk-in Customer",
         items,
         paymentMethod: payMethod,
+        discountAmount: discountVal,
       };
 
       if (!isOnline) {
@@ -427,9 +431,25 @@ export default function PosPage() {
           </div>
         )}
 
-        <div className="border-t border-border pt-3 mb-4 flex items-center justify-between">
-          <span className="text-sm text-muted">Total</span>
-          <span className="font-grotesk font-bold text-xl text-gold">{formatMoney(total)}</span>
+        <div className="border-t border-border pt-3 mb-4 space-y-1">
+          <div className="flex items-center justify-between text-xs text-muted">
+            <span>Subtotal</span>
+            <span>{formatMoney(lineTotal)}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted">Discount</span>
+            <input
+              className="input-sm w-20 text-right"
+              type="number"
+              placeholder="0.00"
+              value={discountAmount}
+              onChange={e => setDiscountAmount(e.target.value)}
+            />
+          </div>
+          <div className="flex items-center justify-between pt-1">
+            <span className="text-sm text-muted">Total</span>
+            <span className="font-grotesk font-bold text-xl text-gold">{formatMoney(total)}</span>
+          </div>
         </div>
 
         <button className="btn-primary w-full justify-center" onClick={openCheckout} disabled={cart.length === 0}>
