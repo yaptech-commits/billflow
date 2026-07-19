@@ -33,19 +33,18 @@ cp .env.local.example .env.local
 Fill in your Firebase values in `.env.local`
 
 ### 4. Set up Firestore security rules
-In Firebase Console → Firestore → Rules, paste:
-```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /{collection}/{docId} {
-      allow read, write: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
-      allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
-    }
-  }
-}
-```
+In Firebase Console → Firestore → Rules, paste the content of `firestore.rules`. These rules allow both the business owner and their invited staff to access shared data (products, clients, etc.) while keeping it secure.
+
+### 5. Create Firestore Indexes
+Your app queries data using `businessId` and sorts it by `createdAt`. For this to work, you must create indexes in the Firebase Console:
+1. Go to **Firestore Database** → **Indexes** → **Composite**.
+2. Create the following index for **each** collection (`products`, `clients`, `invoices`, `suppliers`, `purchaseOrders`, `vouchers`, `payments`, `stockMovements`):
+   - **Collection ID**: (e.g., `products`)
+   - **Fields to index**: 
+     - `businessId`: Ascending
+     - `createdAt`: Descending
+   - **Query scope**: Collection
+3. Click **Create Index**. (It may take a few minutes to build).
 
 ### 5. Run development server
 ```bash

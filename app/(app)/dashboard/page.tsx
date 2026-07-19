@@ -29,7 +29,7 @@ export default function DashboardPage() {
     const invoiceOpts = role === "salesperson" ? { onlyUserId: user.uid } : undefined;
     Promise.all([
       getInvoices(businessId, invoiceOpts),
-      getPayments(user.uid),
+      getPayments(businessId),
       getClients(businessId),
       getBusinessProfile(businessId),
     ]).then(([inv, pay, cli, prof]) => {

@@ -53,6 +53,7 @@ export default function PosPage() {
 
   const [isOnline, setIsOnline] = useState(true);
   const [offlineCount, setOfflineCount] = useState(0);
+  const [isWholesale, setIsWholesale] = useState(false);
 
   const load = async () => {
     if (!businessId) return;
@@ -124,7 +125,8 @@ export default function PosPage() {
         toast.error(`Only ${p.stockQty} of ${p.name} in stock`);
         return prev;
       }
-      return [...prev, { productId: p.id!, productName: p.name, unitPrice: p.price, quantity: qty, maxStock: p.stockQty }];
+      const price = isWholesale && p.wholesalePrice ? p.wholesalePrice : p.price;
+      return [...prev, { productId: p.id!, productName: p.name, unitPrice: price, quantity: qty, maxStock: p.stockQty }];
     });
   };
 
@@ -163,11 +165,14 @@ export default function PosPage() {
   const total = cart.reduce((sum, l) => sum + l.quantity * l.unitPrice, 0);
 
   const filteredProducts = useMemo(() => {
-    if (!search) return products;
-    return products.filter(p =>
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      (p.sku ?? "").toLowerCase().includes(search.toLowerCase())
-    );
+    let list = products;
+    if (search) {
+      list = list.filter(p =>
+        p.name.toLowerCase().includes(search.toLowerCase()) ||
+        (p.sku ?? "").toLowerCase().includes(search.toLowerCase())
+      );
+    }
+    return list;
   }, [products, search]);
 
   const openCheckout = () => {
@@ -272,6 +277,28 @@ export default function PosPage() {
     <div className="grid grid-cols-[1fr_360px] gap-5 items-start">
       {/* Left: scan + product grid */}
       <div>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2 bg-border/30 p-1 rounded-lg">
+            <button
+              onClick={() => setIsWholesale(false)}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${!isWholesale ? "bg-gold text-black shadow-lg" : "text-muted hover:text-surface"}`}
+            >
+              RETAIL
+            </button>
+            <button
+              onClick={() => setIsWholesale(true)}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${isWholesale ? "bg-gold text-black shadow-lg" : "text-muted hover:text-surface"}`}
+            >
+              WHOLESALE
+            </button>
+          </div>
+          {isWholesale && (
+            <span className="text-[10px] font-bold text-gold bg-gold/10 px-2 py-1 rounded border border-gold/20 animate-pulse">
+              WHOLESALE MODE ACTIVE
+            </span>
+          )}
+        </div>
+
         <form onSubmit={handleScanSubmit} className="mb-4">
           <div className="relative">
             <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted" />
@@ -309,7 +336,9 @@ export default function PosPage() {
                 <p className="text-sm font-medium text-surface truncate">{p.name}</p>
                 <p className="text-xs text-muted mt-0.5">{p.sku || "—"}</p>
                 <div className="flex items-center justify-between mt-2">
-                  <span className="font-grotesk font-semibold text-gold">{formatMoney(p.price)}</span>
+                  <span className="font-grotesk font-semibold text-gold">
+                    {formatMoney(isWholesale && p.wholesalePrice ? p.wholesalePrice : p.price)}
+                  </span>
                   <span className="text-[11px] text-muted">{p.stockQty} in stock</span>
                 </div>
               </button>

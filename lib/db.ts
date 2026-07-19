@@ -95,6 +95,7 @@ export interface Product {
   sku?: string;
   unit?: string;
   price: number;
+  wholesalePrice?: number;
   costPrice?: number;
   stockQty: number;
   /** Stock level at/below which this product is considered low-stock. Defaults to 5 if unset. */
@@ -263,7 +264,13 @@ function logStockMovement(
   params: Omit<StockMovement, "id" | "createdAt">
 ) {
   const ref = doc(col("stockMovements"));
-  tx.set(ref, { ...params, createdAt: serverTimestamp() });
+  const data: any = { ...params, createdAt: serverTimestamp() };
+  // Firestore rejects 'undefined' values. Clean optional fields.
+  if (data.note === undefined) delete data.note;
+  if (data.referenceId === undefined) delete data.referenceId;
+  if (data.referenceLabel === undefined) delete data.referenceLabel;
+
+  tx.set(ref, data);
 }
 
 /** Scoped to everything created by a single Firebase Auth user (legacy / not shared). */

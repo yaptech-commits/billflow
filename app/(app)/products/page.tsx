@@ -26,7 +26,7 @@ export default function ProductsPage() {
   const [editing, setEditing] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ name: "", sku: "", unit: "", price: "", stockQty: "", reorderLevel: "" });
+  const [form, setForm] = useState({ name: "", sku: "", unit: "", price: "", wholesalePrice: "", stockQty: "", reorderLevel: "" });
 
   // Movement history modal
   const [historyProduct, setHistoryProduct] = useState<Product | null>(null);
@@ -45,7 +45,7 @@ export default function ProductsPage() {
 
   useEffect(() => { load(); }, [businessId]);
 
-  const resetForm = () => setForm({ name: "", sku: "", unit: "", price: "", stockQty: "", reorderLevel: "" });
+  const resetForm = () =>     setForm({ name: "", sku: "", unit: "", price: "", wholesalePrice: "", stockQty: "", reorderLevel: "" });
 
   const openAdd = () => {
     setEditing(null);
@@ -60,6 +60,7 @@ export default function ProductsPage() {
       sku: p.sku ?? "",
       unit: p.unit ?? "",
       price: String(p.price),
+      wholesalePrice: p.wholesalePrice != null ? String(p.wholesalePrice) : "",
       stockQty: String(p.stockQty),
       reorderLevel: p.reorderLevel != null ? String(p.reorderLevel) : "",
     });
@@ -79,6 +80,7 @@ export default function ProductsPage() {
           sku: form.sku,
           unit: form.unit,
           price: parseFloat(form.price),
+          wholesalePrice: form.wholesalePrice ? parseFloat(form.wholesalePrice) : undefined,
           stockQty: parseInt(form.stockQty || "0", 10),
           reorderLevel: form.reorderLevel ? parseInt(form.reorderLevel, 10) : DEFAULT_REORDER_LEVEL,
         });
@@ -92,6 +94,7 @@ export default function ProductsPage() {
           sku,
           unit: form.unit,
           price: parseFloat(form.price),
+          wholesalePrice: form.wholesalePrice ? parseFloat(form.wholesalePrice) : undefined,
           stockQty: parseInt(form.stockQty || "0", 10),
           reorderLevel: form.reorderLevel ? parseInt(form.reorderLevel, 10) : DEFAULT_REORDER_LEVEL,
         });
@@ -217,11 +220,17 @@ export default function ProductsPage() {
               <input className="input" placeholder="Optional" value={form.sku} onChange={e => setForm(f => ({ ...f, sku: e.target.value }))} />
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="label">Price (GH₵) *</label>
+              <label className="label">Retail Price (GH₵) *</label>
               <input className="input" type="number" placeholder="0.00" value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))} />
             </div>
+            <div>
+              <label className="label">Wholesale Price (GH₵)</label>
+              <input className="input" type="number" placeholder="Optional" value={form.wholesalePrice} onChange={e => setForm(f => ({ ...f, wholesalePrice: e.target.value }))} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="label">Stock Qty</label>
               <input className="input" type="number" placeholder="0" value={form.stockQty} onChange={e => setForm(f => ({ ...f, stockQty: e.target.value }))} />
