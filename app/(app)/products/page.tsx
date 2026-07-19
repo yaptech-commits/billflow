@@ -4,6 +4,7 @@ import { useAuth } from "@/lib/auth-context";
 import {
   getProducts, createProduct, updateProduct, deleteProduct, adjustProductStock,
   getStockMovements, isLowStock, DEFAULT_REORDER_LEVEL, Product, StockMovement,
+  getCategories, createCategory, updateCategory, deleteCategory, Category,
 } from "@/lib/db";
 import { formatCedi } from "@/lib/utils";
 import Modal from "@/components/ui/Modal";
@@ -26,7 +27,11 @@ export default function ProductsPage() {
   const [editing, setEditing] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ name: "", sku: "", unit: "", price: "", wholesalePrice: "", stockQty: "", reorderLevel: "" });
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [form, setForm] = useState({ name: "", sku: "", categoryId: "", unit: "", price: "", wholesalePrice: "", stockQty: "", reorderLevel: "" });
+  const [catOpen, setCatOpen] = useState(false);
+  const [catName, setCatName] = useState("");
+  const [catSaving, setCatSaving] = useState(false);
 
   // Movement history modal
   const [historyProduct, setHistoryProduct] = useState<Product | null>(null);
@@ -38,14 +43,18 @@ export default function ProductsPage() {
 
   const load = async () => {
     if (!businessId) return;
-    const data = await getProducts(businessId);
-    setProducts(data);
+    const [pData, cData] = await Promise.all([
+      getProducts(businessId),
+      getCategories(businessId)
+    ]);
+    setProducts(pData);
+    setCategories(cData);
     setLoading(false);
   };
 
   useEffect(() => { load(); }, [businessId]);
 
-  const resetForm = () =>     setForm({ name: "", sku: "", unit: "", price: "", wholesalePrice: "", stockQty: "", reorderLevel: "" });
+  const resetForm = () =>     setForm({ name: "", sku: "", categoryId: "", unit: "", price: "", wholesalePrice: "", stockQty: "", reorderLevel: "" });
 
   const openAdd = () => {
     setEditing(null);
@@ -55,9 +64,10 @@ export default function ProductsPage() {
 
   const openEdit = (p: Product) => {
     setEditing(p);
-    setForm({
+      setForm({
       name: p.name,
       sku: p.sku ?? "",
+      categoryId: p.categoryId ?? "",
       unit: p.unit ?? "",
       price: String(p.price),
       wholesalePrice: p.wholesalePrice != null ? String(p.wholesalePrice) : "",
@@ -78,6 +88,7 @@ export default function ProductsPage() {
         await updateProduct(editing.id!, {
           name: form.name,
           sku: form.sku,
+          categoryId: form.categoryId || undefined,
           unit: form.unit,
           price: parseFloat(form.price),
           wholesalePrice: form.wholesalePrice ? parseFloat(form.wholesalePrice) : undefined,
@@ -92,6 +103,7 @@ export default function ProductsPage() {
           businessId,
           name: form.name,
           sku,
+          categoryId: form.categoryId || undefined,
           unit: form.unit,
           price: parseFloat(form.price),
           wholesalePrice: form.wholesalePrice ? parseFloat(form.wholesalePrice) : undefined,
@@ -104,9 +116,35 @@ export default function ProductsPage() {
       resetForm();
       load();
     } catch (err: any) {
-      toast.error(err.message ?? "Something went wrong");
+      toast.error(err.message ?? "Could not save product");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleAddCategory = async () => {
+    if (!businessId || !catName) return;
+    setCatSaving(true);
+    try {
+      await createCategory({ businessId, name: catName });
+      toast.success("Category added");
+      setCatName("");
+      load();
+    } catch (err: any) {
+      toast.error("Could not add category");
+    } finally {
+      setCatSaving(false);
+    }
+  };
+
+  const handleDeleteCategory = async (id: string) => {
+    if (!confirm("Delete this category? Products in this category will not be deleted.")) return;
+    try {
+      await deleteCategory(id);
+      toast.success("Category deleted");
+      load();
+    } catch (err: any) {
+      toast.error("Could not delete category");
     }
   };
 
@@ -143,7 +181,8 @@ export default function ProductsPage() {
 
   return (
     <div>
-      <div className="flex justify-end mb-6">
+      <div className="flex justify-end gap-3 mb-6">
+        <button className="btn-ghost" onClick={() => setCatOpen(true)}>Manage Categories</button>
         <button className="btn-primary" onClick={openAdd}><Plus size={15} /> Add Product</button>
       </div>
 
@@ -216,9 +255,18 @@ export default function ProductsPage() {
               <input className="input" placeholder="e.g. MikroTik hAP ac2" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
             </div>
             <div>
-              <label className="label">SKU</label>
-              <input className="input" placeholder="Optional" value={form.sku} onChange={e => setForm(f => ({ ...f, sku: e.target.value }))} />
+              <label className="label">Category</label>
+              <select className="input" value={form.categoryId} onChange={e => setForm(f => ({ ...f, categoryId: e.target.value }))}>
+                <option value="">No Category</option>
+                {categories.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
             </div>
+          </div>
+          <div>
+            <label className="label">SKU</label>
+            <input className="input" placeholder="Optional" value={form.sku} onChange={e => setForm(f => ({ ...f, sku: e.target.value }))} />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -278,6 +326,26 @@ export default function ProductsPage() {
             </button>
           </div>
         )}
+      </Modal>
+
+      {/* Categories Modal */}
+      <Modal open={catOpen} onClose={() => setCatOpen(false)} title="Manage Categories">
+        <div className="space-y-4">
+          <div className="flex gap-2">
+            <input className="input" placeholder="Category name" value={catName} onChange={e => setCatName(e.target.value)} />
+            <button className="btn-primary" onClick={handleAddCategory} disabled={catSaving}>Add</button>
+          </div>
+          <div className="space-y-2">
+            {categories.map(c => (
+              <div key={c.id} className="flex items-center justify-between p-2 rounded-lg bg-white/5 border border-border">
+                <span className="text-sm">{c.name}</span>
+                <button onClick={() => handleDeleteCategory(c.id!)} className="text-muted hover:text-red transition-colors">
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
       </Modal>
 
       {/* Stock History Modal */}

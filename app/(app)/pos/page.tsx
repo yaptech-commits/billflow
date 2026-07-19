@@ -3,7 +3,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import {
   getProducts, createSale, getClients, getBusinessProfile, Product, Client,
-  InvoiceLineItem, PaymentMethod, BusinessProfile, Shift, getActiveShift, openShift, closeShift
+  InvoiceLineItem, PaymentMethod, BusinessProfile, Shift, getActiveShift, openShift, closeShift,
+  getCategories, Category
 } from "@/lib/db";
 import { formatMoney } from "@/lib/utils";
 import Modal from "@/components/ui/Modal";
@@ -54,17 +55,21 @@ export default function PosPage() {
   const [isOnline, setIsOnline] = useState(true);
   const [offlineCount, setOfflineCount] = useState(0);
   const [isWholesale, setIsWholesale] = useState(false);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
 
   const load = async () => {
     if (!businessId) return;
-    const [productData, clientData, profileData] = await Promise.all([
+    const [productData, clientData, profileData, categoryData] = await Promise.all([
       getProducts(businessId),
       getClients(businessId),
       getBusinessProfile(businessId),
+      getCategories(businessId),
     ]);
     setProducts(productData);
     setClients(clientData);
     setProfile(profileData);
+    setCategories(categoryData);
 
     if (user) {
       const shift = await getActiveShift(businessId, user.uid);
@@ -172,8 +177,11 @@ export default function PosPage() {
         (p.sku ?? "").toLowerCase().includes(search.toLowerCase())
       );
     }
+    if (selectedCategory !== "all") {
+      list = list.filter(p => p.categoryId === selectedCategory);
+    }
     return list;
-  }, [products, search]);
+  }, [products, search, selectedCategory]);
 
   const openCheckout = () => {
     if (cart.length === 0) {
@@ -312,6 +320,28 @@ export default function PosPage() {
             />
           </div>
         </form>
+
+        <div className="flex gap-2 mb-4 overflow-x-auto pb-1 no-scrollbar">
+          <button
+            onClick={() => setSelectedCategory("all")}
+            className={`px-3 py-1.5 rounded-full text-[10px] font-bold whitespace-nowrap transition-all border ${
+              selectedCategory === "all" ? "bg-gold border-gold text-black shadow-md" : "bg-white/5 border-border text-muted hover:border-muted"
+            }`}
+          >
+            ALL CATEGORIES
+          </button>
+          {categories.map(cat => (
+            <button
+              key={cat.id}
+              onClick={() => setSelectedCategory(cat.id!)}
+              className={`px-3 py-1.5 rounded-full text-[10px] font-bold whitespace-nowrap transition-all border ${
+                selectedCategory === cat.id ? "bg-gold border-gold text-black shadow-md" : "bg-white/5 border-border text-muted hover:border-muted"
+              }`}
+            >
+              {cat.name.toUpperCase()}
+            </button>
+          ))}
+        </div>
 
         <input
           className="input mb-4"

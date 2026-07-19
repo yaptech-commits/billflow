@@ -87,12 +87,20 @@ export interface CreditNote {
   createdAt?: Timestamp | null;
 }
 
+export interface Category {
+  id?: string;
+  businessId: string;
+  name: string;
+  createdAt?: Timestamp | null;
+}
+
 export interface Product {
   id?: string;
   userId: string;
   businessId: string;
   name: string;
   sku?: string;
+  categoryId?: string;
   unit?: string;
   price: number;
   wholesalePrice?: number;
@@ -661,6 +669,25 @@ export async function updateProduct(id: string, data: Partial<Product>) {
 
 export async function deleteProduct(id: string) {
   return deleteDoc(doc(db, "products", id));
+}
+
+// ─── CATEGORIES ───────────────────────────────────────────────────────────────
+
+export async function createCategory(data: Omit<Category, "id">) {
+  return addDoc(col("categories"), { ...data, createdAt: serverTimestamp() });
+}
+
+export async function getCategories(businessId: string): Promise<Category[]> {
+  const snap = await getDocs(businessQuery("categories", businessId));
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Category));
+}
+
+export async function updateCategory(id: string, data: Partial<Category>) {
+  return updateDoc(doc(db, "categories", id), data);
+}
+
+export async function deleteCategory(id: string) {
+  return deleteDoc(doc(db, "categories", id));
 }
 
 /** Manual stock adjustment (restock, correction, etc.) — separate from invoice-driven deduction. */
