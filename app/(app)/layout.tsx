@@ -1,18 +1,29 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import Sidebar from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
+import { cn } from "@/lib/utils";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) router.replace("/auth/login");
   }, [user, loading, router]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("sidebar-collapsed");
+    if (saved === "true") setSidebarCollapsed(true);
+
+    const handleToggle = (e: any) => setSidebarCollapsed(e.detail.collapsed);
+    window.addEventListener("sidebar-toggle", handleToggle);
+    return () => window.removeEventListener("sidebar-toggle", handleToggle);
+  }, []);
 
   if (loading || !user) {
     return (
@@ -35,7 +46,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen bg-black">
       <Sidebar />
-      <div className="flex-1 flex flex-col ml-[240px]">
+      <div className={cn(
+        "flex-1 flex flex-col transition-all duration-300",
+        sidebarCollapsed ? "ml-[70px]" : "ml-[240px]"
+      )}>
         <Topbar title={pageTitle[pathname] ?? "BillFlow"} />
         <main className="flex-1 p-7">{children}</main>
       </div>
