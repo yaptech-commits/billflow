@@ -317,7 +317,7 @@ export default function InvoicesPage() {
                       </span>
                     )}
                   </td>
-                  <td className="py-3 text-muted text-xs">{inv.paymentMethod === "momo" ? "📱 MoMo" : "💳 Card"}</td>
+                  <td className="py-3 text-muted text-xs">{inv.paymentMethod === "momo" ? "📱 MoMo" : inv.paymentMethod === "card" ? "💳 Card" : "💵 Cash"}</td>
                   <td className="py-3 text-muted text-xs">
                     {inv.dueAt ? inv.dueAt.toDate().toLocaleDateString("en-GH") : "—"}
                   </td>
@@ -424,8 +424,8 @@ export default function InvoicesPage() {
           </div>
           <div>
             <label className="label">Payment Method</label>
-            <div className="grid grid-cols-2 gap-3">
-              {(["momo", "card"] as const).map(m => (
+            <div className="grid grid-cols-3 gap-3">
+              {(["momo", "card", "cash"] as const).map(m => (
                 <button
                   key={m}
                   onClick={() => setForm(f => ({ ...f, paymentMethod: m }))}
@@ -433,9 +433,9 @@ export default function InvoicesPage() {
                     form.paymentMethod === m ? "border-gold bg-gold/5" : "border-border hover:border-muted"
                   }`}
                 >
-                  <div className="text-2xl mb-1">{m === "momo" ? "📱" : "💳"}</div>
-                  <div className="text-xs font-semibold text-surface">{m === "momo" ? "Mobile Money" : "Card Payment"}</div>
-                  <div className="text-[10px] text-muted mt-0.5">{m === "momo" ? "MTN · Vodafone · AirtelTigo" : "Paystack · Flutterwave"}</div>
+                  <div className="text-2xl mb-1">{m === "momo" ? "📱" : m === "card" ? "💳" : "💵"}</div>
+                  <div className="text-xs font-semibold text-surface">{m === "momo" ? "Mobile Money" : m === "card" ? "Card Payment" : "Cash"}</div>
+                  <div className="text-[10px] text-muted mt-0.5">{m === "momo" ? "MTN · Vodafone" : m === "card" ? "Paystack" : "Physical Cash"}</div>
                 </button>
               ))}
             </div>

@@ -10,6 +10,7 @@ interface AuthContextType {
   loading: boolean;
   businessId: string | null;
   role: StaffRole | null;
+  permissions: string[];
   logout: () => Promise<void>;
 }
 
@@ -18,6 +19,7 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   businessId: null,
   role: null,
+  permissions: [],
   logout: async () => {},
 });
 
@@ -25,6 +27,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [businessId, setBusinessId] = useState<string | null>(null);
   const [role, setRole] = useState<StaffRole | null>(null);
+  const [permissions, setPermissions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
@@ -36,14 +39,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const ctx = await resolveBusinessContext(u.uid, u.email);
           setBusinessId(ctx.businessId);
           setRole(ctx.role);
+          setPermissions(ctx.permissions || []);
         } catch {
           // Fall back to treating them as an independent owner if resolution fails.
           setBusinessId(u.uid);
           setRole("owner");
+          setPermissions([]);
         }
       } else {
         setBusinessId(null);
         setRole(null);
+        setPermissions([]);
       }
       setLoading(false);
     });
@@ -56,7 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, businessId, role, logout }}>
+    <AuthContext.Provider value={{ user, loading, businessId, role, permissions, logout }}>
       {children}
     </AuthContext.Provider>
   );

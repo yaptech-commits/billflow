@@ -10,14 +10,23 @@ import {
 import { cn } from "@/lib/utils";
 import type { StaffRole } from "@/lib/db";
 
-function getNav(role: StaffRole | null) {
+function getNav(role: StaffRole | null, permissions: string[]) {
+  const isAllowed = (href: string) => {
+    if (role === "owner") return true;
+    if (!permissions || permissions.length === 0) {
+      // Default salesperson access if no specific permissions set
+      return ["/pos", "/invoices", "/clients", "/products", "/dashboard"].includes(href);
+    }
+    return permissions.includes(href);
+  };
+
   const businessItems = [
     { href: "/reports",  icon: BarChart2, label: "Reports" },
     ...(role === "owner" ? [{ href: "/staff", icon: UserPlus, label: "Staff" }] : []),
     { href: "/settings", icon: Settings,  label: "Settings" },
-  ];
+  ].filter(item => isAllowed(item.href));
 
-  return [
+  const groups = [
     { label: "Main", items: [
       { href: "/pos",        icon: ScanLine,          label: "Point of Sale" },
       { href: "/dashboard",  icon: LayoutDashboard,   label: "Dashboard" },
@@ -26,20 +35,22 @@ function getNav(role: StaffRole | null) {
       { href: "/products",   icon: Package,           label: "Products" },
       { href: "/vouchers",   icon: Wifi,              label: "Vouchers" },
       { href: "/payments",   icon: CreditCard,        label: "Payments" },
-    ]},
+    ].filter(item => isAllowed(item.href)) },
     { label: "Inventory", items: [
       { href: "/suppliers",       icon: Truck,          label: "Suppliers" },
       { href: "/purchase-orders", icon: ClipboardList,  label: "Purchase Orders" },
-    ]},
+    ].filter(item => isAllowed(item.href)) },
     { label: "Business", items: businessItems },
   ];
+
+  return groups.filter(g => g.items.length > 0);
 }
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { user, role, logout } = useAuth();
+  const { user, role, permissions, logout } = useAuth();
   const name = user?.displayName ?? user?.email ?? "User";
-  const nav = getNav(role);
+  const nav = getNav(role, permissions);
 
   return (
     <aside className="fixed top-0 left-0 bottom-0 w-[240px] bg-deep border-r border-border flex flex-col z-50">

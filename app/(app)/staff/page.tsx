@@ -13,6 +13,25 @@ export default function StaffPage() {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [email, setEmail] = useState("");
+  const [selectedPermissions, setSelectedPermissions] = useState<string[]>(["/pos", "/invoices", "/clients", "/products"]);
+
+  const AVAILABLE_PAGES = [
+    { path: "/dashboard", label: "Dashboard" },
+    { path: "/pos", label: "POS" },
+    { path: "/invoices", label: "Invoices" },
+    { path: "/clients", label: "Clients" },
+    { path: "/products", label: "Products" },
+    { path: "/inventory", label: "Inventory" },
+    { path: "/suppliers", label: "Suppliers" },
+    { path: "/purchase-orders", label: "Purchase Orders" },
+    { path: "/reports", label: "Reports" },
+  ];
+
+  const togglePermission = (path: string) => {
+    setSelectedPermissions(prev =>
+      prev.includes(path) ? prev.filter(p => p !== path) : [...prev, path]
+    );
+  };
 
   const load = async () => {
     if (!businessId) return;
@@ -27,10 +46,11 @@ export default function StaffPage() {
     if (!businessId || !email) { toast.error("Enter an email address"); return; }
     setSaving(true);
     try {
-      await inviteSalesperson(businessId, email.trim().toLowerCase());
+      await inviteSalesperson(businessId, email.trim().toLowerCase(), selectedPermissions);
       toast.success(`Invited ${email}`);
       setOpen(false);
       setEmail("");
+      setSelectedPermissions(["/pos", "/invoices", "/clients", "/products"]);
       load();
     } catch (err: any) {
       toast.error(err.message ?? "Could not send invite");
@@ -132,9 +152,27 @@ export default function StaffPage() {
               value={email}
               onChange={e => setEmail(e.target.value)}
             />
-            <p className="text-xs text-muted mt-2">
-              They'll get access once they sign up or log in with this email. They'll be able to see
-              all clients and products, but only their own invoices and sales.
+          </div>
+          <div>
+            <label className="label">Allowed Pages</label>
+            <div className="grid grid-cols-2 gap-2 mt-2">
+              {AVAILABLE_PAGES.map(page => (
+                <button
+                  key={page.path}
+                  onClick={() => togglePermission(page.path)}
+                  className={`flex items-center gap-2 p-2 rounded-lg border text-xs transition-all ${
+                    selectedPermissions.includes(page.path)
+                      ? "border-gold bg-gold/5 text-surface"
+                      : "border-border text-muted hover:border-muted"
+                  }`}
+                >
+                  <div className={`w-3 h-3 rounded-full border ${selectedPermissions.includes(page.path) ? "bg-gold border-gold" : "border-muted"}`} />
+                  {page.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-[10px] text-muted mt-3">
+              Staff will only be able to see and access the pages you select here.
             </p>
           </div>
           <div className="flex gap-3 justify-end pt-2">

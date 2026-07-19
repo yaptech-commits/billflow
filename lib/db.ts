@@ -21,7 +21,7 @@ import { db } from "./firebase";
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
 export type InvoiceStatus = "paid" | "pending" | "overdue" | "draft";
-export type PaymentMethod = "momo" | "card";
+export type PaymentMethod = "momo" | "card" | "cash";
 
 export interface InvoiceLineItem {
   productId: string;
@@ -181,6 +181,8 @@ export interface Staff {
   role: StaffRole;
   status: StaffStatus;
   staffUid?: string;
+  /** List of page paths the staff can access (e.g. ["/pos", "/products"]). If unset/empty, they see all standard salesperson pages. */
+  permissions?: string[];
   createdAt?: Timestamp | null;
 }
 
@@ -799,7 +801,7 @@ export async function receivePurchaseOrder(id: string) {
 export async function resolveBusinessContext(
   uid: string,
   email: string
-): Promise<{ businessId: string; role: StaffRole; staffId?: string }> {
+): Promise<{ businessId: string; role: StaffRole; staffId?: string; permissions?: string[] }> {
   // Already-claimed staff record for this uid takes priority.
   const claimedSnap = await getDocs(
     query(col("staff"), where("staffUid", "==", uid))
@@ -808,7 +810,7 @@ export async function resolveBusinessContext(
     const s = claimedSnap.docs[0].data() as Staff;
     // Self-heal in case staffIndex is missing/stale (e.g. records created before this field existed).
     await setDoc(doc(db, "staffIndex", uid), { businessId: s.businessId, role: s.role, status: s.status });
-    return { businessId: s.businessId, role: s.role, staffId: claimedSnap.docs[0].id };
+    return { businessId: s.businessId, role: s.role, staffId: claimedSnap.docs[0].id, permissions: s.permissions };
   }
 
   // Pending invite matching this email — claim it now.
@@ -826,15 +828,16 @@ export async function resolveBusinessContext(
       businessId: s.businessId,
       role: s.role,
       status: "active",
+      permissions: s.permissions || [],
     });
-    return { businessId: s.businessId, role: s.role, staffId: staffDoc.id };
+    return { businessId: s.businessId, role: s.role, staffId: staffDoc.id, permissions: s.permissions };
   }
 
   // No invite found — this user is a business owner in their own right.
   return { businessId: uid, role: "owner" };
 }
 
-export async function inviteSalesperson(businessId: string, email: string) {
+export async function inviteSalesperson(businessId: string, email: string, permissions?: string[]) {
   const existing = await getDocs(
     query(col("staff"), where("businessId", "==", businessId), where("email", "==", email))
   );
@@ -846,6 +849,7 @@ export async function inviteSalesperson(businessId: string, email: string) {
     email,
     role: "salesperson" as StaffRole,
     status: "pending" as StaffStatus,
+    permissions: permissions || [],
     createdAt: serverTimestamp(),
   });
 }
