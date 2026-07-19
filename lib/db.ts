@@ -563,6 +563,10 @@ export async function deleteClient(id: string) {
   return deleteDoc(doc(db, "clients", id));
 }
 
+export async function updateClient(id: string, data: Partial<Client>) {
+  return updateDoc(doc(db, "clients", id), data);
+}
+
 // ─── SHIFTS ───────────────────────────────────────────────────────────────────
 
 export async function openShift(data: Omit<Shift, "id" | "openedAt" | "status">) {
@@ -916,6 +920,25 @@ export async function removeStaff(id: string) {
   // Revoke Firestore access immediately by removing their index entry too.
   if (staffDoc?.staffUid) {
     await deleteDoc(doc(db, "staffIndex", staffDoc.staffUid));
+  }
+}
+
+export async function updateStaff(id: string, data: Partial<Staff>) {
+  const staffRef = doc(db, "staff", id);
+  await updateDoc(staffRef, data);
+
+  // If permissions or businessId changed, update the staffIndex for real-time rule enforcement
+  if (data.permissions || data.businessId || data.status) {
+    const staffSnap = await getDoc(staffRef);
+    const staff = staffSnap.data() as Staff;
+    if (staff.staffUid) {
+      await updateDoc(doc(db, "staffIndex", staff.staffUid), {
+        ...(data.businessId ? { businessId: data.businessId } : {}),
+        ...(data.status ? { status: data.status } : {}),
+        // Note: staffIndex only holds businessId and status for basic rule matching;
+        // detailed page permissions are checked in the UI via the staff record.
+      });
+    }
   }
 }
 

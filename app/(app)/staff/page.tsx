@@ -1,9 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { getStaff, inviteSalesperson, removeStaff, Staff } from "@/lib/db";
+import { getStaff, inviteSalesperson, removeStaff, updateStaff, Staff } from "@/lib/db";
 import toast from "react-hot-toast";
-import { Plus, Trash2, Mail, ShieldCheck, Clock } from "lucide-react";
+import { Plus, Trash2, Mail, ShieldCheck, Clock, Edit2 } from "lucide-react";
 import Modal from "@/components/ui/Modal";
 
 export default function StaffPage() {
@@ -14,6 +14,7 @@ export default function StaffPage() {
   const [saving, setSaving] = useState(false);
   const [email, setEmail] = useState("");
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>(["/pos", "/invoices", "/clients", "/products"]);
+  const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
 
   const AVAILABLE_PAGES = [
     { path: "/dashboard", label: "Dashboard" },
@@ -59,6 +60,27 @@ export default function StaffPage() {
     }
   };
 
+  const handleUpdatePermissions = async () => {
+    if (!editingStaff?.id) return;
+    setSaving(true);
+    try {
+      await updateStaff(editingStaff.id, { permissions: selectedPermissions });
+      toast.success("Permissions updated");
+      setEditingStaff(null);
+      setSelectedPermissions(["/pos", "/invoices", "/clients", "/products"]);
+      load();
+    } catch (err: any) {
+      toast.error(err.message ?? "Could not update permissions");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openEdit = (s: Staff) => {
+    setEditingStaff(s);
+    setSelectedPermissions(s.permissions || []);
+  };
+
   const handleRemove = async (id: string, emailAddr: string) => {
     if (!confirm(`Remove ${emailAddr}'s access?`)) return;
     await removeStaff(id);
@@ -101,7 +123,7 @@ export default function StaffPage() {
                 <th className="text-left pb-3">Email</th>
                 <th className="text-left pb-3">Role</th>
                 <th className="text-left pb-3">Status</th>
-                <th className="text-left pb-3">Actions</th>
+                <th className="text-right pb-3">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -125,14 +147,23 @@ export default function StaffPage() {
                       </span>
                     )}
                   </td>
-                  <td className="py-3">
-                    <button
-                      onClick={() => handleRemove(s.id!, s.email)}
-                      className="text-muted hover:text-red transition-colors"
-                      title="Remove access"
-                    >
-                      <Trash2 size={15} />
-                    </button>
+                  <td className="py-3 text-right">
+                    <div className="flex items-center justify-end gap-3">
+                      <button
+                        onClick={() => openEdit(s)}
+                        className="text-muted hover:text-gold transition-colors"
+                        title="Edit Permissions"
+                      >
+                        <Edit2 size={15} />
+                      </button>
+                      <button
+                        onClick={() => handleRemove(s.id!, s.email)}
+                        className="text-muted hover:text-red transition-colors"
+                        title="Remove access"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -179,6 +210,40 @@ export default function StaffPage() {
             <button className="btn-ghost" onClick={() => setOpen(false)}>Cancel</button>
             <button className="btn-primary" onClick={handleInvite} disabled={saving}>
               {saving ? "Inviting..." : "Send Invite"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={!!editingStaff} onClose={() => setEditingStaff(null)} title="Edit Staff Permissions">
+        <div className="space-y-4">
+          <div>
+            <p className="text-xs text-muted mb-1">Editing access for:</p>
+            <p className="text-sm font-medium text-surface">{editingStaff?.email}</p>
+          </div>
+          <div>
+            <label className="label">Allowed Pages</label>
+            <div className="grid grid-cols-2 gap-2 mt-2">
+              {AVAILABLE_PAGES.map(page => (
+                <button
+                  key={page.path}
+                  onClick={() => togglePermission(page.path)}
+                  className={`flex items-center gap-2 p-2 rounded-lg border text-xs transition-all ${
+                    selectedPermissions.includes(page.path)
+                      ? "border-gold bg-gold/5 text-surface"
+                      : "border-border text-muted hover:border-muted"
+                  }`}
+                >
+                  <div className={`w-3 h-3 rounded-full border ${selectedPermissions.includes(page.path) ? "bg-gold border-gold" : "border-muted"}`} />
+                  {page.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex gap-3 justify-end pt-2">
+            <button className="btn-ghost" onClick={() => setEditingStaff(null)}>Cancel</button>
+            <button className="btn-primary" onClick={handleUpdatePermissions} disabled={saving}>
+              {saving ? "Saving..." : "Update Permissions"}
             </button>
           </div>
         </div>
