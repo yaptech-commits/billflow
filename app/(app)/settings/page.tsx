@@ -6,7 +6,7 @@ import { auth } from "@/lib/firebase";
 import {
   getBusinessProfile, upsertBusinessProfile, BusinessProfile,
   DEFAULT_ACCENT_COLOR, MAX_LOGO_BYTES, CURRENCIES, DEFAULT_CURRENCY,
-  DEFAULT_TAX_RATE, DEFAULT_TAX_LABEL,
+  DEFAULT_TAX_RATE, DEFAULT_TAX_LABEL, deleteBusinessData,
 } from "@/lib/db";
 import toast from "react-hot-toast";
 import { Upload, X } from "lucide-react";
@@ -111,6 +111,33 @@ export default function SettingsPage() {
     await updateProfile(auth.currentUser, { displayName: name });
     toast.success("Profile updated ✅");
     setSaving(false);
+  };
+
+  const [deleting, setDeleting] = useState(false);
+  const handleDeleteAccount = async () => {
+    if (!businessId || role !== "owner") return;
+    const confirmText = "delete my business data";
+    const input = prompt(`DANGER: This will permanently delete all your products, sales, and business data. Type "${confirmText}" to confirm:`);
+    
+    if (input !== confirmText) {
+      if (input !== null) toast.error("Incorrect confirmation text");
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      await deleteBusinessData(businessId);
+      toast.success("All business data has been deleted.");
+      // Redirect or logout
+      setTimeout(() => {
+        auth.signOut();
+        window.location.href = "/auth/login";
+      }, 2000);
+    } catch (err: any) {
+      toast.error(err.message || "Could not delete account data");
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
@@ -292,11 +319,19 @@ export default function SettingsPage() {
       </div>
 
       {/* Danger zone */}
-      <div className="card border-red/20">
-        <h2 className="font-grotesk font-semibold text-red mb-3">Danger Zone</h2>
-        <p className="text-xs text-muted mb-4">These actions are permanent and cannot be undone.</p>
-        <button className="btn-danger">Delete Account</button>
-      </div>
+      {role === "owner" && (
+        <div className="card border-red/20">
+          <h2 className="font-grotesk font-semibold text-red mb-3">Danger Zone</h2>
+          <p className="text-xs text-muted mb-4">These actions are permanent and cannot be undone. All your business records will be wiped from our database.</p>
+          <button 
+            className="btn-danger" 
+            onClick={handleDeleteAccount}
+            disabled={deleting}
+          >
+            {deleting ? "Deleting Data..." : "Delete All Business Data"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

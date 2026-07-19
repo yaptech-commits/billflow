@@ -690,6 +690,25 @@ export async function deleteCategory(id: string) {
   return deleteDoc(doc(db, "categories", id));
 }
 
+/** 
+ * DANGER: Permanently deletes ALL data associated with a businessId.
+ * This includes products, invoices, clients, payments, categories, stock movements, and staff.
+ */
+export async function deleteBusinessData(businessId: string) {
+  const collections = [
+    "products", "invoices", "clients", "payments", "categories", 
+    "stockMovements", "staffIndex", "businessProfiles", "purchaseOrders", 
+    "suppliers", "vouchers", "shifts"
+  ];
+
+  for (const colName of collections) {
+    const q = query(collection(db, colName), where("businessId", "==", businessId));
+    const snap = await getDocs(q);
+    const deletePromises = snap.docs.map(d => deleteDoc(d.ref));
+    await Promise.all(deletePromises);
+  }
+}
+
 /** Manual stock adjustment (restock, correction, etc.) — separate from invoice-driven deduction. */
 export async function adjustProductStock(
   id: string,
