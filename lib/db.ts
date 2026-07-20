@@ -918,9 +918,15 @@ export async function inviteSalesperson(businessId: string, email: string, permi
 
 export async function getStaff(businessId: string): Promise<Staff[]> {
   try {
+    const { auth } = await import("@/lib/firebase");
+    const idToken = await auth.currentUser?.getIdToken();
+
     const response = await fetch("/api/staff", {
       method: "GET",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+      },
     });
 
     if (!response.ok) {

@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+
+export const dynamic = "force-dynamic";
 import { getAdminDb } from "@/lib/firebase-admin";
 import { requireServerActor } from "@/lib/server-auth";
 

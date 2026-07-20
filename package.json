@@ -12,6 +12,7 @@
     "clsx": "^2.1.1",
     "date-fns": "^3.6.0",
     "firebase": "^10.12.0",
+    "firebase-admin": "^14.2.0",
     "jsbarcode": "^3.12.3",
     "lucide-react": "^0.383.0",
     "nanoid": "^5.0.7",
