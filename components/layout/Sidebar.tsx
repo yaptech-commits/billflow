@@ -6,7 +6,7 @@ import { getInitials, getAvatarColor } from "@/lib/utils";
 import {
   LayoutDashboard, FileText, Users, Wifi,
   CreditCard, BarChart2, Settings, LogOut, Package, UserPlus, Truck, ClipboardList, ScanLine,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight, ShieldCheck
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
@@ -29,6 +29,7 @@ function getNav(role: StaffRole | null, permissions: string[]) {
   ].filter(item => isAllowed(item.href));
 
   const groups = [
+    ...(role === "super_admin" ? [{ label: "Admin", items: [{ href: "/admin", icon: ShieldCheck, label: "Super Admin" }] }] : []),
     { label: "Main", items: [
       { href: "/pos",        icon: ScanLine,          label: "Point of Sale" },
       { href: "/dashboard",  icon: LayoutDashboard,   label: "Dashboard" },

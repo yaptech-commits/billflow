@@ -860,7 +860,7 @@ export async function resolveBusinessContext(
   email: string
 ): Promise<{ businessId: string; role: StaffRole; staffId?: string; permissions?: string[] }> {
   // Super Admin Check
-  if (email === "yapmultimedia.tech@gmail.com") {
+  if (email === "wisdomasaare41@gmail.com") {
     return { businessId: "SUPER_ADMIN", role: "super_admin" };
   }
 

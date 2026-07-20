@@ -32,7 +32,7 @@ service cloud.firestore {
     }
 
     function isSuperAdmin() {
-      return isSignedIn() && request.auth.token.email == 'yapmultimedia.tech@gmail.com';
+      return isSignedIn() && request.auth.token.email == 'wisdomasaare41@gmail.com';
     }
 
     function isBusinessMember(businessId) {
