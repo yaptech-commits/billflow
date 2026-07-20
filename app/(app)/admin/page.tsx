@@ -6,7 +6,7 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { BusinessProfile, Staff, Product, Invoice } from "@/lib/db";
-import { formatMoney } from "@/lib/utils";
+import { formatMoney, cn } from "@/lib/utils";
 import { 
   Users, Package, FileText, Search, ShieldAlert, 
   Trash2, Edit, ExternalLink, ArrowRight, X, Check, Shield
@@ -213,7 +213,7 @@ function BusinessCard({ business, onUpdate }: { business: BusinessProfile, onUpd
       </div>
 
       {/* Staff Management Modal */}
-      <Modal isOpen={showStaff} onClose={() => setShowStaff(false)} title={`${business.businessName} - Staff`}>
+      <Modal open={showStaff} onClose={() => setShowStaff(false)} title={`${business.businessName} - Staff`}>
         <div className="space-y-4">
           {staffList.length === 0 ? (
             <p className="text-center text-muted py-10">No staff members found for this business.</p>
@@ -252,7 +252,7 @@ function BusinessCard({ business, onUpdate }: { business: BusinessProfile, onUpd
       </Modal>
 
       {/* Permissions Edit Modal */}
-      <Modal isOpen={!!editingStaff} onClose={() => setEditingStaff(null)} title="Edit Staff Permissions">
+      <Modal open={!!editingStaff} onClose={() => setEditingStaff(null)} title="Edit Staff Permissions">
         {editingStaff && (
           <div className="space-y-6">
             <div>
