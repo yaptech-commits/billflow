@@ -2,14 +2,15 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { 
-  getDocs, collection, query, orderBy, doc, getDoc, updateDoc, deleteDoc, where
+  getDocs, collection, query, orderBy, doc, getDoc, updateDoc, deleteDoc, where, writeBatch
 } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { sendPasswordResetEmail } from "firebase/auth";
+import { db, auth } from "@/lib/firebase";
 import { BusinessProfile, Staff, Product, Invoice } from "@/lib/db";
 import { formatMoney, cn } from "@/lib/utils";
 import { 
   Users, Package, FileText, Search, ShieldAlert, 
-  Trash2, Edit, ExternalLink, ArrowRight, X, Check, Shield
+  Trash2, Edit, ExternalLink, ArrowRight, X, Check, Shield, Ban, RotateCcw, UserMinus
 } from "lucide-react";
 import Modal from "@/components/ui/Modal";
 import toast from "react-hot-toast";
@@ -161,6 +162,51 @@ function BusinessCard({ business, onUpdate }: { business: BusinessProfile, onUpd
       fetchStats();
     } catch (e) {
       toast.error("Update failed", { id: t });
+    }
+  };
+
+  const handleToggleStaffStatus = async (staff: Staff) => {
+    const newStatus = staff.status === "active" ? "pending" : "active";
+    const t = toast.loading(`${newStatus === "pending" ? "Suspending" : "Activating"} staff...`);
+    try {
+      const batch = writeBatch(db);
+      batch.update(doc(db, "staff", staff.id!), { status: newStatus });
+      if (staff.staffUid) {
+        batch.update(doc(db, "staffIndex", staff.staffUid), { status: newStatus });
+      }
+      await batch.commit();
+      toast.success(`Staff ${newStatus === "pending" ? "suspended" : "activated"}`, { id: t });
+      fetchStats();
+    } catch (e) {
+      toast.error("Action failed", { id: t });
+    }
+  };
+
+  const handleDeleteStaff = async (staff: Staff) => {
+    if (!confirm(`Are you sure you want to delete ${staff.email}? This will revoke all their access.`)) return;
+    const t = toast.loading("Deleting staff...");
+    try {
+      const batch = writeBatch(db);
+      batch.delete(doc(db, "staff", staff.id!));
+      if (staff.staffUid) {
+        batch.delete(doc(db, "staffIndex", staff.staffUid));
+      }
+      await batch.commit();
+      toast.success("Staff deleted", { id: t });
+      fetchStats();
+    } catch (e) {
+      toast.error("Deletion failed", { id: t });
+    }
+  };
+
+  const handleResetPassword = async (email: string) => {
+    if (!confirm(`Send password reset email to ${email}?`)) return;
+    const t = toast.loading("Sending reset email...");
+    try {
+      await sendPasswordResetEmail(auth, email);
+      toast.success("Reset email sent", { id: t });
+    } catch (e: any) {
+      toast.error(e.message || "Failed to send reset email", { id: t });
     }
   };
 
@@ -389,12 +435,39 @@ function BusinessCard({ business, onUpdate }: { business: BusinessProfile, onUpd
                       </span>
                     </div>
                   </div>
-                  <button 
-                    onClick={() => setEditingStaff(s)}
-                    className="btn-ghost p-2"
-                  >
-                    <Shield size={14} />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button 
+                      onClick={() => handleResetPassword(s.email)}
+                      className="p-2 text-muted hover:text-gold transition-colors"
+                      title="Send Password Reset"
+                    >
+                      <RotateCcw size={14} />
+                    </button>
+                    <button 
+                      onClick={() => handleToggleStaffStatus(s)}
+                      className={cn(
+                        "p-2 transition-colors",
+                        s.status === "active" ? "text-muted hover:text-red" : "text-muted hover:text-green"
+                      )}
+                      title={s.status === "active" ? "Suspend Staff" : "Activate Staff"}
+                    >
+                      {s.status === "active" ? <Ban size={14} /> : <Check size={14} />}
+                    </button>
+                    <button 
+                      onClick={() => setEditingStaff(s)}
+                      className="p-2 text-muted hover:text-gold transition-colors"
+                      title="Edit Permissions"
+                    >
+                      <Shield size={14} />
+                    </button>
+                    <button 
+                      onClick={() => handleDeleteStaff(s)}
+                      className="p-2 text-muted hover:text-red transition-colors"
+                      title="Delete Staff"
+                    >
+                      <UserMinus size={14} />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
