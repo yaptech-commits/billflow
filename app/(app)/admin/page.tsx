@@ -90,11 +90,14 @@ export default function AdminPage() {
 }
 
 function BusinessCard({ business, onUpdate }: { business: BusinessProfile, onUpdate: () => void }) {
-  const [stats, setStats] = useState({ products: 0, invoices: 0, staff: 0 });
+  const [stats, setStats] = useState({ products: 0, invoices: 0, staff: 0, payments: 0, totalRevenue: 0 });
   const [loading, setLoading] = useState(true);
   const [showStaff, setShowStaff] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
   const [staffList, setStaffList] = useState<Staff[]>([]);
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
+  const [editForm, setEditForm] = useState<Partial<BusinessProfile>>({});
 
   const ALL_PAGES = [
     { id: "/pos", label: "POS" },
@@ -112,12 +115,22 @@ function BusinessCard({ business, onUpdate }: { business: BusinessProfile, onUpd
 
   const fetchStats = async () => {
     try {
-      const [p, i, s] = await Promise.all([
+      const [p, i, s, pay] = await Promise.all([
         getDocs(query(collection(db, "products"), where("businessId", "==", business.businessId))),
         getDocs(query(collection(db, "invoices"), where("businessId", "==", business.businessId))),
-        getDocs(query(collection(db, "staff"), where("businessId", "==", business.businessId)))
+        getDocs(query(collection(db, "staff"), where("businessId", "==", business.businessId))),
+        getDocs(query(collection(db, "payments"), where("businessId", "==", business.businessId)))
       ]);
-      setStats({ products: p.size, invoices: i.size, staff: s.size });
+      
+      const totalRevenue = pay.docs.reduce((acc, doc) => acc + (doc.data().amount || 0), 0);
+      
+      setStats({ 
+        products: p.size, 
+        invoices: i.size, 
+        staff: s.size, 
+        payments: pay.size,
+        totalRevenue 
+      });
       setStaffList(s.docs.map(d => ({ ...d.data(), id: d.id } as Staff)));
     } catch (e) {
       console.error(e);
@@ -146,6 +159,18 @@ function BusinessCard({ business, onUpdate }: { business: BusinessProfile, onUpd
       toast.success("Permissions updated", { id: t });
       setEditingStaff(null);
       fetchStats();
+    } catch (e) {
+      toast.error("Update failed", { id: t });
+    }
+  };
+
+  const handleUpdateBusiness = async () => {
+    const t = toast.loading("Updating business profile...");
+    try {
+      await updateDoc(doc(db, "businessProfiles", business.businessId), editForm);
+      toast.success("Business profile updated", { id: t });
+      setShowEdit(false);
+      onUpdate();
     } catch (e) {
       toast.error("Update failed", { id: t });
     }
@@ -196,6 +221,23 @@ function BusinessCard({ business, onUpdate }: { business: BusinessProfile, onUpd
           <span className="text-[10px] text-muted">ID: {business.businessId.slice(0, 8)}...</span>
           <div className="flex items-center gap-2">
             <button 
+              onClick={() => {
+                setEditForm({ ...business });
+                setShowEdit(true);
+              }}
+              className="p-1.5 text-muted hover:text-gold transition-colors" 
+              title="Edit Business"
+            >
+              <Edit size={14} />
+            </button>
+            <button 
+              onClick={() => setShowDetails(true)}
+              className="p-1.5 text-muted hover:text-gold transition-colors" 
+              title="View Full Details"
+            >
+              <ExternalLink size={14} />
+            </button>
+            <button 
               className="p-1.5 text-muted hover:text-red transition-colors" 
               title="Delete Business Data"
               onClick={async () => {
@@ -211,6 +253,115 @@ function BusinessCard({ business, onUpdate }: { business: BusinessProfile, onUpd
           </div>
         </div>
       </div>
+
+      {/* Business Details Modal */}
+      <Modal open={showDetails} onClose={() => setShowDetails(false)} title={`Business Details - ${business.businessName}`}>
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="p-4 bg-white/5 rounded-lg border border-border">
+              <p className="text-[10px] text-muted uppercase font-bold mb-1">Total Revenue</p>
+              <p className="text-xl font-grotesk text-gold">{formatMoney(stats.totalRevenue, business.currency || "GHS")}</p>
+            </div>
+            <div className="p-4 bg-white/5 rounded-lg border border-border">
+              <p className="text-[10px] text-muted uppercase font-bold mb-1">Total Payments</p>
+              <p className="text-xl font-grotesk text-surface">{stats.payments}</p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <h4 className="text-xs font-bold uppercase text-muted">Business Information</h4>
+            <div className="grid grid-cols-1 gap-3">
+              <div className="flex justify-between py-2 border-b border-border/30">
+                <span className="text-xs text-muted">Email</span>
+                <span className="text-xs text-surface">{business.email || "N/A"}</span>
+              </div>
+              <div className="flex justify-between py-2 border-b border-border/30">
+                <span className="text-xs text-muted">Phone</span>
+                <span className="text-xs text-surface">{business.phone || "N/A"}</span>
+              </div>
+              <div className="flex justify-between py-2 border-b border-border/30">
+                <span className="text-xs text-muted">Address</span>
+                <span className="text-xs text-surface">{business.address || "N/A"}</span>
+              </div>
+              <div className="flex justify-between py-2 border-b border-border/30">
+                <span className="text-xs text-muted">Currency</span>
+                <span className="text-xs text-surface">{business.currency || "GHS"}</span>
+              </div>
+              <div className="flex justify-between py-2 border-b border-border/30">
+                <span className="text-xs text-muted">Tax Settings</span>
+                <span className="text-xs text-surface">{business.taxLabel || "Tax"}: {business.taxRate || 0}% ({business.taxInclusive ? "Inclusive" : "Exclusive"})</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <button className="btn-primary w-full justify-center" onClick={() => setShowDetails(false)}>Close</button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Edit Business Modal */}
+      <Modal open={showEdit} onClose={() => setShowEdit(false)} title={`Edit Business - ${business.businessName}`}>
+        <div className="space-y-4">
+          <div>
+            <label className="label">Business Name</label>
+            <input 
+              className="input" 
+              value={editForm.businessName || ""} 
+              onChange={e => setEditForm({ ...editForm, businessName: e.target.value })} 
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">Email</label>
+              <input 
+                className="input" 
+                value={editForm.email || ""} 
+                onChange={e => setEditForm({ ...editForm, email: e.target.value })} 
+              />
+            </div>
+            <div>
+              <label className="label">Phone</label>
+              <input 
+                className="input" 
+                value={editForm.phone || ""} 
+                onChange={e => setEditForm({ ...editForm, phone: e.target.value })} 
+              />
+            </div>
+          </div>
+          <div>
+            <label className="label">Address</label>
+            <input 
+              className="input" 
+              value={editForm.address || ""} 
+              onChange={e => setEditForm({ ...editForm, address: e.target.value })} 
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">Tax Rate (%)</label>
+              <input 
+                className="input" 
+                type="number"
+                value={editForm.taxRate || 0} 
+                onChange={e => setEditForm({ ...editForm, taxRate: parseFloat(e.target.value) || 0 })} 
+              />
+            </div>
+            <div>
+              <label className="label">Tax Label</label>
+              <input 
+                className="input" 
+                value={editForm.taxLabel || "VAT"} 
+                onChange={e => setEditForm({ ...editForm, taxLabel: e.target.value })} 
+              />
+            </div>
+          </div>
+          <div className="flex gap-3 pt-4">
+            <button className="btn-ghost flex-1 justify-center" onClick={() => setShowEdit(false)}>Cancel</button>
+            <button className="btn-primary flex-1 justify-center" onClick={handleUpdateBusiness}>Save Changes</button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Staff Management Modal */}
       <Modal open={showStaff} onClose={() => setShowStaff(false)} title={`${business.businessName} - Staff`}>
