@@ -917,10 +917,23 @@ export async function inviteSalesperson(businessId: string, email: string, permi
 }
 
 export async function getStaff(businessId: string): Promise<Staff[]> {
-  const snap = await getDocs(
-    query(col("staff"), where("businessId", "==", businessId), orderBy("createdAt", "desc"))
-  );
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Staff));
+  try {
+    const response = await fetch("/api/staff", {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to fetch staff");
+    }
+
+    const data = await response.json();
+    return data.staff as Staff[];
+  } catch (error) {
+    console.error("Error fetching staff:", error);
+    throw error;
+  }
 }
 
 export async function removeStaff(id: string) {
