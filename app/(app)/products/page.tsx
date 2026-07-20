@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import {
   getProducts, createProduct, updateProduct, deleteProduct, adjustProductStock,
@@ -9,7 +9,7 @@ import {
 import { formatCedi } from "@/lib/utils";
 import Modal from "@/components/ui/Modal";
 import toast from "react-hot-toast";
-import { Plus, Trash2, Pencil, PackagePlus, PackageMinus, AlertTriangle, History, ArrowUp, ArrowDown, Barcode as BarcodeIcon } from "lucide-react";
+import { Plus, Trash2, Pencil, PackagePlus, PackageMinus, AlertTriangle, History, ArrowUp, ArrowDown, Barcode as BarcodeIcon, Search } from "lucide-react";
 import Barcode from "@/components/Barcode";
 import { generateSKU } from "@/lib/sku-generator";
 
@@ -32,6 +32,15 @@ export default function ProductsPage() {
   const [catOpen, setCatOpen] = useState(false);
   const [catName, setCatName] = useState("");
   const [catSaving, setCatSaving] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const filteredProducts = useMemo(() => {
+    if (!search) return products;
+    return products.filter(p =>
+      p.name.toLowerCase().includes(search.toLowerCase()) ||
+      (p.sku ?? "").toLowerCase().includes(search.toLowerCase())
+    );
+  }, [products, search]);
 
   // Movement history modal
   const [historyProduct, setHistoryProduct] = useState<Product | null>(null);
@@ -54,7 +63,7 @@ export default function ProductsPage() {
 
   useEffect(() => { load(); }, [businessId]);
 
-  const resetForm = () =>     setForm({ name: "", sku: "", categoryId: "", unit: "", price: "", wholesalePrice: "", stockQty: "", reorderLevel: "" });
+  const resetForm = () => setForm({ name: "", sku: "", categoryId: "", unit: "", price: "", wholesalePrice: "", stockQty: "", reorderLevel: "" });
 
   const openAdd = () => {
     setEditing(null);
@@ -64,7 +73,7 @@ export default function ProductsPage() {
 
   const openEdit = (p: Product) => {
     setEditing(p);
-      setForm({
+    setForm({
       name: p.name,
       sku: p.sku ?? "",
       categoryId: p.categoryId ?? "",
@@ -181,14 +190,30 @@ export default function ProductsPage() {
 
   return (
     <div>
-      <div className="flex justify-end gap-3 mb-6">
-        <button className="btn-ghost" onClick={() => setCatOpen(true)}>Manage Categories</button>
-        <button className="btn-primary" onClick={openAdd}><Plus size={15} /> Add Product</button>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+        <div className="relative w-full md:w-96">
+          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted" />
+          <input
+            className="input pl-10"
+            placeholder="Search products by name or SKU..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+        <div className="flex gap-3 w-full md:w-auto">
+          <button className="btn-ghost flex-1 md:flex-none" onClick={() => setCatOpen(true)}>Manage Categories</button>
+          <button className="btn-primary flex-1 md:flex-none" onClick={openAdd}><Plus size={15} /> Add Product</button>
+        </div>
       </div>
 
       <div className="card">
         {loading ? (
           <p className="text-muted text-sm py-10 text-center">Loading products...</p>
+        ) : filteredProducts.length === 0 ? (
+          <div className="text-center py-16">
+            <p className="text-muted mb-3">No products match your search.</p>
+            <button className="btn-primary inline-flex" onClick={openAdd}><Plus size={15} /> Add Product</button>
+          </div>
         ) : products.length === 0 ? (
           <div className="text-center py-16">
             <p className="text-muted mb-3">No products yet</p>
@@ -206,7 +231,7 @@ export default function ProductsPage() {
               </tr>
             </thead>
             <tbody>
-              {products.map(p => (
+              {filteredProducts.map(p => (
                 <tr key={p.id} className="border-t border-border hover:bg-white/[0.02]">
                   <td className="py-3 font-medium text-surface">{p.name}</td>
                   <td className="py-3 text-muted text-xs">{p.sku || "—"}</td>
@@ -328,26 +353,6 @@ export default function ProductsPage() {
         )}
       </Modal>
 
-      {/* Categories Modal */}
-      <Modal open={catOpen} onClose={() => setCatOpen(false)} title="Manage Categories">
-        <div className="space-y-4">
-          <div className="flex gap-2">
-            <input className="input" placeholder="Category name" value={catName} onChange={e => setCatName(e.target.value)} />
-            <button className="btn-primary" onClick={handleAddCategory} disabled={catSaving}>Add</button>
-          </div>
-          <div className="space-y-2">
-            {categories.map(c => (
-              <div key={c.id} className="flex items-center justify-between p-2 rounded-lg bg-white/5 border border-border">
-                <span className="text-sm">{c.name}</span>
-                <button onClick={() => handleDeleteCategory(c.id!)} className="text-muted hover:text-red transition-colors">
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      </Modal>
-
       {/* Stock History Modal */}
       <Modal open={!!historyProduct} onClose={() => setHistoryProduct(null)} title={historyProduct ? `Stock History · ${historyProduct.name}` : "Stock History"} width="max-w-xl">
         {historyLoading ? (
@@ -381,6 +386,33 @@ export default function ProductsPage() {
             ))}
           </div>
         )}
+      </Modal>
+
+      {/* Categories Modal */}
+      <Modal open={catOpen} onClose={() => setCatOpen(false)} title="Manage Categories" width="max-w-md">
+        <div className="space-y-4">
+          <div className="flex gap-2">
+            <input
+              className="input"
+              placeholder="New category name"
+              value={catName}
+              onChange={e => setCatName(e.target.value)}
+            />
+            <button className="btn-primary" onClick={handleAddCategory} disabled={catSaving}>
+              {catSaving ? "Adding..." : "Add"}
+            </button>
+          </div>
+          <div className="space-y-2 max-h-60 overflow-y-auto">
+            {categories.map(c => (
+              <div key={c.id} className="flex items-center justify-between p-2 rounded border border-border">
+                <span className="text-sm text-surface">{c.name}</span>
+                <button onClick={() => handleDeleteCategory(c.id!)} className="text-muted hover:text-red">
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
       </Modal>
     </div>
   );
