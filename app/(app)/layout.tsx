@@ -5,9 +5,10 @@ import { useAuth } from "@/lib/auth-context";
 import Sidebar from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
 import { cn } from "@/lib/utils";
+import { checkLowStockAndNotify, clearOldNotifications } from "@/lib/db";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, businessId, role } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -24,6 +25,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     window.addEventListener("sidebar-toggle", handleToggle);
     return () => window.removeEventListener("sidebar-toggle", handleToggle);
   }, []);
+
+  useEffect(() => {
+    if (businessId && role === "owner") {
+      // Check for low stock and clear old notifications once per session/mount
+      checkLowStockAndNotify(businessId);
+      clearOldNotifications(businessId);
+    }
+  }, [businessId, role]);
 
   if (loading || !user) {
     return (

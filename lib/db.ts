@@ -15,6 +15,7 @@ import {
   Timestamp,
   runTransaction,
   Transaction,
+  writeBatch,
 } from "firebase/firestore";
 import { db } from "./firebase";
 
@@ -248,6 +249,16 @@ export interface Payment {
   amount: number;
   status: "success" | "failed" | "pending";
   createdAt?: Timestamp | null;
+}
+
+export interface Notification {
+  id?: string;
+  businessId: string;
+  title: string;
+  message: string;
+  type: "low_stock" | "info" | "alert";
+  read: boolean;
+  createdAt: Timestamp;
 }
 
 export interface Shift {
@@ -1108,6 +1119,85 @@ export async function getStockMovements(businessId: string, opts?: { productId?:
 export async function getBusinessProfile(businessId: string): Promise<BusinessProfile | null> {
   const snap = await getDoc(doc(db, "businessProfiles", businessId));
   return snap.exists() ? (snap.data() as BusinessProfile) : null;
+}
+
+// ─── NOTIFICATIONS ─────────────────────────────────────────────────────────────
+
+export async function getNotifications(businessId: string): Promise<Notification[]> {
+  const oneWeekAgo = new Date();
+  oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+
+  const q = query(
+    col("notifications"),
+    where("businessId", "==", businessId),
+    where("createdAt", ">=", oneWeekAgo),
+    orderBy("createdAt", "desc")
+  );
+  
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as Notification));
+}
+
+export async function markNotificationAsRead(id: string) {
+  return updateDoc(doc(db, "notifications", id), { read: true });
+}
+
+export async function clearOldNotifications(businessId: string) {
+  const oneWeekAgo = new Date();
+  oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+
+  const q = query(
+    col("notifications"),
+    where("businessId", "==", businessId),
+    where("createdAt", "<", oneWeekAgo)
+  );
+
+  const snap = await getDocs(q);
+  const batch = writeBatch(db);
+  snap.docs.forEach(d => batch.delete(d.ref));
+  return batch.commit();
+}
+
+export async function checkLowStockAndNotify(businessId: string) {
+  const productsSnap = await getDocs(query(col("products"), where("businessId", "==", businessId)));
+  const products = productsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Product));
+  
+  for (const product of products) {
+    const reorderLevel = product.reorderLevel ?? 5;
+    if (product.stockQty <= reorderLevel) {
+      // Check if we already notified about this product in the last 24h to avoid spam
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      
+      const existingQ = query(
+        col("notifications"),
+        where("businessId", "==", businessId),
+        where("type", "==", "low_stock"),
+        where("message", "array-contains", product.name), // This is a bit loose, better to use a specific field but let's keep it simple for now
+        where("createdAt", ">", yesterday)
+      );
+      
+      // Better: Check by a specific title pattern
+      const existingQ2 = query(
+        col("notifications"),
+        where("businessId", "==", businessId),
+        where("title", "==", `Low Stock: ${product.name}`),
+        where("createdAt", ">", yesterday)
+      );
+
+      const existingSnap = await getDocs(existingQ2);
+      if (existingSnap.empty) {
+        await addDoc(col("notifications"), {
+          businessId,
+          title: `Low Stock: ${product.name}`,
+          message: `${product.name} is down to ${product.stockQty} ${product.unit || "units"}. Reorder level is ${reorderLevel}.`,
+          type: "low_stock",
+          read: false,
+          createdAt: serverTimestamp(),
+        });
+      }
+    }
+  }
 }
 
 export async function upsertBusinessProfile(profile: Omit<BusinessProfile, "updatedAt">) {

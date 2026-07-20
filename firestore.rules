@@ -254,6 +254,11 @@ service cloud.firestore {
       allow read, write: if isOwner(businessId);
     }
 
+    match /notifications/{id} {
+      allow read, update, delete: if ownsExistingBusinessDocument();
+      allow create: if ownsIncomingBusinessDocument();
+    }
+
     // Default deny for all current and future collections.
     match /{document=**} {
       allow read, write: if false;
