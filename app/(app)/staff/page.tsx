@@ -36,12 +36,21 @@ export default function StaffPage() {
 
   const load = async () => {
     if (!businessId) return;
-    const data = await getStaff(businessId);
-    setStaff(data);
-    setLoading(false);
+    setLoading(true);
+    try {
+      const data = await getStaff(businessId);
+      setStaff(data);
+    } catch (err: any) {
+      console.error("Staff load error:", err);
+      toast.error("Failed to load staff list");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  useEffect(() => { load(); }, [businessId]);
+  useEffect(() => {
+    load();
+  }, [businessId]);
 
   const handleInvite = async () => {
     if (!businessId || !email) { toast.error("Enter an email address"); return; }

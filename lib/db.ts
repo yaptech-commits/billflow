@@ -921,11 +921,16 @@ export async function getStaff(businessId: string): Promise<Staff[]> {
     const snap = await getDocs(
       query(
         col("staff"),
-        where("businessId", "==", businessId),
-        orderBy("createdAt", "desc")
+        where("businessId", "==", businessId)
       )
     );
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Staff));
+    const staff = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Staff));
+    // Sort manually to avoid needing a composite index
+    return staff.sort((a, b) => {
+      const dateA = a.createdAt?.seconds || 0;
+      const dateB = b.createdAt?.seconds || 0;
+      return dateB - dateA;
+    });
   } catch (error) {
     console.error("Error fetching staff:", error);
     throw error;
