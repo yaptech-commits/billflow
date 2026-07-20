@@ -49,10 +49,36 @@ export default function AdminPage() {
     );
   }
 
-  const filtered = businesses.filter(b => 
+  const pendingUsers = businesses.filter(b => b.status === "pending");
+  const approvedBusinesses = businesses.filter(b => b.status !== "pending");
+
+  const filtered = approvedBusinesses.filter(b => 
     b.businessName.toLowerCase().includes(search.toLowerCase()) ||
     b.email?.toLowerCase().includes(search.toLowerCase())
   );
+
+  const handleApprove = async (id: string) => {
+    const t = toast.loading("Approving account...");
+    try {
+      await updateDoc(doc(db, "businessProfiles", id), { status: "active" });
+      toast.success("Account approved", { id: t });
+      fetchBusinesses();
+    } catch (e) {
+      toast.error("Approval failed", { id: t });
+    }
+  };
+
+  const handleSuspend = async (id: string, currentStatus?: string) => {
+    const newStatus = currentStatus === "suspended" ? "active" : "suspended";
+    const t = toast.loading(`${newStatus === "suspended" ? "Suspending" : "Activating"} account...`);
+    try {
+      await updateDoc(doc(db, "businessProfiles", id), { status: newStatus });
+      toast.success(`Account ${newStatus}`, { id: t });
+      fetchBusinesses();
+    } catch (e) {
+      toast.error("Action failed", { id: t });
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -75,22 +101,62 @@ export default function AdminPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {loading ? (
-          <div className="col-span-full py-20 text-center text-muted animate-pulse">Loading businesses...</div>
-        ) : filtered.length === 0 ? (
-          <div className="col-span-full py-20 text-center text-muted">No businesses found</div>
-        ) : (
-          filtered.map(b => (
-            <BusinessCard key={b.businessId} business={b} onUpdate={fetchBusinesses} />
-          ))
-        )}
+      {pendingUsers.length > 0 && (
+        <div className="space-y-4">
+          <h2 className="text-lg font-bold text-gold flex items-center gap-2">
+            <Shield size={20} /> Pending Approvals ({pendingUsers.length})
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {pendingUsers.map(b => (
+              <div key={b.businessId} className="card border-gold/30 bg-gold/5">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="font-bold text-surface">{b.businessName}</h3>
+                    <p className="text-xs text-muted">{b.email}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => handleApprove(b.businessId)}
+                      className="p-2 bg-green/20 text-green rounded-full hover:bg-green/30 transition-colors"
+                      title="Approve Account"
+                    >
+                      <Check size={16} />
+                    </button>
+                    <button 
+                      onClick={() => handleSuspend(b.businessId, "suspended")}
+                      className="p-2 bg-red/20 text-red rounded-full hover:bg-red/30 transition-colors"
+                      title="Reject/Suspend"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                </div>
+                <p className="text-[10px] text-muted">Signed up: {b.createdAt ? new Date(b.createdAt.toDate()).toLocaleDateString() : "N/A"}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-4">
+        <h2 className="text-lg font-bold text-white">Approved Businesses</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {loading ? (
+            <div className="col-span-full py-20 text-center text-muted animate-pulse">Loading businesses...</div>
+          ) : filtered.length === 0 ? (
+            <div className="col-span-full py-20 text-center text-muted">No businesses found</div>
+          ) : (
+            filtered.map(b => (
+              <BusinessCard key={b.businessId} business={b} onUpdate={fetchBusinesses} onSuspend={() => handleSuspend(b.businessId, b.status)} />
+            ))
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-function BusinessCard({ business, onUpdate }: { business: BusinessProfile, onUpdate: () => void }) {
+function BusinessCard({ business, onUpdate, onSuspend }: { business: BusinessProfile, onUpdate: () => void, onSuspend: () => void }) {
   const [stats, setStats] = useState({ products: 0, invoices: 0, staff: 0, payments: 0, totalRevenue: 0 });
   const [loading, setLoading] = useState(true);
   const [showStaff, setShowStaff] = useState(false);
@@ -282,6 +348,16 @@ function BusinessCard({ business, onUpdate }: { business: BusinessProfile, onUpd
               title="View Full Details"
             >
               <ExternalLink size={14} />
+            </button>
+            <button 
+              onClick={onSuspend}
+              className={cn(
+                "p-1.5 transition-colors",
+                business.status === "suspended" ? "text-green hover:text-green/80" : "text-muted hover:text-red"
+              )}
+              title={business.status === "suspended" ? "Activate Account" : "Suspend Account"}
+            >
+              {business.status === "suspended" ? <Check size={14} /> : <Ban size={14} />}
             </button>
             <button 
               className="p-1.5 text-muted hover:text-red transition-colors" 

@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Bell, Check, Clock, Info, Package, AlertTriangle } from "lucide-react";
+import { Bell, Check, Clock, Info, Package, AlertTriangle, RefreshCw } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { getNotifications, markNotificationAsRead, Notification } from "@/lib/db";
 import Modal from "@/components/ui/Modal";
@@ -35,6 +35,10 @@ export default function Topbar({ title }: { title: string }) {
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
+  const handleRefresh = () => {
+    window.location.reload();
+  };
+
   const handleMarkRead = async (id: string) => {
     await markNotificationAsRead(id);
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
@@ -44,6 +48,14 @@ export default function Topbar({ title }: { title: string }) {
     <header className="sticky top-0 z-40 bg-deep border-b border-border px-7 py-4 flex items-center justify-between">
       <h1 className="font-grotesk font-bold text-xl text-white">{title}</h1>
       <div className="flex items-center gap-3">
+        <button 
+          onClick={handleRefresh}
+          className="text-muted hover:text-gold transition-colors p-2 rounded-full hover:bg-white/5"
+          title="Refresh Page"
+        >
+          <RefreshCw size={18} />
+        </button>
+
         {role === "owner" && (
           <button 
             onClick={() => setShowNotifications(true)}

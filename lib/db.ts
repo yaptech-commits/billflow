@@ -218,6 +218,8 @@ export interface BusinessProfile {
   /** Custom Paystack Public Key for this business. */
   paystackPublicKey?: string;
   nextInvoiceNumber?: number;
+  status?: "pending" | "active" | "suspended";
+  createdAt?: Timestamp | null;
   updatedAt?: Timestamp | null;
 }
 
@@ -907,7 +909,31 @@ export async function resolveBusinessContext(
   }
 
   // No invite found — this user is a business owner in their own right.
-  return { businessId: uid, role: "owner" };
+  // Check for owner approval
+  const profileRef = doc(db, "businessProfiles", uid);
+  const profileSnap = await getDoc(profileRef);
+  
+  if (profileSnap.exists()) {
+    const data = profileSnap.data();
+    if (data.status === "suspended") {
+      throw new Error("Your account has been suspended. Contact BillFlow Official for assistance.");
+    }
+    if (data.status === "pending") {
+      throw new Error("Account pending approval. Contact BillFlow Official for approval.");
+    }
+    return { businessId: uid, role: "owner" };
+  }
+
+  // New account - set as pending by default
+  await setDoc(profileRef, {
+    businessId: uid,
+    businessName: "New Business",
+    email: email,
+    status: "pending",
+    createdAt: serverTimestamp(),
+  });
+  
+  throw new Error("Account pending approval. Contact BillFlow Official for approval.");
 }
 
 export async function inviteSalesperson(businessId: string, email: string, permissions?: string[]) {

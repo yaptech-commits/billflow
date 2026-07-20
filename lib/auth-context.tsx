@@ -40,11 +40,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setBusinessId(ctx.businessId);
           setRole(ctx.role);
           setPermissions(ctx.permissions || []);
-        } catch {
-          // Fall back to treating them as an independent owner if resolution fails.
-          setBusinessId(u.uid);
-          setRole("owner");
-          setPermissions([]);
+        } catch (err: any) {
+          // If it's an approval error, log out and let the login page show the message
+          if (err.message?.includes("Contact BillFlow Official")) {
+            await signOut(auth);
+            router.push(`/auth/login?error=${encodeURIComponent(err.message)}`);
+          } else {
+            // Fall back to treating them as an independent owner if resolution fails for other reasons.
+            setBusinessId(u.uid);
+            setRole("owner");
+            setPermissions([]);
+          }
         }
       } else {
         setBusinessId(null);
