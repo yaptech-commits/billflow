@@ -918,24 +918,14 @@ export async function inviteSalesperson(businessId: string, email: string, permi
 
 export async function getStaff(businessId: string): Promise<Staff[]> {
   try {
-    const { auth } = await import("@/lib/firebase");
-    const idToken = await auth.currentUser?.getIdToken();
-
-    const response = await fetch("/api/staff", {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || "Failed to fetch staff");
-    }
-
-    const data = await response.json();
-    return data.staff as Staff[];
+    const snap = await getDocs(
+      query(
+        col("staff"),
+        where("businessId", "==", businessId),
+        orderBy("createdAt", "desc")
+      )
+    );
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Staff));
   } catch (error) {
     console.error("Error fetching staff:", error);
     throw error;
