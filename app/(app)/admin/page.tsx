@@ -11,7 +11,7 @@ import {
   Users, Package, FileText, Search, ShieldAlert, 
   Trash2, Edit, ExternalLink, ArrowRight, X, Check, Shield
 } from "lucide-react";
-import Modal from "@/components/Modal";
+import Modal from "@/components/ui/Modal";
 import toast from "react-hot-toast";
 
 export default function AdminPage() {
