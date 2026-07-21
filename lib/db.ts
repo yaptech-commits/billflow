@@ -679,6 +679,42 @@ export async function getPayments(businessId: string): Promise<Payment[]> {
 // ─── PRODUCTS ─────────────────────────────────────────────────────────────────
 
 export async function createProduct(data: Omit<Product, "id">) {
+  // Check if a product with the same name already exists for this business
+  const existingSnap = await getDocs(
+    query(
+      col("products"), 
+      where("businessId", "==", data.businessId),
+      where("name", "==", data.name)
+    )
+  );
+
+  if (!existingSnap.empty) {
+    const existingDoc = existingSnap.docs[0];
+    const existingData = existingDoc.data() as Product;
+    const newQty = (existingData.stockQty || 0) + (data.stockQty || 0);
+    
+    // Update the existing product with the combined stock
+    await updateDoc(existingDoc.ref, {
+      stockQty: newQty,
+      // Update price and wholesale price if provided in the new data
+      price: data.price || existingData.price,
+      wholesalePrice: data.wholesalePrice || existingData.wholesalePrice,
+      updatedAt: serverTimestamp()
+    });
+
+    // Log the stock movement for the addition
+    await logStockMovement({
+      productId: existingDoc.id,
+      businessId: data.businessId,
+      type: 'add',
+      quantity: data.stockQty || 0,
+      note: 'Automatic stock merge from duplicate product entry',
+      userId: data.businessId // Assuming business owner for auto-merge
+    });
+
+    return existingDoc.ref;
+  }
+
   return addDoc(col("products"), { ...data, createdAt: serverTimestamp() });
 }
 
