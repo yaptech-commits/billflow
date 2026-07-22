@@ -703,13 +703,20 @@ export async function createProduct(data: Omit<Product, "id">) {
     });
 
     // Log the stock movement for the addition
-    await logStockMovement({
-      productId: existingDoc.id,
-      businessId: data.businessId,
-      type: 'add',
-      quantity: data.stockQty || 0,
-      note: 'Automatic stock merge from duplicate product entry',
-      userId: data.businessId // Assuming business owner for auto-merge
+    // Note: logStockMovement requires a Transaction object. Since we are not in a transaction here,
+    // we should either use a separate non-transactional function or use runTransaction.
+    // For simplicity and consistency with the stock management design, let's wrap this in a transaction.
+    await runTransaction(db, async (tx) => {
+      logStockMovement(tx, {
+        productId: existingDoc.id,
+        businessId: data.businessId,
+        productName: data.name,
+        delta: data.stockQty || 0,
+        resultingQty: newQty,
+        source: 'manual',
+        note: 'Automatic stock merge from duplicate product entry',
+        userId: data.userId || data.businessId
+      });
     });
 
     return existingDoc.ref;
