@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { 
-  getDocs, collection, query, orderBy, doc, getDoc, updateDoc, deleteDoc, where, writeBatch
+  getDocs, collection, query, orderBy, doc, getDoc, updateDoc, deleteDoc, where, writeBatch, addDoc, serverTimestamp
 } from "firebase/firestore";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { db, auth } from "@/lib/firebase";
@@ -10,7 +10,8 @@ import { BusinessProfile, Staff, Product, Invoice } from "@/lib/db";
 import { formatMoney, cn } from "@/lib/utils";
 import { 
   Users, Package, FileText, Search, ShieldAlert, 
-  Trash2, Edit, ExternalLink, ArrowRight, X, Check, Shield, Ban, RotateCcw, UserMinus
+  Trash2, Edit, ExternalLink, ArrowRight, X, Check, Shield, Ban, RotateCcw, UserMinus,
+  Truck, CreditCard, Ticket, ShoppingCart, Eye, Plus, ChevronRight
 } from "lucide-react";
 import Modal from "@/components/ui/Modal";
 import toast from "react-hot-toast";
@@ -146,9 +147,9 @@ export default function AdminPage() {
           ) : filtered.length === 0 ? (
             <div className="col-span-full py-20 text-center text-muted">No businesses found</div>
           ) : (
-            filtered.map(b => (
-              <BusinessCard key={b.businessId} business={b} onUpdate={fetchBusinesses} onSuspend={() => handleSuspend(b.businessId, b.status)} />
-            ))
+              filtered.map(b => (
+                <BusinessCard key={b.businessId} business={b} user={user} onUpdate={fetchBusinesses} onSuspend={() => handleSuspend(b.businessId, b.status)} />
+              ))
           )}
         </div>
       </div>
@@ -156,7 +157,7 @@ export default function AdminPage() {
   );
 }
 
-function BusinessCard({ business, onUpdate, onSuspend }: { business: BusinessProfile, onUpdate: () => void, onSuspend: () => void }) {
+function BusinessCard({ business, user, onUpdate, onSuspend }: { business: BusinessProfile, user: any, onUpdate: () => void, onSuspend: () => void }) {
   const [stats, setStats] = useState({ products: 0, invoices: 0, staff: 0, payments: 0, totalRevenue: 0 });
   const [loading, setLoading] = useState(true);
   const [showStaff, setShowStaff] = useState(false);
@@ -165,6 +166,13 @@ function BusinessCard({ business, onUpdate, onSuspend }: { business: BusinessPro
   const [staffList, setStaffList] = useState<Staff[]>([]);
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
   const [editForm, setEditForm] = useState<Partial<BusinessProfile>>({});
+
+  // New Management States
+  const [activeTab, setActiveTab] = useState<"products" | "invoices" | "clients" | "suppliers" | "vouchers" | "payments" | "po" | null>(null);
+  const [listData, setListData] = useState<any[]>([]);
+  const [listLoading, setListLoading] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<any | null>(null);
+  const [itemForm, setItemForm] = useState<any>({});
 
   const ALL_PAGES = [
     { id: "/pos", label: "POS" },
@@ -209,6 +217,89 @@ function BusinessCard({ business, onUpdate, onSuspend }: { business: BusinessPro
   useEffect(() => {
     fetchStats();
   }, [business.businessId]);
+
+  const fetchTabData = async (tab: typeof activeTab) => {
+    if (!tab) return;
+    setListLoading(true);
+    try {
+      const collectionName = {
+        products: "products",
+        invoices: "invoices",
+        clients: "clients",
+        suppliers: "suppliers",
+        vouchers: "vouchers",
+        payments: "payments",
+        po: "purchaseOrders"
+      }[tab];
+
+      const snap = await getDocs(query(collection(db, collectionName), where("businessId", "==", business.businessId)));
+      setListData(snap.docs.map(d => ({ ...d.data(), id: d.id })));
+    } catch (e) {
+      toast.error("Failed to fetch data");
+    } finally {
+      setListLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab) fetchTabData(activeTab);
+  }, [activeTab]);
+
+  const handleDeleteItem = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this item?")) return;
+    const t = toast.loading("Deleting...");
+    try {
+      const collectionName = {
+        products: "products",
+        invoices: "invoices",
+        clients: "clients",
+        suppliers: "suppliers",
+        vouchers: "vouchers",
+        payments: "payments",
+        po: "purchaseOrders"
+      }[activeTab!];
+      await deleteDoc(doc(db, collectionName, id));
+      toast.success("Deleted successfully", { id: t });
+      fetchTabData(activeTab);
+      fetchStats();
+    } catch (e) {
+      toast.error("Delete failed", { id: t });
+    }
+  };
+
+  const handleSaveItem = async () => {
+    const t = toast.loading("Saving...");
+    try {
+      const collectionName = {
+        products: "products",
+        invoices: "invoices",
+        clients: "clients",
+        suppliers: "suppliers",
+        vouchers: "vouchers",
+        payments: "payments",
+        po: "purchaseOrders"
+      }[activeTab!];
+      
+      const { id, new: isNew, ...dataToSave } = itemForm;
+      
+      if (selectedItem?.id && !selectedItem.new) {
+        await updateDoc(doc(db, collectionName, selectedItem.id), dataToSave);
+      } else {
+        await addDoc(collection(db, collectionName), {
+          ...dataToSave,
+          businessId: business.businessId,
+          userId: user?.uid, // Link to superadmin who created it or business owner? Let's use current superadmin.
+          createdAt: serverTimestamp()
+        });
+      }
+      toast.success("Saved successfully", { id: t });
+      setSelectedItem(null);
+      fetchTabData(activeTab);
+      fetchStats();
+    } catch (e) {
+      toast.error("Save failed", { id: t });
+    }
+  };
 
   const handleUpdatePermissions = async () => {
     if (!editingStaff) return;
@@ -327,6 +418,41 @@ function BusinessCard({ business, onUpdate, onSuspend }: { business: BusinessPro
             <p className="text-[10px] text-muted uppercase font-bold tracking-tighter">Staff</p>
             <p className="text-sm font-grotesk text-surface">{loading ? "..." : stats.staff}</p>
           </div>
+        </div>
+
+        <div className="grid grid-cols-4 gap-2 mb-4">
+          <button onClick={() => setActiveTab("products")} className="p-2 bg-white/5 rounded hover:bg-gold/10 hover:text-gold transition-all flex flex-col items-center gap-1">
+            <Package size={14} />
+            <span className="text-[9px] uppercase font-bold">Items</span>
+          </button>
+          <button onClick={() => setActiveTab("invoices")} className="p-2 bg-white/5 rounded hover:bg-gold/10 hover:text-gold transition-all flex flex-col items-center gap-1">
+            <FileText size={14} />
+            <span className="text-[9px] uppercase font-bold">Invoices</span>
+          </button>
+          <button onClick={() => setActiveTab("clients")} className="p-2 bg-white/5 rounded hover:bg-gold/10 hover:text-gold transition-all flex flex-col items-center gap-1">
+            <Users size={14} />
+            <span className="text-[9px] uppercase font-bold">Clients</span>
+          </button>
+          <button onClick={() => setActiveTab("suppliers")} className="p-2 bg-white/5 rounded hover:bg-gold/10 hover:text-gold transition-all flex flex-col items-center gap-1">
+            <Truck size={14} />
+            <span className="text-[9px] uppercase font-bold">Suppliers</span>
+          </button>
+          <button onClick={() => setActiveTab("vouchers")} className="p-2 bg-white/5 rounded hover:bg-gold/10 hover:text-gold transition-all flex flex-col items-center gap-1">
+            <Ticket size={14} />
+            <span className="text-[9px] uppercase font-bold">Vouchers</span>
+          </button>
+          <button onClick={() => setActiveTab("payments")} className="p-2 bg-white/5 rounded hover:bg-gold/10 hover:text-gold transition-all flex flex-col items-center gap-1">
+            <CreditCard size={14} />
+            <span className="text-[9px] uppercase font-bold">Payments</span>
+          </button>
+          <button onClick={() => setActiveTab("po")} className="p-2 bg-white/5 rounded hover:bg-gold/10 hover:text-gold transition-all flex flex-col items-center gap-1">
+            <ShoppingCart size={14} />
+            <span className="text-[9px] uppercase font-bold">PO</span>
+          </button>
+          <button onClick={() => setShowDetails(true)} className="p-2 bg-white/5 rounded hover:bg-gold/10 hover:text-gold transition-all flex flex-col items-center gap-1">
+            <ExternalLink size={14} />
+            <span className="text-[9px] uppercase font-bold">Stats</span>
+          </button>
         </div>
 
         <div className="flex items-center justify-between">
@@ -548,6 +674,115 @@ function BusinessCard({ business, onUpdate, onSuspend }: { business: BusinessPro
               ))}
             </div>
           )}
+        </div>
+      </Modal>
+
+      {/* Data Management Modal */}
+      <Modal 
+        open={!!activeTab} 
+        onClose={() => setActiveTab(null)} 
+        title={`Manage ${activeTab?.toUpperCase()} - ${business.businessName}`}
+      >
+        <div className="space-y-4">
+          <div className="flex justify-between items-center mb-4">
+            <p className="text-xs text-muted">Total items: {listData.length}</p>
+            <button 
+              onClick={() => {
+                setSelectedItem({ new: true });
+                setItemForm({});
+              }}
+              className="btn-primary text-xs py-1.5"
+            >
+              <Plus size={14} /> Add New
+            </button>
+          </div>
+
+          <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
+            {listLoading ? (
+              <p className="text-center py-10 text-muted animate-pulse">Loading data...</p>
+            ) : listData.length === 0 ? (
+              <p className="text-center py-10 text-muted">No records found</p>
+            ) : (
+              listData.map(item => (
+                <div key={item.id} className="p-3 bg-white/5 rounded-lg border border-border flex items-center justify-between group">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-surface truncate">
+                      {item.name || item.clientName || item.supplierName || item.code || item.invoiceNumber || item.poNumber || "Unnamed Item"}
+                    </p>
+                    <p className="text-[10px] text-muted mt-0.5">
+                      {item.price ? `Price: ${formatMoney(item.price, business.currency || "GHS")}` : ""}
+                      {item.amount ? `Amount: ${formatMoney(item.amount, business.currency || "GHS")}` : ""}
+                      {item.email ? `Email: ${item.email}` : ""}
+                      {item.status ? ` · Status: ${item.status}` : ""}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button 
+                      onClick={() => {
+                        setSelectedItem(item);
+                        setItemForm({ ...item });
+                      }}
+                      className="p-1.5 text-muted hover:text-gold transition-colors"
+                    >
+                      <Edit size={14} />
+                    </button>
+                    <button 
+                      onClick={() => handleDeleteItem(item.id)}
+                      className="p-1.5 text-muted hover:text-red transition-colors"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          <div className="flex gap-3 pt-4 border-t border-border">
+            <button className="btn-ghost w-full justify-center" onClick={() => setActiveTab(null)}>Close</button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Item Edit/Add Modal */}
+      <Modal 
+        open={!!selectedItem} 
+        onClose={() => setSelectedItem(null)} 
+        title={selectedItem?.new ? `Add ${activeTab}` : `Edit ${activeTab}`}
+      >
+        <div className="space-y-4">
+          {activeTab === "products" && (
+            <>
+              <div><label className="label">Name</label><input className="input" value={itemForm.name || ""} onChange={e => setItemForm({...itemForm, name: e.target.value})} /></div>
+              <div className="grid grid-cols-2 gap-4">
+                <div><label className="label">Price</label><input className="input" type="number" value={itemForm.price || 0} onChange={e => setItemForm({...itemForm, price: parseFloat(e.target.value)})} /></div>
+                <div><label className="label">Stock Qty</label><input className="input" type="number" value={itemForm.stockQty || 0} onChange={e => setItemForm({...itemForm, stockQty: parseInt(e.target.value)})} /></div>
+              </div>
+            </>
+          )}
+          {(activeTab === "clients" || activeTab === "suppliers") && (
+            <>
+              <div><label className="label">Name</label><input className="input" value={itemForm.name || ""} onChange={e => setItemForm({...itemForm, name: e.target.value})} /></div>
+              <div><label className="label">Email</label><input className="input" value={itemForm.email || ""} onChange={e => setItemForm({...itemForm, email: e.target.value})} /></div>
+              <div><label className="label">Phone</label><input className="input" value={itemForm.phone || ""} onChange={e => setItemForm({...itemForm, phone: e.target.value})} /></div>
+            </>
+          )}
+          {activeTab === "vouchers" && (
+            <>
+              <div><label className="label">Code</label><input className="input" value={itemForm.code || ""} onChange={e => setItemForm({...itemForm, code: e.target.value})} /></div>
+              <div><label className="label">Price</label><input className="input" type="number" value={itemForm.price || 0} onChange={e => setItemForm({...itemForm, price: parseFloat(e.target.value)})} /></div>
+            </>
+          )}
+          {(activeTab === "invoices" || activeTab === "payments" || activeTab === "po") && (
+            <p className="text-sm text-muted py-4 italic text-center">
+              Direct editing of complex financial documents is restricted. 
+              Please use the business interface or delete/re-create records.
+            </p>
+          )}
+
+          <div className="flex gap-3 pt-4 border-t border-border">
+            <button className="btn-ghost flex-1 justify-center" onClick={() => setSelectedItem(null)}>Cancel</button>
+            <button className="btn-primary flex-1 justify-center" onClick={handleSaveItem}>Save Changes</button>
+          </div>
         </div>
       </Modal>
 

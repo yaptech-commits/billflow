@@ -92,11 +92,13 @@ export default function PosPage() {
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
+      if (!activeShift?.id) return;
+      
       syncOfflineSales(async (data: any) => {
         return createPosSale({
           idempotencyKey: crypto.randomUUID(),
-          shiftId: activeShift?.id || data.shiftId,
-          customerName: data.clientName || data.customerName,
+          shiftId: activeShift.id!,
+          customerName: data.customerName || "Walk-in Customer",
           items: data.items.map((l: any) => ({ productId: l.productId, quantity: l.quantity })),
           paymentMethod: data.paymentMethod,
           discountAmount: data.discountAmount,
@@ -120,7 +122,7 @@ export default function PosPage() {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
-  }, [businessId]);
+  }, [businessId, activeShift]);
 
   // Keep the scan input focused so a barcode scanner (acting as a keyboard) always lands here.
   useEffect(() => {
@@ -257,10 +259,7 @@ export default function PosPage() {
     }));
     
     const saleData = {
-      userId: user.uid,
-      businessId,
-      clientId: "walk-in",
-      clientName: customerName || "Walk-in Customer",
+      customerName: customerName || "Walk-in Customer",
       items,
       paymentMethod: payMethod,
       discountAmount: discountVal,
@@ -278,14 +277,11 @@ export default function PosPage() {
           callback: async (response: any) => {
             setCharging(true);
             try {
-              const result = await createPosSale({
-                idempotencyKey: response.reference,
-                shiftId: activeShift!.id!,
-                customerName: customerName || "Walk-in Customer",
-                items: cart.map(l => ({ productId: l.productId, quantity: l.quantity })),
-                paymentMethod: payMethod,
+              const result = await createPosSale({ 
+                ...saleData, 
                 reference: response.reference,
-                discountAmount: discountVal,
+                shiftId: activeShift!.id!,
+                idempotencyKey: response.reference
               });
               setReceipt({
                 invoiceId: result.invoiceId,
@@ -296,7 +292,7 @@ export default function PosPage() {
                 timestamp: new Date(),
               });
               
-              // Optimistic UI update: update local products and shift without re-fetching
+              // Optimistic UI update
               setProducts(prev => prev.map(p => {
                 const item = cart.find(c => c.productId === p.id);
                 return item ? { ...p, stockQty: p.stockQty - item.quantity } : p;
@@ -305,9 +301,7 @@ export default function PosPage() {
                 ...prev,
                 totalSales: (prev.totalSales || 0) + result.amount,
                 paymentBreakdown: {
-                  momo: prev.paymentBreakdown?.momo || 0,
-                  card: prev.paymentBreakdown?.card || 0,
-                  cash: prev.paymentBreakdown?.cash || 0,
+                  ...prev.paymentBreakdown,
                   [payMethod]: (prev.paymentBreakdown?.[payMethod] || 0) + result.amount
                 }
               } : null);
@@ -350,12 +344,9 @@ export default function PosPage() {
         setOfflineCount(getOfflineQueue().length);
       } else {
         const result = await createPosSale({
+          ...saleData,
+          shiftId: activeShift.id!,
           idempotencyKey: crypto.randomUUID(),
-          shiftId: activeShift!.id!,
-          customerName: customerName || "Walk-in Customer",
-          items: cart.map(l => ({ productId: l.productId, quantity: l.quantity })),
-          paymentMethod: payMethod,
-          discountAmount: discountVal,
         });
         setReceipt({
           invoiceId: result.invoiceId,
@@ -366,7 +357,7 @@ export default function PosPage() {
           timestamp: new Date(),
         });
         
-        // Optimistic UI update: update local products and shift without re-fetching
+        // Optimistic UI update
         setProducts(prev => prev.map(p => {
           const item = cart.find(c => c.productId === p.id);
           return item ? { ...p, stockQty: p.stockQty - item.quantity } : p;
@@ -375,9 +366,7 @@ export default function PosPage() {
           ...prev,
           totalSales: (prev.totalSales || 0) + result.amount,
           paymentBreakdown: {
-            momo: prev.paymentBreakdown?.momo || 0,
-            card: prev.paymentBreakdown?.card || 0,
-            cash: prev.paymentBreakdown?.cash || 0,
+            ...prev.paymentBreakdown,
             [payMethod]: (prev.paymentBreakdown?.[payMethod] || 0) + result.amount
           }
         } : null);
@@ -471,229 +460,331 @@ export default function PosPage() {
               <button
                 key={p.id}
                 onClick={() => addToCart(p)}
-                disabled={p.stockQty <= 0}
-                className="card text-left p-3.5 hover:border-gold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className="card p-4 hover:border-gold transition-all text-left group relative"
               >
-                <p className="text-sm font-medium text-surface truncate">{p.name}</p>
-                <p className="text-xs text-muted mt-0.5">{p.sku || "—"}</p>
-                <div className="flex items-center justify-between mt-2">
-                  <span className="font-grotesk font-semibold text-gold">
-                    {formatMoney(isWholesale && p.wholesalePrice ? p.wholesalePrice : p.price)}
+                <div className="flex justify-between items-start mb-2">
+                  <span className="text-[10px] font-bold text-muted uppercase tracking-wider">{p.sku || "NO SKU"}</span>
+                  <span className={cn(
+                    "text-[10px] font-bold px-1.5 py-0.5 rounded",
+                    p.stockQty <= (p.reorderLevel || 5) ? "bg-red/10 text-red" : "bg-green/10 text-green"
+                  )}>
+                    {p.stockQty} {p.unit || "pcs"}
                   </span>
-                  <span className="text-[11px] text-muted">{p.stockQty} in stock</span>
                 </div>
+                <h3 className="font-bold text-surface mb-1 truncate group-hover:text-gold transition-colors">{p.name}</h3>
+                <p className="text-lg font-grotesk text-white">{formatMoney(isWholesale && p.wholesalePrice ? p.wholesalePrice : p.price, profile?.currency || "GHS")}</p>
+                <div className="absolute inset-0 bg-gold/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
               </button>
             ))}
           </div>
         )}
       </div>
 
-      {/* Right: cart */}
-      <div className="card sticky top-5">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-grotesk font-semibold text-white flex items-center gap-2">
-            <ShoppingCart size={16} /> Cart
-          </h2>
-          <div className="flex items-center gap-3">
-            {activeShift && (
-              <button onClick={() => setShiftModalOpen(true)} className="text-[10px] uppercase tracking-wider font-bold text-green border border-green/30 px-1.5 py-0.5 rounded">
-                Shift Open
-              </button>
-            )}
-            <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${isOnline ? "text-muted" : "bg-red/10 text-red"}`}>
-              {isOnline ? <Wifi size={10} /> : <WifiOff size={10} />}
-              {isOnline ? "Online" : "Offline"}
-              {offlineCount > 0 && <span className="ml-1 bg-red text-white px-1 rounded-full">{offlineCount}</span>}
-            </div>
-            {cart.length > 0 && (
-              <button onClick={clearCart} className="text-xs text-muted hover:text-red transition-colors">Clear</button>
-            )}
+      {/* Right: Cart */}
+      <div className="sticky top-24 flex flex-col h-[calc(100vh-120px)]">
+        <div className="card flex-1 flex flex-col p-0 overflow-hidden">
+          <div className="p-4 border-b border-border flex items-center justify-between bg-white/5">
+            <h2 className="font-bold text-surface flex items-center gap-2">
+              <ShoppingCart size={18} /> Current Sale
+            </h2>
+            <button onClick={clearCart} className="text-muted hover:text-red transition-colors">
+              <Trash2 size={16} />
+            </button>
           </div>
-        </div>
 
-        {cart.length === 0 ? (
-          <p className="text-muted text-sm py-10 text-center">Scan or tap a product to add it</p>
-        ) : (
-          <div className="space-y-3 mb-4 max-h-[45vh] overflow-y-auto">
-            {cart.map(l => (
-              <div key={l.productId} className="flex items-center justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm text-surface truncate">{l.productName}</p>
-                  <p className="text-xs text-muted">{formatMoney(l.unitPrice)} each</p>
-                </div>
-                <div className="flex items-center gap-1.5 flex-shrink-0">
-                  <button onClick={() => updateQty(l.productId, -1)} className="w-6 h-6 flex items-center justify-center rounded bg-border text-muted hover:text-surface">
-                    <Minus size={12} />
-                  </button>
-                  <span className="text-sm text-surface w-5 text-center">{l.quantity}</span>
-                  <button onClick={() => updateQty(l.productId, 1)} className="w-6 h-6 flex items-center justify-center rounded bg-border text-muted hover:text-surface">
-                    <Plus size={12} />
-                  </button>
-                  <button onClick={() => removeLine(l.productId)} className="text-muted hover:text-red ml-1">
-                    <Trash2 size={13} />
-                  </button>
-                </div>
+          <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+            {cart.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-muted py-20">
+                <ShoppingCart size={40} className="mb-4 opacity-20" />
+                <p className="text-sm">Cart is empty</p>
               </div>
-            ))}
+            ) : (
+              cart.map(l => (
+                <div key={l.productId} className="flex items-center gap-3 bg-white/5 p-3 rounded-lg border border-border/50">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-surface truncate">{l.productName}</p>
+                    <p className="text-xs text-muted">{formatMoney(l.unitPrice, profile?.currency || "GHS")} each</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => updateQty(l.productId, -1)} className="p-1 hover:text-gold transition-colors">
+                      <Minus size={14} />
+                    </button>
+                    <span className="text-sm font-grotesk w-6 text-center text-white">{l.quantity}</span>
+                    <button onClick={() => updateQty(l.productId, 1)} className="p-1 hover:text-gold transition-colors">
+                      <Plus size={14} />
+                    </button>
+                  </div>
+                  <button onClick={() => removeLine(l.productId)} className="text-muted hover:text-red p-1 transition-colors">
+                    <X size={14} />
+                  </button>
+                </div>
+              ))
+            )}
           </div>
-        )}
 
-        <div className="border-t border-border pt-3 mb-4 space-y-1">
-          <div className="flex items-center justify-between text-xs text-muted">
-            <span>Subtotal</span>
-            <span>{formatMoney(lineTotal)}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-muted">Discount</span>
-            <input
-              className="input-sm w-20 text-right"
-              type="number"
-              placeholder="0.00"
-              value={discountAmount}
-              onChange={e => setDiscountAmount(e.target.value)}
-            />
-          </div>
-          <div className="flex items-center justify-between pt-1">
-            <span className="text-sm text-muted">Total</span>
-            <span className="font-grotesk font-bold text-xl text-gold">{formatMoney(total)}</span>
+          <div className="p-5 bg-white/5 border-t border-border space-y-3">
+            <div className="flex justify-between text-sm">
+              <span className="text-muted">Subtotal</span>
+              <span className="text-surface font-grotesk">{formatMoney(lineTotal, profile?.currency || "GHS")}</span>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-sm text-muted">Discount</span>
+              <input
+                className="input h-8 text-right font-grotesk w-24"
+                type="number"
+                placeholder="0.00"
+                value={discountAmount}
+                onChange={e => setDiscountAmount(e.target.value)}
+              />
+            </div>
+            <div className="pt-3 border-t border-border flex justify-between items-end">
+              <span className="font-bold text-surface">Total</span>
+              <span className="text-2xl font-grotesk font-bold text-gold">{formatMoney(total, profile?.currency || "GHS")}</span>
+            </div>
+            <button
+              onClick={openCheckout}
+              disabled={cart.length === 0}
+              className="btn-primary w-full justify-center py-4 mt-2 shadow-lg shadow-gold/10"
+            >
+              PROCEED TO CHECKOUT
+            </button>
           </div>
         </div>
 
-        <button className="btn-primary w-full justify-center" onClick={openCheckout} disabled={cart.length === 0}>
-          Checkout
-        </button>
+        <div className="mt-4 flex items-center justify-between px-2">
+          <div className="flex items-center gap-2">
+            {isOnline ? (
+              <span className="flex items-center gap-1.5 text-[10px] font-bold text-green">
+                <Wifi size={12} /> ONLINE
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 text-[10px] font-bold text-red">
+                <WifiOff size={12} /> OFFLINE
+              </span>
+            )}
+            {offlineCount > 0 && (
+              <span className="text-[10px] font-bold text-gold bg-gold/10 px-1.5 py-0.5 rounded">
+                {offlineCount} PENDING SYNC
+              </span>
+            )}
+          </div>
+          <button
+            onClick={() => setShiftModalOpen(true)}
+            className="text-[10px] font-bold text-muted hover:text-gold transition-colors"
+          >
+            {activeShift ? "SHIFT MANAGEMENT" : "OPEN SHIFT"}
+          </button>
+        </div>
       </div>
 
-      {/* Checkout modal */}
+      {/* Checkout Modal */}
       <Modal open={checkoutOpen} onClose={() => setCheckoutOpen(false)} title="Checkout">
-        <div className="space-y-4">
-          <div className="flex items-center justify-between px-1">
-            <span className="text-sm text-muted">Total due</span>
-            <span className="font-grotesk font-bold text-xl text-gold">{formatMoney(total)}</span>
+        <div className="space-y-6">
+          <div className="bg-white/5 p-4 rounded-lg border border-border text-center">
+            <p className="text-sm text-muted mb-1">Total Amount Due</p>
+            <p className="text-3xl font-grotesk font-bold text-gold">{formatMoney(total, profile?.currency || "GHS")}</p>
           </div>
-          <div>
-            <label className="label">Customer Name</label>
-            <input className="input" value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="Walk-in Customer" />
-          </div>
-          <div>
-            <label className="label">Payment Method</label>
-            <div className="grid grid-cols-2 gap-3">
-              {(["momo", "card", "cash"] as const).map(m => (
-                <button
-                  key={m}
-                  onClick={() => setPayMethod(m)}
-                  className={`border-2 rounded-xl p-3 text-center transition-all ${
-                    payMethod === m ? "border-gold bg-gold/5" : "border-border hover:border-muted"
-                  }`}
-                >
-                  <div className="text-2xl mb-1">{m === "momo" ? "📱" : m === "card" ? "💳" : "💵"}</div>
-                  <div className="text-xs font-semibold text-surface">{m === "momo" ? "Mobile Money" : m === "card" ? "Card" : "Cash"}</div>
-                </button>
-              ))}
+
+          <div className="space-y-4">
+            <div>
+              <label className="label">Customer Name</label>
+              <input
+                className="input"
+                placeholder="Walk-in Customer"
+                value={customerName}
+                onChange={e => setCustomerName(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="label">Payment Method</label>
+              <div className="grid grid-cols-3 gap-3">
+                {(["cash", "momo", "card"] as const).map(m => (
+                  <button
+                    key={m}
+                    onClick={() => setPayMethod(m)}
+                    className={cn(
+                      "p-3 rounded-lg border text-xs font-bold transition-all uppercase",
+                      payMethod === m ? "bg-gold border-gold text-black" : "bg-white/5 border-border text-muted hover:border-muted"
+                    )}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-          <div className="flex gap-3 justify-end pt-2">
-            <button className="btn-ghost" onClick={() => setCheckoutOpen(false)}>Cancel</button>
-            <button className="btn-primary" onClick={handleCharge} disabled={charging}>
-              {charging ? "Processing..." : `Charge ${formatMoney(total)}`}
+
+          <div className="flex gap-3 pt-4">
+            <button className="btn-ghost flex-1 justify-center" onClick={() => setCheckoutOpen(false)}>Cancel</button>
+            <button
+              className="btn-primary flex-1 justify-center"
+              onClick={handleCharge}
+              disabled={charging}
+            >
+              {charging ? "Processing..." : "Complete Sale"}
             </button>
           </div>
         </div>
       </Modal>
 
-      {/* Shift Management Modal */}
-      <Modal
-        open={shiftModalOpen}
-        onClose={() => activeShift ? setShiftModalOpen(false) : null}
-        title={activeShift ? "Close Shift" : "Open Shift"}
-        width="max-w-sm"
-      >
-        <div className="space-y-4">
+      {/* Receipt Modal */}
+      <Modal open={!!receipt} onClose={() => setReceipt(null)} title="Sale Complete">
+        {receipt && (
+          <div className="space-y-6">
+            <div className="flex justify-center mb-4">
+              <div className="flex items-center gap-2 bg-border/30 p-1 rounded-lg">
+                <button
+                  onClick={() => setReceiptWidth(58)}
+                  className={`px-3 py-1 rounded-md text-[10px] font-bold transition-all ${receiptWidth === 58 ? "bg-white text-black shadow-sm" : "text-muted"}`}
+                >
+                  58MM
+                </button>
+                <button
+                  onClick={() => setReceiptWidth(80)}
+                  className={`px-3 py-1 rounded-md text-[10px] font-bold transition-all ${receiptWidth === 80 ? "bg-white text-black shadow-sm" : "text-muted"}`}
+                >
+                  80MM
+                </button>
+              </div>
+            </div>
+
+            <div className="flex justify-center overflow-hidden rounded-lg border border-border bg-white">
+              <div id="receipt-content" className="p-4" style={{ width: receiptWidth === 58 ? "220px" : "300px" }}>
+                <BrandedDocument profile={profile!} type="receipt">
+                  <div className="text-[10px] space-y-1">
+                    <div className="flex justify-between border-b border-dashed border-black pb-1">
+                      <span>Receipt #:</span>
+                      <span className="font-bold">{receipt.invoiceId.slice(-6).toUpperCase()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Date:</span>
+                      <span>{receipt.timestamp.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Customer:</span>
+                      <span>{receipt.customerName}</span>
+                    </div>
+                    <div className="flex justify-between border-b border-dashed border-black pb-1">
+                      <span>Method:</span>
+                      <span className="uppercase">{receipt.method}</span>
+                    </div>
+
+                    <div className="py-2 space-y-1">
+                      {receipt.items.map((item, idx) => (
+                        <div key={idx} className="flex justify-between">
+                          <span className="flex-1 truncate pr-2">{item.quantity}x {item.productName}</span>
+                          <span className="font-bold">{formatMoney(item.quantity * item.unitPrice, profile?.currency || "GHS")}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="border-t border-black pt-1 space-y-1">
+                      <div className="flex justify-between text-xs font-bold">
+                        <span>TOTAL:</span>
+                        <span>{formatMoney(receipt.amount, profile?.currency || "GHS")}</span>
+                      </div>
+                    </div>
+                  </div>
+                </BrandedDocument>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                className="btn-ghost flex-1 justify-center gap-2"
+                onClick={() => setReceipt(null)}
+              >
+                Done
+              </button>
+              <button
+                className="btn-primary flex-1 justify-center gap-2"
+                onClick={() => printReceipt("receipt-content")}
+              >
+                <Printer size={16} /> Print Receipt
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Shift Modal */}
+      <Modal open={shiftModalOpen} onClose={() => activeShift && setShiftModalOpen(false)} title={activeShift ? "End Shift" : "Start New Shift"}>
+        <div className="space-y-6">
           {!activeShift ? (
             <>
-              <p className="text-sm text-muted">Please enter the starting cash amount in the drawer to begin your shift.</p>
+              <div className="p-4 bg-gold/5 border border-gold/20 rounded-lg">
+                <p className="text-sm text-surface leading-relaxed">
+                  To start making sales, please enter your opening cash balance. This helps track your daily sales and cash flow.
+                </p>
+              </div>
               <div>
-                <label className="label">Opening Cash ({profile?.currency || "GH₵"})</label>
+                <label className="label">Opening Cash Balance ({profile?.currency || "GHS"})</label>
                 <input
-                  className="input"
+                  className="input text-lg font-grotesk"
                   type="number"
+                  placeholder="0.00"
                   value={openingCash}
                   onChange={e => setOpeningCash(e.target.value)}
-                  placeholder="0.00"
+                  autoFocus
                 />
               </div>
-              <button className="btn-primary w-full justify-center" onClick={handleOpenShift}>
-                Start Shift
+              <button onClick={handleOpenShift} className="btn-primary w-full justify-center py-3">
+                START SHIFT
               </button>
             </>
           ) : (
             <>
-              <div className="space-y-2 text-sm text-muted">
-                <div className="flex justify-between">
-                  <span>Opened at:</span>
-                  <span className="text-surface">{activeShift.openedAt.toDate().toLocaleString("en-GH")}</span>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="card bg-white/5 border-border">
+                  <p className="text-[10px] text-muted uppercase font-bold mb-1">Started At</p>
+                  <p className="text-sm text-surface">{new Date(activeShift.openedAt.toDate()).toLocaleTimeString()}</p>
                 </div>
-                <div className="flex justify-between">
-                  <span>Opening Cash:</span>
-                  <span className="text-surface">{formatMoney(activeShift.openingCash)}</span>
+                <div className="card bg-white/5 border-border">
+                  <p className="text-[10px] text-muted uppercase font-bold mb-1">Total Sales</p>
+                  <p className="text-sm text-surface font-grotesk">{formatMoney(activeShift.totalSales || 0, profile?.currency || "GHS")}</p>
                 </div>
               </div>
-              <div className="border-t border-border pt-4">
-                <label className="label">Actual Cash in Drawer</label>
+
+              <div className="space-y-3">
+                <p className="text-xs font-bold text-muted uppercase">Payment Breakdown</p>
+                <div className="space-y-2">
+                  {Object.entries(activeShift.paymentBreakdown || {}).map(([method, amount]) => (
+                    <div key={method} className="flex justify-between text-sm p-2 bg-white/5 rounded border border-border/30">
+                      <span className="capitalize text-muted">{method}</span>
+                      <span className="font-grotesk text-surface">{formatMoney(amount as number, profile?.currency || "GHS")}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="label">Actual Cash in Drawer ({profile?.currency || "GHS"})</label>
                 <input
-                  className="input"
+                  className="input text-lg font-grotesk"
                   type="number"
+                  placeholder="0.00"
                   value={actualCash}
                   onChange={e => setActualCash(e.target.value)}
-                  placeholder="0.00"
                 />
-                <p className="text-[11px] text-muted mt-1">Count all cash in the drawer, including the opening float.</p>
+                <p className="text-[10px] text-muted mt-2">
+                  Expected cash based on sales: {formatMoney((activeShift.openingCash || 0) + (activeShift.paymentBreakdown?.cash || 0), profile?.currency || "GHS")}
+                </p>
               </div>
-              <button className="btn-primary w-full justify-center bg-red hover:bg-red/80 border-red" onClick={handleCloseShift} disabled={closingShift}>
-                {closingShift ? "Closing..." : "Close Shift & End Day"}
-              </button>
+
+              <div className="flex gap-3 pt-2">
+                <button className="btn-ghost flex-1 justify-center" onClick={() => setShiftModalOpen(false)}>Cancel</button>
+                <button
+                  className="btn-primary flex-1 justify-center"
+                  onClick={handleCloseShift}
+                  disabled={closingShift}
+                >
+                  {closingShift ? "Closing..." : "CLOSE SHIFT"}
+                </button>
+              </div>
             </>
           )}
         </div>
-      </Modal>
-
-      {/* Receipt modal */}
-      <Modal open={!!receipt} onClose={() => setReceipt(null)} title="Sale Complete">
-        {receipt && (
-          <div>
-            <div className="mb-5">
-              <BrandedDocument
-                profile={profile}
-                docType="RECEIPT"
-                docNumber={receipt.invoiceId.slice(0, 8).toUpperCase()}
-                date={receipt.timestamp}
-                clientName={receipt.customerName}
-                items={receipt.items.map(l => ({ productName: l.productName, quantity: l.quantity, unitPrice: l.unitPrice }))}
-                amount={receipt.amount}
-                paymentMethod={receipt.method}
-              />
-            </div>
-            <div className="flex items-center justify-between mt-6 pt-4 border-t border-border">
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-muted uppercase font-bold">Size:</span>
-                <select 
-                  className="bg-black border border-border text-[11px] rounded px-2 py-1 outline-none focus:border-gold"
-                  value={receiptWidth}
-                  onChange={(e) => setReceiptWidth(Number(e.target.value) as 58 | 80)}
-                >
-                  <option value={80}>80mm</option>
-                  <option value={58}>58mm</option>
-                </select>
-              </div>
-              <div className="flex gap-3">
-                <button className="btn-ghost" onClick={() => setReceipt(null)}><X size={14} /> Close</button>
-                <button className="btn-primary" onClick={() => printReceipt("branded-doc", receiptWidth)}>
-                  <Printer size={14} /> Print Receipt
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </Modal>
     </div>
   );

@@ -1228,33 +1228,33 @@ export async function clearOldNotifications(businessId: string) {
 }
 
 export async function checkLowStockAndNotify(businessId: string) {
+  // Throttle this check to run at most once every 6 hours per session to save quota
+  const lastCheckKey = `last_low_stock_check_${businessId}`;
+  const lastCheck = localStorage.getItem(lastCheckKey);
+  const now = Date.now();
+  if (lastCheck && now - parseInt(lastCheck) < 6 * 60 * 60 * 1000) {
+    return;
+  }
+  localStorage.setItem(lastCheckKey, now.toString());
+
   const productsSnap = await getDocs(query(col("products"), where("businessId", "==", businessId)));
   const products = productsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Product));
   
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+
   for (const product of products) {
     const reorderLevel = product.reorderLevel ?? 5;
     if (product.stockQty <= reorderLevel) {
       // Check if we already notified about this product in the last 24h to avoid spam
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      
       const existingQ = query(
-        col("notifications"),
-        where("businessId", "==", businessId),
-        where("type", "==", "low_stock"),
-        where("message", "array-contains", product.name), // This is a bit loose, better to use a specific field but let's keep it simple for now
-        where("createdAt", ">", yesterday)
-      );
-      
-      // Better: Check by a specific title pattern
-      const existingQ2 = query(
         col("notifications"),
         where("businessId", "==", businessId),
         where("title", "==", `Low Stock: ${product.name}`),
         where("createdAt", ">", yesterday)
       );
 
-      const existingSnap = await getDocs(existingQ2);
+      const existingSnap = await getDocs(existingQ);
       if (existingSnap.empty) {
         await addDoc(col("notifications"), {
           businessId,
