@@ -295,7 +295,21 @@ export default function PosPage() {
                 method: payMethod,
                 timestamp: new Date(),
               });
-              load();
+              
+              // Optimistic UI update: update local products and shift without re-fetching
+              setProducts(prev => prev.map(p => {
+                const item = cart.find(c => c.productId === p.id);
+                return item ? { ...p, stockQty: p.stockQty - item.quantity } : p;
+              }));
+              setActiveShift(prev => prev ? {
+                ...prev,
+                totalSales: (prev.totalSales || 0) + result.amount,
+                paymentBreakdown: {
+                  ...(prev.paymentBreakdown || {}),
+                  [payMethod]: (prev.paymentBreakdown?.[payMethod] || 0) + result.amount
+                }
+              } : null);
+
               setCheckoutOpen(false);
               setCart([]);
               toast.success("Payment successful!");
@@ -349,7 +363,20 @@ export default function PosPage() {
           method: payMethod,
           timestamp: new Date(),
         });
-        load();
+        
+        // Optimistic UI update: update local products and shift without re-fetching
+        setProducts(prev => prev.map(p => {
+          const item = cart.find(c => c.productId === p.id);
+          return item ? { ...p, stockQty: p.stockQty - item.quantity } : p;
+        }));
+        setActiveShift(prev => prev ? {
+          ...prev,
+          totalSales: (prev.totalSales || 0) + result.amount,
+          paymentBreakdown: {
+            ...(prev.paymentBreakdown || {}),
+            [payMethod]: (prev.paymentBreakdown?.[payMethod] || 0) + result.amount
+          }
+        } : null);
       }
 
       setCheckoutOpen(false);
