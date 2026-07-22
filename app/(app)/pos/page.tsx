@@ -2,10 +2,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import {
-  getProducts, createSale, getClients, getBusinessProfile, Product, Client,
+  getProducts, getClients, getBusinessProfile, Product, Client,
   InvoiceLineItem, PaymentMethod, BusinessProfile, Shift, getActiveShift, openShift, closeShift,
   getCategories, Category
 } from "@/lib/db";
+import { createPosSale } from "@/lib/pos-api";
 import { formatMoney } from "@/lib/utils";
 import Modal from "@/components/ui/Modal";
 import BrandedDocument from "@/components/BrandedDocument";
@@ -91,7 +92,16 @@ export default function PosPage() {
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
-      syncOfflineSales(createSale).then(({ synced }) => {
+      syncOfflineSales(async (data: any) => {
+        return createPosSale({
+          idempotencyKey: crypto.randomUUID(),
+          shiftId: activeShift?.id || data.shiftId,
+          customerName: data.clientName || data.customerName,
+          items: data.items.map((l: any) => ({ productId: l.productId, quantity: l.quantity })),
+          paymentMethod: data.paymentMethod,
+          discountAmount: data.discountAmount,
+        });
+      }).then(({ synced }) => {
         if (synced > 0) {
           toast.success(`Synced ${synced} offline sales!`);
           load();
@@ -268,7 +278,15 @@ export default function PosPage() {
           callback: async (response: any) => {
             setCharging(true);
             try {
-              const result = await createSale({ ...saleData, reference: response.reference });
+              const result = await createPosSale({
+                idempotencyKey: response.reference,
+                shiftId: activeShift!.id!,
+                customerName: customerName || "Walk-in Customer",
+                items: cart.map(l => ({ productId: l.productId, quantity: l.quantity })),
+                paymentMethod: payMethod,
+                reference: response.reference,
+                discountAmount: discountVal,
+              });
               setReceipt({
                 invoiceId: result.invoiceId,
                 amount: result.amount,
@@ -315,7 +333,14 @@ export default function PosPage() {
         });
         setOfflineCount(getOfflineQueue().length);
       } else {
-        const result = await createSale(saleData);
+        const result = await createPosSale({
+          idempotencyKey: crypto.randomUUID(),
+          shiftId: activeShift!.id!,
+          customerName: customerName || "Walk-in Customer",
+          items: cart.map(l => ({ productId: l.productId, quantity: l.quantity })),
+          paymentMethod: payMethod,
+          discountAmount: discountVal,
+        });
         setReceipt({
           invoiceId: result.invoiceId,
           amount: result.amount,
