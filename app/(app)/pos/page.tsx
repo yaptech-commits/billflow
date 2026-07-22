@@ -305,7 +305,9 @@ export default function PosPage() {
                 ...prev,
                 totalSales: (prev.totalSales || 0) + result.amount,
                 paymentBreakdown: {
-                  ...(prev.paymentBreakdown || {}),
+                  momo: prev.paymentBreakdown?.momo || 0,
+                  card: prev.paymentBreakdown?.card || 0,
+                  cash: prev.paymentBreakdown?.cash || 0,
                   [payMethod]: (prev.paymentBreakdown?.[payMethod] || 0) + result.amount
                 }
               } : null);
@@ -373,7 +375,9 @@ export default function PosPage() {
           ...prev,
           totalSales: (prev.totalSales || 0) + result.amount,
           paymentBreakdown: {
-            ...(prev.paymentBreakdown || {}),
+            momo: prev.paymentBreakdown?.momo || 0,
+            card: prev.paymentBreakdown?.card || 0,
+            cash: prev.paymentBreakdown?.cash || 0,
             [payMethod]: (prev.paymentBreakdown?.[payMethod] || 0) + result.amount
           }
         } : null);
