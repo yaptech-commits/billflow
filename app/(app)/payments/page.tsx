@@ -21,7 +21,24 @@ export default function PaymentsPage() {
   const load = async () => {
     if (!user || !businessId) return;
     const [pay, cli] = await Promise.all([getPayments(businessId), getClients(businessId)]);
-    setPayments(pay);
+
+    // Merge with offline payments
+    const offlineSales = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("billflow_offline_sales") || "[]") : [];
+    const offlinePayments: Payment[] = offlineSales.map((s: any) => ({
+      id: s.id,
+      clientId: s.data.clientId || "",
+      clientName: s.data.customerName || "Walk-in Customer",
+      amount: s.data.amount || s.data.items.reduce((sum: number, l: any) => sum + (l.quantity * l.unitPrice), 0),
+      method: s.data.paymentMethod || s.data.method,
+      reference: `OFFLINE-${s.id.slice(0, 5)}`,
+      status: "success",
+      createdAt: Timestamp.fromMillis(s.timestamp),
+      businessId: s.data.businessId || businessId,
+      userId: user.uid,
+      isOffline: true
+    }));
+
+    setPayments([...offlinePayments, ...pay]);
     setClients(cli);
     setLoading(false);
   };

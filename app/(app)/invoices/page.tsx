@@ -73,7 +73,26 @@ export default function InvoicesPage() {
       getProducts(businessId),
       getBusinessProfile(businessId),
     ]);
-    setInvoices(inv);
+
+    // Merge with offline invoices
+    const offlineSales = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("billflow_offline_sales") || "[]") : [];
+    const offlineInvoices: Invoice[] = offlineSales.map((s: any) => ({
+      id: s.id,
+      invoiceNumber: `OFFLINE-${s.id.slice(0, 5)}`,
+      clientId: s.data.clientId || "",
+      clientName: s.data.customerName || "Walk-in Customer",
+      items: s.data.items,
+      amount: s.data.amount || s.data.items.reduce((sum: number, l: any) => sum + (l.quantity * l.unitPrice), 0),
+      amountPaid: s.data.amount || s.data.items.reduce((sum: number, l: any) => sum + (l.quantity * l.unitPrice), 0),
+      status: "paid",
+      paymentMethod: s.data.paymentMethod || s.data.method,
+      issuedAt: Timestamp.fromMillis(s.timestamp),
+      businessId: s.data.businessId || businessId,
+      userId: user.uid,
+      isOffline: true
+    }));
+
+    setInvoices([...offlineInvoices, ...inv]);
     setClients(cli);
     setProducts(prod);
     setProfile(prof);
