@@ -6,7 +6,7 @@ import { errorResponseDetails, HttpError, requireServerActor } from "@/lib/serve
 export const runtime = "nodejs";
 
 type RequestedLine = { productId: string; quantity: number };
-type PaymentMethod = "momo" | "card" | "cash";
+type PaymentMethod = "cash" | "momo" | "card";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -41,7 +41,7 @@ function parseBody(value: unknown) {
   }
 
   const paymentMethod = body.paymentMethod;
-  if (paymentMethod !== "momo" && paymentMethod !== "card" && paymentMethod !== "cash") {
+  if (paymentMethod !== "cash" && paymentMethod !== "momo" && paymentMethod !== "card") {
     throw new HttpError(400, "Unsupported payment method");
   }
 
