@@ -74,11 +74,13 @@ export default function InvoicesPage() {
       getBusinessProfile(businessId),
     ]);
 
-    // Merge with offline invoices
+    // Merge with offline records
     const offlineSales = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("billflow_offline_sales") || "[]") : [];
-    const offlineInvoices: Invoice[] = offlineSales.map((s: any) => ({
+    const manualOfflineInvoices = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("billflow_offline_invoices") || "[]") : [];
+    
+    const posOfflineInvoices: Invoice[] = offlineSales.map((s: any) => ({
       id: s.id,
-      invoiceNumber: `OFFLINE-${s.id.slice(0, 5)}`,
+      invoiceNumber: `POS-OFFLINE-${s.id.slice(0, 5)}`,
       clientId: s.data.clientId || "",
       clientName: s.data.customerName || "Walk-in Customer",
       items: s.data.items,
@@ -92,7 +94,16 @@ export default function InvoicesPage() {
       isOffline: true
     }));
 
-    setInvoices([...offlineInvoices, ...inv]);
+    const manualInvoices: Invoice[] = manualOfflineInvoices.map((s: any) => ({
+      id: s.id,
+      invoiceNumber: `INV-OFFLINE-${s.id.slice(0, 5)}`,
+      ...s.data,
+      issuedAt: Timestamp.fromMillis(s.timestamp),
+      dueAt: s.data.dueAt ? Timestamp.fromMillis(s.data.dueAt) : null,
+      isOffline: true
+    }));
+
+    setInvoices([...posOfflineInvoices, ...manualInvoices, ...inv]);
     setClients(cli);
     setProducts(prod);
     setProfile(prof);
@@ -164,7 +175,34 @@ export default function InvoicesPage() {
       productId, productName, quantity, unitPrice,
     }));
     try {
-      if (editTarget) {
+      const isOnline = navigator.onLine && localStorage.getItem("billflow_offline_mode") !== "true";
+      
+      if (!isOnline && !editTarget) {
+        const offlineInvoices = JSON.parse(localStorage.getItem("billflow_offline_invoices") || "[]");
+        const newOfflineInvoice = {
+          id: crypto.randomUUID(),
+          data: {
+            userId: user.uid,
+            businessId,
+            clientId: form.clientId,
+            clientName: client?.name ?? "Unknown",
+            items,
+            subtotal: lineTotal,
+            discountAmount: discountAmount,
+            amount: total,
+            notes: form.notes,
+            status,
+            paymentMethod: form.paymentMethod,
+            issuedAt: Date.now(),
+            dueAt: form.dueDate ? new Date(form.dueDate).getTime() : null,
+          },
+          timestamp: Date.now()
+        };
+        offlineInvoices.push(newOfflineInvoice);
+        localStorage.setItem("billflow_offline_invoices", JSON.stringify(offlineInvoices));
+        toast.success("Invoice saved offline! Will sync when online.");
+      } else if (editTarget) {
+        if (!isOnline) throw new Error("Cannot edit invoices while offline");
         await updateInvoice(editTarget.id!, {
           clientId: form.clientId,
           clientName: client?.name ?? "Unknown",
@@ -180,21 +218,21 @@ export default function InvoicesPage() {
         toast.success("Invoice updated!");
       } else {
         await createInvoice({
-        userId: user.uid,
-        businessId,
-        clientId: form.clientId,
-        clientName: client?.name ?? "Unknown",
-        items,
-        subtotal: lineTotal,
-        discountAmount: discountAmount,
-        amount: total,
-        notes: form.notes,
-        status,
-        paymentMethod: form.paymentMethod,
-        issuedAt: Timestamp.now(),
-        dueAt: form.dueDate ? Timestamp.fromDate(new Date(form.dueDate)) : null,
-      });
-      toast.success(status === "draft" ? "Invoice saved as draft" : "Invoice sent!");
+          userId: user.uid,
+          businessId,
+          clientId: form.clientId,
+          clientName: client?.name ?? "Unknown",
+          items,
+          subtotal: lineTotal,
+          discountAmount: discountAmount,
+          amount: total,
+          notes: form.notes,
+          status,
+          paymentMethod: form.paymentMethod,
+          issuedAt: Timestamp.now(),
+          dueAt: form.dueDate ? Timestamp.fromDate(new Date(form.dueDate)) : null,
+        });
+        toast.success(status === "draft" ? "Invoice saved as draft" : "Invoice sent!");
       }
       setOpen(false);
       resetForm();

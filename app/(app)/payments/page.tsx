@@ -22,15 +22,17 @@ export default function PaymentsPage() {
     if (!user || !businessId) return;
     const [pay, cli] = await Promise.all([getPayments(businessId), getClients(businessId)]);
 
-    // Merge with offline payments
+    // Merge with offline records
     const offlineSales = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("billflow_offline_sales") || "[]") : [];
-    const offlinePayments: Payment[] = offlineSales.map((s: any) => ({
+    const manualOfflinePayments = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("billflow_offline_payments") || "[]") : [];
+    
+    const posOfflinePayments: Payment[] = offlineSales.map((s: any) => ({
       id: s.id,
       clientId: s.data.clientId || "",
       clientName: s.data.customerName || "Walk-in Customer",
       amount: s.data.amount || s.data.items.reduce((sum: number, l: any) => sum + (l.quantity * l.unitPrice), 0),
       method: s.data.paymentMethod || s.data.method,
-      reference: `OFFLINE-${s.id.slice(0, 5)}`,
+      reference: `POS-OFFLINE-${s.id.slice(0, 5)}`,
       status: "success",
       createdAt: Timestamp.fromMillis(s.timestamp),
       businessId: s.data.businessId || businessId,
@@ -38,7 +40,14 @@ export default function PaymentsPage() {
       isOffline: true
     }));
 
-    setPayments([...offlinePayments, ...pay]);
+    const manualPayments: Payment[] = manualOfflinePayments.map((s: any) => ({
+      id: s.id,
+      ...s.data,
+      createdAt: Timestamp.fromMillis(s.timestamp),
+      isOffline: true
+    }));
+
+    setPayments([...posOfflinePayments, ...manualPayments, ...pay]);
     setClients(cli);
     setLoading(false);
   };
@@ -53,22 +62,51 @@ export default function PaymentsPage() {
     if (!user || !businessId || !form.clientId || !form.amount) { toast.error("Fill all required fields"); return; }
     setSaving(true);
     const client = clients.find(c => c.id === form.clientId);
-    await createPayment({
-      userId: user.uid,
-      businessId,
-      clientId: form.clientId,
-      clientName: client?.name ?? "Unknown",
-      method: form.method,
-      reference: form.reference || `REF-${Date.now()}`,
-      amount: parseFloat(form.amount),
-      status: "success",
-      createdAt: Timestamp.now(),
-    });
-    toast.success("Payment recorded ✅");
-    setOpen(false);
-    setForm({ clientId: "", method: "momo", reference: "", amount: "" });
-    setSaving(false);
-    load();
+    
+    try {
+      const isOnline = navigator.onLine && localStorage.getItem("billflow_offline_mode") !== "true";
+      
+      if (!isOnline) {
+        const offlinePayments = JSON.parse(localStorage.getItem("billflow_offline_payments") || "[]");
+        const newOfflinePayment = {
+          id: crypto.randomUUID(),
+          data: {
+            userId: user.uid,
+            businessId,
+            clientId: form.clientId,
+            clientName: client?.name ?? "Unknown",
+            method: form.method,
+            reference: form.reference || `REF-OFFLINE-${Date.now()}`,
+            amount: parseFloat(form.amount),
+            status: "success",
+          },
+          timestamp: Date.now()
+        };
+        offlinePayments.push(newOfflinePayment);
+        localStorage.setItem("billflow_offline_payments", JSON.stringify(offlinePayments));
+        toast.success("Payment recorded offline! Will sync when online.");
+      } else {
+        await createPayment({
+          userId: user.uid,
+          businessId,
+          clientId: form.clientId,
+          clientName: client?.name ?? "Unknown",
+          method: form.method,
+          reference: form.reference || `REF-${Date.now()}`,
+          amount: parseFloat(form.amount),
+          status: "success",
+          createdAt: Timestamp.now(),
+        });
+        toast.success("Payment recorded ✅");
+      }
+      setOpen(false);
+      setForm({ clientId: "", method: "momo", reference: "", amount: "" });
+      load();
+    } catch (err: any) {
+      toast.error(err.message || "Could not record payment");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (

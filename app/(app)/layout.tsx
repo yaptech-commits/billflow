@@ -5,7 +5,9 @@ import { useAuth } from "@/lib/auth-context";
 import Sidebar from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
 import { cn } from "@/lib/utils";
-import { checkLowStockAndNotify, clearOldNotifications } from "@/lib/db";
+import { checkLowStockAndNotify, clearOldNotifications, createInvoice, createPayment } from "@/lib/db";
+import { syncOfflineSales, syncOfflineInvoices, syncOfflinePayments } from "@/lib/offline-sync";
+import { createPosSale } from "@/lib/pos-api";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, businessId, role } = useAuth();
@@ -33,6 +35,27 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       clearOldNotifications(businessId);
     }
   }, [businessId, role]);
+
+  useEffect(() => {
+    const syncAll = async () => {
+      const isOnline = navigator.onLine && localStorage.getItem("billflow_offline_mode") !== "true";
+      if (!isOnline) return;
+
+      try {
+        await Promise.all([
+          syncOfflineSales(createPosSale),
+          syncOfflineInvoices(createInvoice),
+          syncOfflinePayments(createPayment)
+        ]);
+      } catch (err) {
+        console.error("Auto-sync failed:", err);
+      }
+    };
+
+    const interval = setInterval(syncAll, 30000); // Sync every 30 seconds
+    syncAll();
+    return () => clearInterval(interval);
+  }, []);
 
   if (loading || !user) {
     return (
