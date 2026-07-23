@@ -252,7 +252,11 @@ export async function POST(request: NextRequest) {
 
       canonicalItems.forEach((item, index) => {
         const nextStockQty = item.previousStockQty - item.quantity;
-        transaction.update(productRefs[index], { stockQty: nextStockQty });
+        if (nextStockQty <= 0 && profile?.autoDeleteOutOfStock) {
+          transaction.delete(productRefs[index]);
+        } else {
+          transaction.update(productRefs[index], { stockQty: nextStockQty });
+        }
         transaction.create(movementRefs[index], {
           businessId: actor.businessId,
           productId: item.productId,

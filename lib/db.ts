@@ -219,6 +219,7 @@ export interface BusinessProfile {
   paystackPublicKey?: string;
   nextInvoiceNumber?: number;
   status?: "pending" | "active" | "suspended";
+  autoDeleteOutOfStock?: boolean;
   createdAt?: Timestamp | null;
   updatedAt?: Timestamp | null;
 }
@@ -494,11 +495,21 @@ export async function createSale(sale: SaleInput) {
       createdAt: now,
     });
 
+    const profileRef = doc(db, "businessProfiles", sale.businessId);
+    const profileSnap = await tx.get(profileRef);
+    const profile = profileSnap.data() as BusinessProfile;
+
     productSnaps.forEach((snap, i) => {
       const li = sale.items[i];
       const currentQty = (snap.data() as Product).stockQty ?? 0;
       const nextQty = currentQty - li.quantity;
-      tx.update(productRefs[i], { stockQty: nextQty });
+      
+      if (nextQty <= 0 && profile?.autoDeleteOutOfStock) {
+        tx.delete(productRefs[i]);
+      } else {
+        tx.update(productRefs[i], { stockQty: nextQty });
+      }
+
       logStockMovement(tx, {
         businessId: sale.businessId,
         productId: li.productId,

@@ -7,7 +7,7 @@ import {
   getCategories, Category
 } from "@/lib/db";
 import { createPosSale } from "@/lib/pos-api";
-import { formatMoney } from "@/lib/utils";
+import { formatMoney, cn } from "@/lib/utils";
 import Modal from "@/components/ui/Modal";
 import BrandedDocument from "@/components/BrandedDocument";
 import toast from "react-hot-toast";
@@ -301,7 +301,9 @@ export default function PosPage() {
                 ...prev,
                 totalSales: (prev.totalSales || 0) + result.amount,
                 paymentBreakdown: {
-                  ...prev.paymentBreakdown,
+                  momo: prev.paymentBreakdown?.momo || 0,
+                  card: prev.paymentBreakdown?.card || 0,
+                  cash: prev.paymentBreakdown?.cash || 0,
                   [payMethod]: (prev.paymentBreakdown?.[payMethod] || 0) + result.amount
                 }
               } : null);
@@ -366,7 +368,9 @@ export default function PosPage() {
           ...prev,
           totalSales: (prev.totalSales || 0) + result.amount,
           paymentBreakdown: {
-            ...prev.paymentBreakdown,
+            momo: prev.paymentBreakdown?.momo || 0,
+            card: prev.paymentBreakdown?.card || 0,
+            cash: prev.paymentBreakdown?.cash || 0,
             [payMethod]: (prev.paymentBreakdown?.[payMethod] || 0) + result.amount
           }
         } : null);
@@ -651,42 +655,18 @@ export default function PosPage() {
 
             <div className="flex justify-center overflow-hidden rounded-lg border border-border bg-white">
               <div id="receipt-content" className="p-4" style={{ width: receiptWidth === 58 ? "220px" : "300px" }}>
-                <BrandedDocument profile={profile!} type="receipt">
-                  <div className="text-[10px] space-y-1">
-                    <div className="flex justify-between border-b border-dashed border-black pb-1">
-                      <span>Receipt #:</span>
-                      <span className="font-bold">{receipt.invoiceId.slice(-6).toUpperCase()}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Date:</span>
-                      <span>{receipt.timestamp.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Customer:</span>
-                      <span>{receipt.customerName}</span>
-                    </div>
-                    <div className="flex justify-between border-b border-dashed border-black pb-1">
-                      <span>Method:</span>
-                      <span className="uppercase">{receipt.method}</span>
-                    </div>
-
-                    <div className="py-2 space-y-1">
-                      {receipt.items.map((item, idx) => (
-                        <div key={idx} className="flex justify-between">
-                          <span className="flex-1 truncate pr-2">{item.quantity}x {item.productName}</span>
-                          <span className="font-bold">{formatMoney(item.quantity * item.unitPrice, profile?.currency || "GHS")}</span>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="border-t border-black pt-1 space-y-1">
-                      <div className="flex justify-between text-xs font-bold">
-                        <span>TOTAL:</span>
-                        <span>{formatMoney(receipt.amount, profile?.currency || "GHS")}</span>
-                      </div>
-                    </div>
-                  </div>
-                </BrandedDocument>
+                <BrandedDocument 
+                  profile={profile} 
+                  docType="RECEIPT"
+                  docNumber={receipt.invoiceId.slice(-6).toUpperCase()}
+                  date={receipt.timestamp}
+                  clientName={receipt.customerName}
+                  items={receipt.items}
+                  amount={receipt.amount}
+                  paymentMethod={receipt.method}
+                  currencyCode={profile?.currency || "GHS"}
+                  width={receiptWidth}
+                />
               </div>
             </div>
 

@@ -167,6 +167,12 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
   const [editForm, setEditForm] = useState<Partial<BusinessProfile>>({});
 
+  useEffect(() => {
+    if (showEdit) {
+      setEditForm({ ...business });
+    }
+  }, [showEdit, business]);
+
   // New Management States
   const [activeTab, setActiveTab] = useState<"products" | "invoices" | "clients" | "suppliers" | "vouchers" | "payments" | "po" | null>(null);
   const [listData, setListData] = useState<any[]>([]);
@@ -188,7 +194,23 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
     { id: "/settings", label: "Settings" },
   ];
 
-  const fetchStats = async () => {
+  const fetchStats = async (force = false) => {
+    const cacheKey = `stats_${business.businessId}`;
+    const lastFetchKey = `last_stats_fetch_${business.businessId}`;
+    const now = Date.now();
+    
+    if (!force) {
+      const cached = localStorage.getItem(cacheKey);
+      const lastFetch = localStorage.getItem(lastFetchKey);
+      if (cached && lastFetch && now - parseInt(lastFetch) < 6 * 60 * 60 * 1000) {
+        const parsed = JSON.parse(cached);
+        setStats(parsed.stats);
+        setStaffList(parsed.staffList);
+        setLoading(false);
+        return;
+      }
+    }
+
     try {
       const [p, i, s, pay] = await Promise.all([
         getDocs(query(collection(db, "products"), where("businessId", "==", business.businessId))),
@@ -198,15 +220,20 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
       ]);
       
       const totalRevenue = pay.docs.reduce((acc, doc) => acc + (doc.data().amount || 0), 0);
-      
-      setStats({ 
+      const newStats = { 
         products: p.size, 
         invoices: i.size, 
         staff: s.size, 
         payments: pay.size,
         totalRevenue 
-      });
-      setStaffList(s.docs.map(d => ({ ...d.data(), id: d.id } as Staff)));
+      };
+      const newStaffList = s.docs.map(d => ({ ...d.data(), id: d.id } as Staff));
+      
+      setStats(newStats);
+      setStaffList(newStaffList);
+      
+      localStorage.setItem(cacheKey, JSON.stringify({ stats: newStats, staffList: newStaffList }));
+      localStorage.setItem(lastFetchKey, now.toString());
     } catch (e) {
       console.error(e);
     } finally {
@@ -261,7 +288,7 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
       await deleteDoc(doc(db, collectionName, id));
       toast.success("Deleted successfully", { id: t });
       fetchTabData(activeTab);
-      fetchStats();
+      fetchStats(true);
     } catch (e) {
       toast.error("Delete failed", { id: t });
     }
@@ -295,7 +322,7 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
       toast.success("Saved successfully", { id: t });
       setSelectedItem(null);
       fetchTabData(activeTab);
-      fetchStats();
+      fetchStats(true);
     } catch (e) {
       toast.error("Save failed", { id: t });
     }
@@ -316,7 +343,7 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
       }
       toast.success("Permissions updated", { id: t });
       setEditingStaff(null);
-      fetchStats();
+      fetchStats(true);
     } catch (e) {
       toast.error("Update failed", { id: t });
     }
@@ -333,7 +360,7 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
       }
       await batch.commit();
       toast.success(`Staff ${newStatus === "pending" ? "suspended" : "activated"}`, { id: t });
-      fetchStats();
+      fetchStats(true);
     } catch (e) {
       toast.error("Action failed", { id: t });
     }
@@ -350,7 +377,7 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
       }
       await batch.commit();
       toast.success("Staff deleted", { id: t });
-      fetchStats();
+      fetchStats(true);
     } catch (e) {
       toast.error("Deletion failed", { id: t });
     }
@@ -603,6 +630,18 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
                 onChange={e => setEditForm({ ...editForm, taxLabel: e.target.value })} 
               />
             </div>
+          </div>
+          <div className="flex items-center gap-3 p-4 bg-white/5 rounded-lg border border-border">
+            <input 
+              type="checkbox" 
+              id={`autoDelete-${business.businessId}`}
+              className="w-4 h-4 rounded border-border bg-black text-gold focus:ring-gold"
+              checked={editForm.autoDeleteOutOfStock || false}
+              onChange={(e) => setEditForm({ ...editForm, autoDeleteOutOfStock: e.target.checked })}
+            />
+            <label htmlFor={`autoDelete-${business.businessId}`} className="text-sm font-bold text-surface cursor-pointer">
+              Auto-delete products when stock reaches 0
+            </label>
           </div>
           <div className="flex gap-3 pt-4">
             <button className="btn-ghost flex-1 justify-center" onClick={() => setShowEdit(false)}>Cancel</button>
