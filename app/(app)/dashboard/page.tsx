@@ -9,13 +9,6 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 import { Plus } from "lucide-react";
 import Link from "next/link";
 
-const chartData = [
-  { month: "Jan", revenue: 1800 }, { month: "Feb", revenue: 2200 },
-  { month: "Mar", revenue: 1600 }, { month: "Apr", revenue: 2800 },
-  { month: "May", revenue: 3100 }, { month: "Jun", revenue: 2900 },
-  { month: "Jul", revenue: 3840 },
-];
-
 export default function DashboardPage() {
   const { user, businessId, role } = useAuth();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -70,6 +63,32 @@ export default function DashboardPage() {
   const paidCount = invoices.filter(i => i.status === "paid").length;
   const overdue = invoices.filter(i => i.status === "overdue").reduce((s, i) => s + i.amount, 0);
   const currencyCode = profile?.currency;
+
+  // Generate dynamic chart data for the last 7 days
+  const dailyData = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (6 - i));
+    const dayStr = d.toLocaleDateString("en-US", { weekday: "short" });
+    const dateStr = d.toDateString();
+    
+    const revenue = invoices
+      .filter(inv => inv.status === "paid" && inv.issuedAt?.toDate().toDateString() === dateStr)
+      .reduce((sum, inv) => sum + inv.amount, 0);
+      
+    return { name: dayStr, revenue };
+  });
+
+  // Payment method breakdown
+  const methodTotals = payments.reduce((acc, p) => {
+    acc[p.method] = (acc[p.method] || 0) + p.amount;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const methodData = [
+    { name: "Cash", value: methodTotals["cash"] || 0, color: "#F5A623" },
+    { name: "MoMo", value: methodTotals["momo"] || 0, color: "#10B981" },
+    { name: "Card", value: methodTotals["card"] || 0, color: "#3B82F6" },
+  ].filter(d => d.value > 0);
 
   return (
     <div>
@@ -144,24 +163,55 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Revenue chart */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="font-grotesk font-semibold text-white">Revenue — Last 7 Months</h2>
-          <span className="text-xs text-muted">{profile?.currency ? `${profile.currency} — ${profile.businessName}` : 'Loading...'}</span>
+      {/* Revenue charts */}
+      <div className="grid grid-cols-3 gap-5">
+        <div className="col-span-2 card">
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="font-grotesk font-semibold text-white">Daily Revenue — Last 7 Days</h2>
+            <span className="text-xs text-muted">{profile?.businessName}</span>
+          </div>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={dailyData} barSize={32}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#1E1E2E" vertical={false} />
+              <XAxis dataKey="name" tick={{ fill: "#7B7B9A", fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: "#7B7B9A", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${profile?.currency ? CURRENCIES[profile.currency as keyof typeof CURRENCIES]?.symbol : ''}${v}`} />
+              <Tooltip
+                contentStyle={{ background: "#16161F", border: "1px solid #1E1E2E", borderRadius: 8, fontSize: 12 }}
+                formatter={(v: number) => [`${profile?.currency ? CURRENCIES[profile.currency as keyof typeof CURRENCIES]?.symbol : ''} ${v.toLocaleString()}`, "Revenue"]}
+              />
+              <Bar dataKey="revenue" fill="#F5A623" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
-        <ResponsiveContainer width="100%" height={200}>
-          <BarChart data={chartData} barSize={28}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#1E1E2E" vertical={false} />
-            <XAxis dataKey="month" tick={{ fill: "#7B7B9A", fontSize: 11 }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fill: "#7B7B9A", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${profile?.currency ? CURRENCIES[profile.currency as keyof typeof CURRENCIES]?.symbol : ''}${v}`} />
-            <Tooltip
-              contentStyle={{ background: "#16161F", border: "1px solid #1E1E2E", borderRadius: 8, fontSize: 12 }}
-              formatter={(v: number) => [`${profile?.currency ? CURRENCIES[profile.currency as keyof typeof CURRENCIES]?.symbol : ''} ${v.toLocaleString()}`, "Revenue"]}
-            />
-            <Bar dataKey="revenue" fill="#F5A623" radius={[4, 4, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
+
+        <div className="card">
+          <h2 className="font-grotesk font-semibold text-white mb-5">Sales by Method</h2>
+          <div className="h-[200px] flex flex-col justify-center">
+            {methodData.length === 0 ? (
+              <p className="text-center text-muted text-sm">No sales data</p>
+            ) : (
+              <div className="space-y-4">
+                {methodData.map((d) => {
+                  const percentage = ((d.value / totalRevenue) * 100).toFixed(1);
+                  return (
+                    <div key={d.name}>
+                      <div className="flex justify-between text-xs mb-1.5">
+                        <span className="text-muted">{d.name}</span>
+                        <span className="text-white font-medium">{percentage}%</span>
+                      </div>
+                      <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full rounded-full transition-all duration-500" 
+                          style={{ width: `${percentage}%`, backgroundColor: d.color }} 
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
