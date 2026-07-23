@@ -33,8 +33,33 @@ export default function DashboardPage() {
       getClients(businessId),
       getBusinessProfile(businessId),
     ]).then(([inv, pay, cli, prof]) => {
-      setInvoices(inv);
-      setPayments(pay);
+      // Merge with offline records
+      const offlineSales = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("billflow_offline_sales") || "[]") : [];
+      
+      const offlineInvoices: Invoice[] = offlineSales.map((s: any) => ({
+        id: s.id,
+        invoiceNumber: `OFFLINE-${s.id.slice(0, 5)}`,
+        clientId: s.data.clientId || "",
+        clientName: s.data.customerName || "Walk-in Customer",
+        item: s.data.items.map((li: any) => `${li.productName} ×${li.quantity}`).join(", "),
+        amount: s.data.amount || s.data.items.reduce((sum: number, l: any) => sum + (l.quantity * l.unitPrice), 0),
+        status: "paid",
+        issuedAt: { toDate: () => new Date(s.timestamp) } as any,
+        isOffline: true
+      }));
+
+      const offlinePayments: Payment[] = offlineSales.map((s: any) => ({
+        id: s.id,
+        clientName: s.data.customerName || "Walk-in Customer",
+        amount: s.data.amount || s.data.items.reduce((sum: number, l: any) => sum + (l.quantity * l.unitPrice), 0),
+        method: s.data.paymentMethod || s.data.method,
+        status: "success",
+        createdAt: { toDate: () => new Date(s.timestamp) } as any,
+        isOffline: true
+      }));
+
+      setInvoices([...offlineInvoices, ...inv]);
+      setPayments([...offlinePayments, ...pay]);
       setClients(cli.length);
       setProfile(prof);
       setLoading(false);
