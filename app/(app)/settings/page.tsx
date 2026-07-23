@@ -102,10 +102,24 @@ export default function SettingsPage() {
   const [toggles, setToggles] = useState({
     paystack: true, flutterwave: false, momo: true,
     paidAlert: true, overdueReminder: true, weeklyReport: false,
+    offlineMode: false,
   });
 
-  const toggle = (key: keyof typeof toggles) =>
-    setToggles(t => ({ ...t, [key]: !t[key] }));
+  useEffect(() => {
+    const isOffline = localStorage.getItem("billflow_offline_mode") === "true";
+    setToggles(t => ({ ...t, offlineMode: isOffline }));
+  }, []);
+
+  const toggle = (key: keyof typeof toggles) => {
+    const newValue = !toggles[key];
+    setToggles(t => ({ ...t, [key]: newValue }));
+    if (key === "offlineMode") {
+      localStorage.setItem("billflow_offline_mode", newValue.toString());
+      toast.success(newValue ? "Offline Mode Enabled" : "Online Mode Enabled");
+      // Dispatch custom event for real-time updates across components
+      window.dispatchEvent(new Event("billflow_offline_change"));
+    }
+  };
 
   const handleSave = async () => {
     if (!auth.currentUser) return;
@@ -314,6 +328,18 @@ export default function SettingsPage() {
             <Toggle on={toggles[key as keyof typeof toggles]} onToggle={() => toggle(key as keyof typeof toggles)} />
           </div>
         ))}
+      </div>
+
+      {/* Connectivity */}
+      <div className="card">
+        <h2 className="font-grotesk font-semibold text-white mb-5">Connectivity</h2>
+        <div className="flex items-center justify-between py-3.5">
+          <div>
+            <p className="text-sm text-surface">Force Offline Mode</p>
+            <p className="text-xs text-muted mt-0.5">Work without internet. Data will sync when you go back online.</p>
+          </div>
+          <Toggle on={toggles.offlineMode} onToggle={() => toggle("offlineMode")} />
+        </div>
       </div>
 
       {/* Notifications */}
