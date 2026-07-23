@@ -32,7 +32,7 @@ export interface InvoiceLineItem {
 }
 
 export interface Invoice {
-  invoiceNumber?: number;
+  invoiceNumber?: string | number;
   id?: string;
   userId: string;
   businessId: string;
@@ -60,6 +60,7 @@ export interface Invoice {
   issuedAt: Timestamp | null;
   dueAt: Timestamp | null;
   paidAt?: Timestamp | null;
+  isOffline?: boolean;
 }
 
 export interface CreditNoteLineItem {
@@ -252,6 +253,7 @@ export interface Payment {
   amount: number;
   status: "success" | "failed" | "pending";
   createdAt?: Timestamp | null;
+  isOffline?: boolean;
 }
 
 export interface Notification {
@@ -680,6 +682,10 @@ export async function markVoucherUsed(id: string) {
 
 export async function createPayment(data: Omit<Payment, "id">) {
   return addDoc(col("payments"), { ...data, createdAt: serverTimestamp() });
+}
+
+export async function deletePayment(id: string) {
+  return deleteDoc(doc(db, "payments", id));
 }
 
 export async function getPayments(businessId: string): Promise<Payment[]> {

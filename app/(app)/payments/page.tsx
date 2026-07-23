@@ -1,7 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { getPayments, createPayment, getClients, Payment, Client, PaymentMethod } from "@/lib/db";
+import { getPayments, createPayment, getClients, deletePayment, Payment, Client, PaymentMethod } from "@/lib/db";
+import { deleteOfflinePayment, deleteOfflinePOSSale } from "@/lib/offline-sync";
+import { Trash2 } from "lucide-react";
 import { formatCedi, formatMoney } from "@/lib/utils";
 import { Timestamp } from "firebase/firestore";
 import Modal from "@/components/ui/Modal";
@@ -109,6 +111,23 @@ export default function PaymentsPage() {
     }
   };
 
+  const remove = async (p: Payment) => {
+    if (!confirm("Delete this payment record?")) return;
+    
+    if (p.isOffline) {
+      if (p.reference?.startsWith("POS")) {
+        deleteOfflinePOSSale(p.id!);
+      } else {
+        deleteOfflinePayment(p.id!);
+      }
+      toast.success("Offline payment deleted");
+    } else {
+      await deletePayment(p.id!);
+      toast.success("Payment deleted");
+    }
+    load();
+  };
+
   return (
     <div>
       {/* Summary cards */}
@@ -150,6 +169,7 @@ export default function PaymentsPage() {
                 <th className="text-left pb-3">Reference</th>
                 <th className="text-left pb-3">Amount</th>
                 <th className="text-left pb-3">Status</th>
+                <th className="text-left pb-3">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -161,6 +181,11 @@ export default function PaymentsPage() {
                   <td className="py-3 text-muted text-xs font-grotesk">{p.reference}</td>
                   <td className="py-3 font-grotesk font-semibold text-green">+{formatCedi(p.amount)}</td>
                   <td className="py-3"><Badge status={p.status} /></td>
+                  <td className="py-3">
+                    <button onClick={() => remove(p)} className="text-muted hover:text-red transition-colors" title="Delete">
+                      <Trash2 size={15} />
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>

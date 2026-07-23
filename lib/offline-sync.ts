@@ -100,3 +100,21 @@ export async function syncOfflinePayments(syncFn: (data: any) => Promise<any>) {
   localStorage.setItem("billflow_offline_payments", JSON.stringify(remaining));
   return { synced, failed };
 }
+
+export function deleteOfflineInvoice(id: string) {
+  const queue = JSON.parse(localStorage.getItem("billflow_offline_invoices") || "[]");
+  const filtered = queue.filter((inv: any) => inv.id !== id);
+  localStorage.setItem("billflow_offline_invoices", JSON.stringify(filtered));
+}
+
+export function deleteOfflinePayment(id: string) {
+  const queue = JSON.parse(localStorage.getItem("billflow_offline_payments") || "[]");
+  const filtered = queue.filter((pay: any) => pay.id !== id);
+  localStorage.setItem("billflow_offline_payments", JSON.stringify(filtered));
+}
+
+export function deleteOfflinePOSSale(id: string) {
+  const queue = JSON.parse(localStorage.getItem("billflow_offline_sales") || "[]");
+  const filtered = queue.filter((sale: any) => sale.id !== id);
+  localStorage.setItem("billflow_offline_sales", JSON.stringify(filtered));
+}

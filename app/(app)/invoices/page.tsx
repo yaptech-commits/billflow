@@ -5,6 +5,7 @@ import {
   getInvoices, createInvoice, updateInvoice, deleteInvoice, recordPayment, createCreditNote, getBusinessProfile,
   getClients, getProducts, Invoice, Client, Product, InvoiceStatus, InvoiceLineItem, PaymentMethod, BusinessProfile,
 } from "@/lib/db";
+import { deleteOfflineInvoice, deleteOfflinePOSSale } from "@/lib/offline-sync";
 import { formatMoney } from "@/lib/utils";
 import { Timestamp } from "firebase/firestore";
 import Modal from "@/components/ui/Modal";
@@ -309,10 +310,21 @@ export default function InvoicesPage() {
     }
   };
 
-  const remove = async (id: string) => {
+  const remove = async (inv: Invoice) => {
     if (!confirm("Delete this invoice?")) return;
-    await deleteInvoice(id);
-    toast.success("Invoice deleted");
+    
+    if (inv.isOffline) {
+      const invNum = String(inv.invoiceNumber || "");
+      if (invNum.startsWith("POS")) {
+        deleteOfflinePOSSale(inv.id!);
+      } else {
+        deleteOfflineInvoice(inv.id!);
+      }
+      toast.success("Offline invoice deleted");
+    } else {
+      await deleteInvoice(inv.id!);
+      toast.success("Invoice deleted");
+    }
     load();
   };
 
@@ -404,7 +416,7 @@ export default function InvoicesPage() {
                           <Undo2 size={15} />
                         </button>
                       )}
-                      <button onClick={() => remove(inv.id!)} className="text-muted hover:text-red transition-colors" title="Delete">
+                      <button onClick={() => remove(inv)} className="text-muted hover:text-red transition-colors" title="Delete">
                         <Trash2 size={15} />
                       </button>
                     </div>
