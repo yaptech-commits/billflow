@@ -6,20 +6,30 @@ async function authorizedRequest<T>(url: string, init?: RequestInit): Promise<T>
   if (!user) throw new Error("You must be signed in");
 
   const token = await user.getIdToken();
-  const response = await fetch(url, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-      ...(init?.headers ?? {}),
-    },
-  });
+  try {
+    const response = await fetch(url, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        ...(init?.headers ?? {}),
+      },
+    });
 
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(payload.error || "Request failed");
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const errorMsg = payload.error || `HTTP ${response.status}: ${response.statusText}`;
+      console.error(`[POS API Error] ${url}:`, errorMsg, payload);
+      throw new Error(errorMsg);
+    }
+    return payload as T;
+  } catch (error: any) {
+    if (error instanceof Error && error.message.includes("HTTP")) {
+      throw error;
+    }
+    console.error(`[POS API Network Error] ${url}:`, error);
+    throw new Error(`Network error: ${error?.message || "Request failed"}`);
   }
-  return payload as T;
 }
 
 export async function getPosBootstrap(): Promise<{
