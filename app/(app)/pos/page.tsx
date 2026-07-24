@@ -34,7 +34,6 @@ export default function PosPage() {
   const [selectedClient, setSelectedClient] = useState<string>("");
   const [discount, setDiscount] = useState<number>(0);
   const [scanValue, setScanValue] = useState("");
-  const [search, setSearch] = useState("");
   const scanRef = useRef<HTMLInputElement>(null);
 
   const [checkoutOpen, setCheckoutOpen] = useState(false);
@@ -168,15 +167,15 @@ export default function PosPage() {
     e.preventDefault();
     const term = scanValue.trim();
     if (!term) return;
+    
+    // If there's an exact SKU match, add it immediately and clear
     const bySku = products.find(p => p.sku && p.sku.toLowerCase() === term.toLowerCase());
-    const match = bySku ?? products.find(p => p.name.toLowerCase().includes(term.toLowerCase()));
-    if (match) {
-      addToCart(match);
-      toast.success(`${match.name} added`, { duration: 1200 });
-    } else {
-      toast.error(`No product found for "${term}"`);
+    if (bySku) {
+      addToCart(bySku);
+      toast.success(`${bySku.name} added`, { duration: 1200 });
+      setScanValue("");
     }
-    setScanValue("");
+    // If no exact SKU, we just let the filtered list show the results (no clear)
   };
 
   const updateQty = (productId: string, delta: number) => {
@@ -201,17 +200,18 @@ export default function PosPage() {
 
   const filteredProducts = useMemo(() => {
     let list = products;
-    if (search) {
+    const term = scanValue.trim().toLowerCase();
+    if (term) {
       list = list.filter(p =>
-        p.name.toLowerCase().includes(search.toLowerCase()) ||
-        (p.sku ?? "").toLowerCase().includes(search.toLowerCase())
+        p.name.toLowerCase().includes(term) ||
+        (p.sku ?? "").toLowerCase().includes(term)
       );
     }
     if (selectedCategory !== "all") {
       list = list.filter(p => p.categoryId === selectedCategory);
     }
     return list;
-  }, [products, search, selectedCategory]);
+  }, [products, scanValue, selectedCategory]);
 
   const openCheckout = () => {
     if (cart.length === 0) {
