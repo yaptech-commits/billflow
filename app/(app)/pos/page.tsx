@@ -57,7 +57,7 @@ export default function PosPage() {
     method: PaymentMethod;
     timestamp: Date;
   } | null>(null);
-  const [receiptWidth, setReceiptWidth] = useState<58 | 80>(80);
+  const [receiptWidth, setReceiptWidth] = useState<58 | 80 | '58x3276'>(80);
 
   const [isOnline, setIsOnline] = useState(true);
   const [isForcedOffline, setIsForcedOffline] = useState(false);
@@ -521,17 +521,18 @@ export default function PosPage() {
         <div className="space-y-6">
           <div className="flex justify-center gap-3 mb-2">
             <button onClick={() => setReceiptWidth(58)} className={cn("px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all", receiptWidth === 58 ? "bg-gold border-gold text-black" : "bg-white/5 border-border text-muted")}>58MM</button>
+            <button onClick={() => setReceiptWidth('58x3276')} className={cn("px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all", receiptWidth === '58x3276' ? "bg-gold border-gold text-black" : "bg-white/5 border-border text-muted")}>58MM (LONG)</button>
             <button onClick={() => setReceiptWidth(80)} className={cn("px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all", receiptWidth === 80 ? "bg-gold border-gold text-black" : "bg-white/5 border-border text-muted")}>80MM</button>
           </div>
-          <div className="flex justify-center overflow-hidden rounded-lg border border-border bg-white">
-            <div id="receipt-content" className="p-4" style={{ width: receiptWidth === 58 ? "220px" : "300px" }}>
+          <div className="flex justify-center overflow-hidden rounded-lg border border-border bg-white max-h-[400px] overflow-y-auto">
+            <div id="receipt-content" className="p-4" style={{ width: (receiptWidth === 58 || receiptWidth === '58x3276') ? "220px" : "300px" }}>
               {receipt && (
                 <BrandedDocument profile={profile} docType="RECEIPT" docNumber={receipt.invoiceId.slice(-6).toUpperCase()} date={receipt.timestamp} clientName={receipt.customerName} items={receipt.items} amount={receipt.amount} paymentMethod={receipt.method} currencyCode={profile?.currency || "GHS"} width={receiptWidth} />
               )}
             </div>
           </div>
           <div className="flex gap-3">
-            <button className="btn-ghost flex-1 justify-center gap-2" onClick={() => printReceipt("receipt-content")}><Printer size={18} /> Print</button>
+            <button className="btn-ghost flex-1 justify-center gap-2" onClick={() => printReceipt("receipt-content", receiptWidth)}><Printer size={18} /> Print</button>
             <button className="btn-primary flex-1 justify-center" onClick={() => setReceipt(null)}>DONE</button>
           </div>
         </div>

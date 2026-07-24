@@ -3,15 +3,25 @@
  * Designed for 80mm thermal printers but works with any printer.
  * Captures the content of the BrandedDocument component currently rendered.
  */
-export function printReceipt(elementId: string = "branded-doc", width: 58 | 80 = 80) {
+export function printReceipt(elementId: string = "branded-doc", width: 58 | 80 | '58x3276' = 80) {
   const content = document.getElementById(elementId);
   if (!content) {
     alert("Nothing to print. Please ensure the receipt is visible.");
     return;
   }
 
-  const printWidth = width === 58 ? "58mm" : "80mm";
-  const contentWidth = width === 58 ? "54mm" : "76mm";
+  let printWidth = "80mm";
+  let printHeight = "auto";
+  let contentWidth = "76mm";
+
+  if (width === 58) {
+    printWidth = "58mm";
+    contentWidth = "54mm";
+  } else if (width === '58x3276') {
+    printWidth = "58mm";
+    printHeight = "3276mm";
+    contentWidth = "54mm";
+  }
 
   const printWindow = window.open("", "_blank", "width=300,height=600");
   if (!printWindow) {
@@ -27,7 +37,7 @@ export function printReceipt(elementId: string = "branded-doc", width: 58 | 80 =
       <style>
         /* Thermal receipt printer optimized styles */
         @page {
-          size: ${printWidth} auto;
+          size: ${printWidth} ${printHeight};
           margin: 2mm;
         }
         * {
@@ -37,7 +47,7 @@ export function printReceipt(elementId: string = "branded-doc", width: 58 | 80 =
         }
         body {
           font-family: 'Courier New', monospace;
-          font-size: ${width === 58 ? '10px' : '12px'};
+          font-size: ${width === 58 || width === '58x3276' ? '10px' : '12px'};
           line-height: 1.4;
           color: #000;
           background: #fff;

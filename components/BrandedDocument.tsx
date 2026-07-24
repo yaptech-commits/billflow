@@ -28,7 +28,7 @@ interface BrandedDocumentProps {
   meta?: string;
   currencyCode?: string;
   /** Receipt width in mm, e.g. 58 or 80. Defaults to 80. */
-  width?: 58 | 80;
+  width?: 58 | 80 | '58x3276';
 }
 
 /**
