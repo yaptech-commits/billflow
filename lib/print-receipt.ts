@@ -48,6 +48,7 @@ export function printReceipt(elementId: string = "branded-doc", width: 58 | 80 |
         body {
           font-family: 'Courier New', monospace;
           font-size: ${width === 58 || width === '58x3276' ? '10px' : '12px'};
+          font-weight: bold;
           line-height: 1.4;
           color: #000;
           background: #fff;
@@ -62,8 +63,8 @@ export function printReceipt(elementId: string = "branded-doc", width: 58 | 80 |
           margin-bottom: 8px;
         }
         .receipt-header img {
-          max-width: 50mm;
-          max-height: 15mm;
+          max-width: 25mm;
+          max-height: 10mm;
           margin-bottom: 4px;
         }
         .receipt-header .business-name {

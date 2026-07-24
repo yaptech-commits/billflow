@@ -45,12 +45,11 @@ export default function BrandedDocument({
   const balanceDue = amountPaid != null ? amount - amountPaid : undefined;
 
   return (
-    <div id="branded-doc" className="space-y-4 text-sm">
-      <div className="flex items-start justify-between gap-4 border-b border-dashed border-border pb-4">
-        <div className="flex items-center gap-3 min-w-0">
-          {profile?.logoDataUrl ? (
-            <img src={profile.logoDataUrl} alt={businessName} className="w-12 h-12 object-contain rounded flex-shrink-0" />
-          ) : (
+    <div id="branded-doc" className="space-y-4 text-sm font-bold">
+      <div className="flex flex-col items-center gap-2 border-b border-dashed border-border pb-4">
+        {profile?.logoDataUrl ? (
+          <img src={profile.logoDataUrl} alt={businessName} className="w-8 h-8 object-contain rounded" />
+        ) : (
             <div
               className="w-12 h-12 rounded flex items-center justify-center font-grotesk font-bold text-black flex-shrink-0"
               style={{ backgroundColor: accent }}
@@ -58,17 +57,20 @@ export default function BrandedDocument({
               {businessName.slice(0, 2).toUpperCase()}
             </div>
           )}
-          <div className="min-w-0">
-            <p className="font-grotesk font-semibold text-white truncate">{businessName}</p>
-            {profile?.address && <p className="text-xs text-muted truncate">{profile.address}</p>}
-            {profile?.phone && <p className="text-xs text-muted">{profile.phone}</p>}
-            {profile?.email && <p className="text-xs text-muted">{profile.email}</p>}
+        <div className="text-center min-w-0">
+          <p className="font-grotesk font-bold text-white truncate">{businessName}</p>
+          {profile?.address && <p className="text-[10px] text-muted truncate">{profile.address}</p>}
+          <div className="flex items-center justify-center gap-2 text-[10px] text-muted">
+            {profile?.phone && <span>{profile.phone}</span>}
+            {profile?.email && <span>{profile.email}</span>}
           </div>
         </div>
-        <div className="text-right flex-shrink-0">
-          <p className="font-grotesk font-bold text-xs tracking-wide" style={{ color: accent }}>{docType}</p>
-          <p className="text-xs text-muted mt-0.5">#{docNumber}</p>
-          <p className="text-xs text-muted">{date.toLocaleDateString("en-GH")}</p>
+        <div className="text-center w-full mt-1 pt-1 border-t border-border/20">
+          <p className="font-grotesk font-bold text-[10px] tracking-widest uppercase" style={{ color: accent }}>{docType}</p>
+          <div className="flex justify-between text-[10px] text-muted mt-0.5">
+            <span>#{docNumber}</span>
+            <span>{date.toLocaleDateString("en-GH")}</span>
+          </div>
         </div>
       </div>
 
