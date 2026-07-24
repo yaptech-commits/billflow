@@ -48,10 +48,10 @@ export default function BrandedDocument({
     <div id="branded-doc" className="space-y-4 text-sm font-bold">
       <div className="flex flex-col items-center gap-2 border-b border-dashed border-border pb-4">
         {profile?.logoDataUrl ? (
-          <img src={profile.logoDataUrl} alt={businessName} className="w-8 h-8 object-contain rounded" />
+          <img src={profile.logoDataUrl} alt={businessName} className="w-6 h-6 object-contain rounded" />
         ) : (
             <div
-              className="w-12 h-12 rounded flex items-center justify-center font-grotesk font-bold text-black flex-shrink-0"
+              className="w-6 h-6 rounded flex items-center justify-center font-grotesk font-bold text-black flex-shrink-0 text-xs"
               style={{ backgroundColor: accent }}
             >
               {businessName.slice(0, 2).toUpperCase()}
