@@ -32,6 +32,8 @@ export default function ProductsPage() {
   const [catOpen, setCatOpen] = useState(false);
   const [catName, setCatName] = useState("");
   const [catSaving, setCatSaving] = useState(false);
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [editingCategoryName, setEditingCategoryName] = useState("");
   const [search, setSearch] = useState("");
 
   const filteredProducts = useMemo(() => {
@@ -144,6 +146,27 @@ export default function ProductsPage() {
     } finally {
       setCatSaving(false);
     }
+  };
+
+  const handleEditCategory = async () => {
+    if (!businessId || !editingCategoryId || !editingCategoryName) return;
+    setCatSaving(true);
+    try {
+      await updateCategory(editingCategoryId, { name: editingCategoryName });
+      toast.success("Category updated");
+      setEditingCategoryId(null);
+      setEditingCategoryName("");
+      load();
+    } catch (err: any) {
+      toast.error("Could not update category");
+    } finally {
+      setCatSaving(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingCategoryId(null);
+    setEditingCategoryName("");
   };
 
   const handleDeleteCategory = async (id: string) => {
@@ -404,11 +427,38 @@ export default function ProductsPage() {
           </div>
           <div className="space-y-2 max-h-60 overflow-y-auto">
             {categories.map(c => (
-              <div key={c.id} className="flex items-center justify-between p-2 rounded border border-border">
-                <span className="text-sm text-surface">{c.name}</span>
-                <button onClick={() => handleDeleteCategory(c.id!)} className="text-muted hover:text-red">
-                  <Trash2 size={14} />
-                </button>
+              <div key={c.id} className={`flex items-center justify-between p-2 rounded border transition-colors ${editingCategoryId === c.id ? "border-gold bg-gold/10" : "border-border"}`}>
+                {editingCategoryId === c.id ? (
+                  <input
+                    className="input text-sm flex-1"
+                    value={editingCategoryName}
+                    onChange={e => setEditingCategoryName(e.target.value)}
+                    autoFocus
+                  />
+                ) : (
+                  <span className="text-sm text-surface flex-1">{c.name}</span>
+                )}
+                <div className="flex gap-1">
+                  {editingCategoryId === c.id ? (
+                    <>
+                      <button onClick={handleEditCategory} disabled={catSaving} className="text-green hover:text-green/80 text-xs px-2 py-1">
+                        {catSaving ? "..." : "Save"}
+                      </button>
+                      <button onClick={handleCancelEdit} className="text-muted hover:text-red text-xs px-2 py-1">
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button onClick={() => { setEditingCategoryId(c.id!); setEditingCategoryName(c.name); }} className="text-muted hover:text-gold">
+                        <Pencil size={14} />
+                      </button>
+                      <button onClick={() => handleDeleteCategory(c.id!)} className="text-muted hover:text-red">
+                        <Trash2 size={14} />
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             ))}
           </div>
