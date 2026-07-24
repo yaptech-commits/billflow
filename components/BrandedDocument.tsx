@@ -46,26 +46,14 @@ export default function BrandedDocument({
 
   return (
     <div id="branded-doc" className="space-y-4 text-sm font-bold">
-      <div className="flex flex-col items-center gap-2 border-b border-dashed border-border pb-4">
-        {profile?.logoDataUrl ? (
-          <img src={profile.logoDataUrl} alt={businessName} className="w-6 h-6 object-contain rounded" />
-        ) : (
-            <div
-              className="w-6 h-6 rounded flex items-center justify-center font-grotesk font-bold text-black flex-shrink-0 text-xs"
-              style={{ backgroundColor: accent }}
-            >
-              {businessName.slice(0, 2).toUpperCase()}
-            </div>
-          )}
-        <div className="text-center min-w-0">
-          <p className="font-grotesk font-bold text-white truncate">{businessName}</p>
-          {profile?.address && <p className="text-[10px] text-muted truncate">{profile.address}</p>}
-          <div className="flex items-center justify-center gap-2 text-[10px] text-muted">
-            {profile?.phone && <span>{profile.phone}</span>}
-            {profile?.email && <span>{profile.email}</span>}
-          </div>
+      <div className="text-center border-b border-dashed border-border pb-4">
+        <p className="font-grotesk font-bold text-lg text-surface mb-2">{businessName}</p>
+        {profile?.address && <p className="text-[10px] text-muted">{profile.address}</p>}
+        <div className="flex items-center justify-center gap-2 text-[10px] text-muted">
+          {profile?.phone && <span>{profile.phone}</span>}
+          {profile?.email && <span>{profile.email}</span>}
         </div>
-        <div className="text-center w-full mt-1 pt-1 border-t border-border/20">
+        <div className="text-center w-full mt-2 pt-2 border-t border-border/20">
           <p className="font-grotesk font-bold text-[10px] tracking-widest uppercase" style={{ color: accent }}>{docType}</p>
           <div className="flex justify-between text-[10px] text-muted mt-0.5">
             <span>#{docNumber}</span>
