@@ -39,7 +39,8 @@ export default function PosPage() {
 
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [customerName, setCustomerName] = useState("Walk-in Customer");
-  const [payMethod, setPayMethod] = useState<PaymentMethod>("momo");
+  const [payMethod, setPayMethod] = useState<PaymentMethod>("cash");
+  const [amountReceived, setAmountReceived] = useState<string>("");
   const [charging, setCharging] = useState(false);
 
   // Shift state
@@ -56,6 +57,8 @@ export default function PosPage() {
     customerName: string;
     method: PaymentMethod;
     timestamp: Date;
+    amountPaid: number;
+    change: number;
   } | null>(null);
   const [receiptWidth, setReceiptWidth] = useState<58 | 80>(80);
 
@@ -219,7 +222,8 @@ export default function PosPage() {
       return;
     }
     setCustomerName("Walk-in Customer");
-    setPayMethod("momo");
+    setPayMethod("cash");
+    setAmountReceived("");
     setCheckoutOpen(true);
   };
 
@@ -298,6 +302,8 @@ export default function PosPage() {
                 customerName: customerName || "Walk-in Customer",
                 method: payMethod,
                 timestamp: new Date(),
+                amountPaid: result.amount,
+                change: 0,
               });
               setProducts(prev => prev.map(p => {
                 const item = cart.find(c => c.productId === p.id);
@@ -344,6 +350,8 @@ export default function PosPage() {
           customerName: customerName || "Walk-in Customer",
           method: payMethod,
           timestamp: new Date(),
+          amountPaid: payMethod === "cash" ? (parseFloat(amountReceived) || total) : total,
+          change: payMethod === "cash" ? Math.max(0, (parseFloat(amountReceived) || total) - total) : 0,
         });
         setOfflineCount(getOfflineQueue().length);
       } else {
@@ -359,6 +367,8 @@ export default function PosPage() {
           customerName: customerName || "Walk-in Customer",
           method: payMethod,
           timestamp: new Date(),
+          amountPaid: payMethod === "cash" ? (parseFloat(amountReceived) || total) : total,
+          change: payMethod === "cash" ? Math.max(0, (parseFloat(amountReceived) || total) - total) : 0,
         });
         setProducts(prev => prev.map(p => {
           const item = cart.find(c => c.productId === p.id);
@@ -498,6 +508,26 @@ export default function PosPage() {
               <label className="label">Customer Name</label>
               <input className="input h-12" value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="e.g. John Doe" />
             </div>
+
+            {payMethod === "cash" && (
+              <div>
+                <label className="label">Amount Received ({profile?.currency || "GHS"})</label>
+                <input 
+                  className="input h-12 text-lg font-grotesk" 
+                  type="number" 
+                  placeholder="0.00" 
+                  value={amountReceived} 
+                  onChange={e => setAmountReceived(e.target.value)} 
+                />
+                {parseFloat(amountReceived) >= total && (
+                  <div className="flex justify-between mt-2 text-green font-bold">
+                    <span>Change:</span>
+                    <span>{formatMoney(parseFloat(amountReceived) - total, profile?.currency || "GHS")}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div>
               <label className="label">Payment Method</label>
               <div className="grid grid-cols-3 gap-3">
@@ -531,7 +561,27 @@ export default function PosPage() {
             </div>
           </div>
           <div className="flex gap-3">
-            <button className="btn-ghost flex-1 justify-center gap-2" onClick={() => printReceipt("receipt-content")}><Printer size={18} /> Print</button>
+            <button 
+              className="btn-ghost flex-1 justify-center gap-2" 
+              onClick={() => {
+                if (!receipt || !profile) return;
+                printReceipt({
+                  businessName: profile.businessName,
+                  businessAddress: profile.address,
+                  businessPhone: profile.phone,
+                  invoiceNumber: receipt.invoiceId,
+                  items: receipt.items,
+                  total: receipt.amount,
+                  paymentMethod: receipt.method,
+                  amountPaid: receipt.amountPaid,
+                  change: receipt.change,
+                  customerName: receipt.customerName,
+                  cashierName: user?.displayName || "Staff"
+                });
+              }}
+            >
+              <Printer size={18} /> Print
+            </button>
             <button className="btn-primary flex-1 justify-center" onClick={() => setReceipt(null)}>DONE</button>
           </div>
         </div>

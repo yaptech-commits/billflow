@@ -4,88 +4,104 @@ export function printReceipt(data: any) {
   const printWindow = window.open("", "_blank", "width=400,height=600");
   if (!printWindow) return;
 
+  const itemsHtml = data.items.map((item: any) => `
+    <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+      <div style="flex: 1;">${item.productName}</div>
+      <div style="text-align: right; width: 40px;">${item.quantity}</div>
+      <div style="text-align: right; width: 80px;">${(item.price * item.quantity).toFixed(2)}</div>
+    </div>
+  `).join("");
+
   const html = `
     <html>
       <head>
         <title>Receipt - ${data.invoiceNumber}</title>
         <style>
-          body { font-family: 'Courier New', Courier, monospace; font-size: 12px; padding: 20px; color: #000; }
+          @page { size: 80mm auto; margin: 0; }
+          body { 
+            font-family: 'Courier New', Courier, monospace; 
+            width: 72mm; 
+            margin: 0 auto; 
+            padding: 10mm 2mm;
+            font-size: 12px;
+            line-height: 1.2;
+            color: #000;
+          }
           .center { text-align: center; }
           .bold { font-weight: bold; }
-          .hr { border-top: 1px dashed #000; margin: 10px 0; }
+          .uppercase { text-transform: uppercase; }
+          .divider { border-top: 1px dashed #000; margin: 8px 0; }
+          .header { margin-bottom: 15px; }
+          .header h1 { margin: 0; font-size: 18px; }
+          .header p { margin: 2px 0; font-size: 11px; }
+          .section-title { margin: 10px 0; font-size: 14px; letter-spacing: 2px; }
+          .footer { margin-top: 20px; font-size: 11px; }
+          .barcode { margin-top: 15px; height: 40px; border-left: 1px solid #000; border-right: 1px solid #000; display: flex; align-items: center; justify-content: center; font-size: 10px; }
           .flex { display: flex; justify-content: space-between; }
-          .mt-10 { margin-top: 10px; }
-          .mt-20 { margin-top: 20px; }
-          table { width: 100%; border-collapse: collapse; }
-          th { text-align: left; border-bottom: 1px solid #000; padding-bottom: 5px; }
-          td { padding: 5px 0; }
         </style>
       </head>
       <body>
-        <div class="center">
-          <h2 class="bold">${data.businessName}</h2>
+        <div class="header center">
+          <h1 class="uppercase">${data.businessName}</h1>
           <p>${data.businessAddress || ""}</p>
-          <p>${data.businessPhone || ""}</p>
-          <p class="bold mt-10">RECEIPT</p>
+          <p>Tel: ${data.businessPhone || ""}</p>
+        </div>
+
+        <div class="divider"></div>
+        <div class="section-title center bold uppercase">
+          ${data.paymentMethod === 'cash' ? 'CASH RECEIPT' : 'RECEIPT'}
+        </div>
+        <div class="divider"></div>
+
+        <div class="flex bold" style="margin-bottom: 5px;">
+          <span style="flex: 1;">Description</span>
+          <span style="text-align: right; width: 40px;">Qty</span>
+          <span style="text-align: right; width: 80px;">Price</span>
         </div>
         
-        <div class="mt-20">
-          <div class="flex"><span>Date:</span> <span>${new Date().toLocaleString()}</span></div>
-          <div class="flex"><span>Invoice #:</span> <span>${data.invoiceNumber}</span></div>
-          <div class="flex"><span>Cashier:</span> <span>${data.cashierName}</span></div>
+        <div class="items">
+          ${itemsHtml}
         </div>
-        
-        <div class="hr"></div>
-        
-        <table>
-          <thead>
-            <tr>
-              <th>Item</th>
-              <th>Qty</th>
-              <th>Price</th>
-              <th>Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${data.items.map((item: any) => `
-              <tr>
-                <td>${item.productName}</td>
-                <td>${item.quantity}</td>
-                <td>${formatCedi(item.price)}</td>
-                <td>${formatCedi(item.price * item.quantity)}</td>
-              </tr>
-            `).join("")}
-          </tbody>
-        </table>
-        
-        <div class="hr"></div>
-        
-        <div class="mt-10">
-          <div class="flex"><span>Subtotal:</span> <span>${formatCedi(data.subtotal)}</span></div>
-          ${data.taxAmount > 0 ? `<div class="flex"><span>Tax:</span> <span>${formatCedi(data.taxAmount)}</span></div>` : ""}
-          ${data.discountAmount > 0 ? `<div class="flex"><span>Discount:</span> <span>-${formatCedi(data.discountAmount)}</span></div>` : ""}
-          <div class="flex bold mt-10" style="font-size: 14px;">
-            <span>TOTAL:</span> <span>${formatCedi(data.total)}</span>
+
+        <div class="divider"></div>
+
+        <div class="flex bold" style="font-size: 16px;">
+          <span>Total</span>
+          <span>${data.total.toFixed(2)}</span>
+        </div>
+
+        <div class="flex" style="margin-top: 5px;">
+          <span>Cash</span>
+          <span>${(data.amountPaid || 0).toFixed(2)}</span>
+        </div>
+        <div class="flex">
+          <span>Change</span>
+          <span>${(data.change || 0).toFixed(2)}</span>
+        </div>
+
+        <div class="divider"></div>
+
+        <div style="font-size: 10px; margin-top: 10px;">
+          <p>Invoice: ${data.invoiceNumber}</p>
+          <p>Date: ${new Date().toLocaleString()}</p>
+          ${data.customerName ? `<p>Customer: ${data.customerName}</p>` : ""}
+          <p>Cashier: ${data.cashierName || "System"}</p>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="footer center">
+          <p class="bold">THANK YOU!</p>
+          <div class="barcode">
+            <div style="width: 100%; height: 100%; background: repeating-linear-gradient(90deg, #000, #000 2px, transparent 2px, transparent 4px);"></div>
           </div>
+          <p style="margin-top: 5px;">${data.invoiceNumber}</p>
         </div>
-        
-        <div class="hr"></div>
-        
-        <div class="mt-10">
-          <div class="flex"><span>Method:</span> <span style="text-transform: uppercase;">${data.paymentMethod}</span></div>
-          <div class="flex"><span>Amount Paid:</span> <span>${formatCedi(data.amountPaid)}</span></div>
-          ${data.change > 0 ? `<div class="flex"><span>Change:</span> <span>${formatCedi(data.change)}</span></div>` : ""}
-        </div>
-        
-        <div class="center mt-20">
-          <p class="bold">Thank you for your business!</p>
-          <p>Powered by BillFlow</p>
-        </div>
-        
+
         <script>
           window.onload = () => {
             window.print();
-            window.close();
+            setTimeout(() => window.close(), 500);
           };
         </script>
       </body>
