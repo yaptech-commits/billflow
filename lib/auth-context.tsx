@@ -1,0 +1,77 @@
+"use client";
+import { createContext, useContext, useEffect, useState } from "react";
+import { User, onAuthStateChanged, signOut } from "firebase/auth";
+import { auth } from "@/lib/firebase";
+import { resolveBusinessContext, StaffRole } from "@/lib/db";
+import { useRouter } from "next/navigation";
+
+interface AuthContextType {
+  user: User | null;
+  loading: boolean;
+  businessId: string | null;
+  role: StaffRole | null;
+  permissions: string[];
+  logout: () => Promise<void>;
+}
+
+const AuthContext = createContext<AuthContextType>({
+  user: null,
+  loading: true,
+  businessId: null,
+  role: null,
+  permissions: [],
+  logout: async () => {},
+});
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [businessId, setBusinessId] = useState<string | null>(null);
+  const [role, setRole] = useState<StaffRole | null>(null);
+  const [permissions, setPermissions] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (u) => {
+      setUser(u);
+      if (u && u.email) {
+        try {
+          const ctx = await resolveBusinessContext(u.uid, u.email);
+          setBusinessId(ctx.businessId);
+          setRole(ctx.role);
+          setPermissions(ctx.permissions || []);
+        } catch (err: any) {
+          // If it's an approval error, log out and let the login page show the message
+          if (err.message?.includes("Contact BillFlow Official")) {
+            await signOut(auth);
+            router.push(`/auth/login?error=${encodeURIComponent(err.message)}`);
+          } else {
+            // Fall back to treating them as an independent owner if resolution fails for other reasons.
+            setBusinessId(u.uid);
+            setRole("owner");
+            setPermissions([]);
+          }
+        }
+      } else {
+        setBusinessId(null);
+        setRole(null);
+        setPermissions([]);
+      }
+      setLoading(false);
+    });
+    return unsub;
+  }, []);
+
+  const logout = async () => {
+    await signOut(auth);
+    router.push("/auth/login");
+  };
+
+  return (
+    <AuthContext.Provider value={{ user, loading, businessId, role, permissions, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export const useAuth = () => useContext(AuthContext);

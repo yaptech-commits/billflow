@@ -1,0 +1,267 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Identity and business-role helpers ──────────────────────────────────
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(businessId) {
+      return isSignedIn() && request.auth.uid == businessId;
+    }
+
+    function staffIndexPath(uid) {
+      return /databases/$(database)/documents/staffIndex/$(uid);
+    }
+
+    function staffIndexDoc() {
+      return get(staffIndexPath(request.auth.uid));
+    }
+
+    function isActiveSalespersonFor(businessId) {
+      return isSignedIn()
+        && exists(staffIndexPath(request.auth.uid))
+        && staffIndexDoc().data.businessId == businessId
+        && staffIndexDoc().data.role == 'salesperson'
+        && staffIndexDoc().data.status == 'active';
+    }
+
+    function isBusinessMember(businessId) {
+      return isOwner(businessId) || isActiveSalespersonFor(businessId);
+    }
+
+    function ownsExistingBusinessDocument() {
+      return isSignedIn() && isOwner(resource.data.businessId);
+    }
+
+    function ownsIncomingBusinessDocument() {
+      return isSignedIn() && isOwner(request.resource.data.businessId);
+    }
+
+    // ── staffIndex ──────────────────────────────────────────────────────────
+
+    match /staffIndex/{uid} {
+      allow get: if isSignedIn() && (
+        request.auth.uid == uid ||
+        isOwner(resource.data.businessId)
+      );
+      allow list: if false;
+
+      allow create: if isSignedIn() && (
+        (
+          isOwner(request.resource.data.businessId)
+          && request.resource.data.role == 'salesperson'
+          && request.resource.data.status == 'active'
+        ) ||
+        (
+          request.auth.uid == uid
+          && request.resource.data.keys().hasAll(['businessId', 'role', 'status', 'staffId'])
+          && request.resource.data.keys().hasOnly(['businessId', 'role', 'status', 'staffId'])
+          && request.resource.data.role == 'salesperson'
+          && request.resource.data.status == 'active'
+          && getAfter(/databases/$(database)/documents/staff/$(request.resource.data.staffId)).data.staffUid == uid
+          && getAfter(/databases/$(database)/documents/staff/$(request.resource.data.staffId)).data.businessId == request.resource.data.businessId
+          && getAfter(/databases/$(database)/documents/staff/$(request.resource.data.staffId)).data.role == 'salesperson'
+          && getAfter(/databases/$(database)/documents/staff/$(request.resource.data.staffId)).data.status == 'active'
+          && getAfter(/databases/$(database)/documents/staff/$(request.resource.data.staffId)).data.email == request.auth.token.email
+        )
+      );
+
+      allow update: if isSignedIn()
+        && isOwner(resource.data.businessId)
+        && request.resource.data.businessId == resource.data.businessId
+        && request.resource.data.role == 'salesperson';
+
+      allow delete: if isSignedIn() && isOwner(resource.data.businessId);
+    }
+
+    // ── Staff invitations and roster ────────────────────────────────────────
+
+    match /staff/{staffId} {
+      allow read: if isSignedIn() && (
+        isOwner(resource.data.businessId) ||
+        (
+          resource.data.status == 'pending'
+          && resource.data.email == request.auth.token.email
+        )
+      );
+
+      allow create: if ownsIncomingBusinessDocument()
+        && request.resource.data.role == 'salesperson'
+        && request.resource.data.status == 'pending';
+
+      allow update: if isSignedIn() && (
+        (
+          isOwner(resource.data.businessId)
+          && request.resource.data.businessId == resource.data.businessId
+        ) ||
+        (
+          resource.data.status == 'pending'
+          && resource.data.role == 'salesperson'
+          && resource.data.email == request.auth.token.email
+          && request.resource.data.businessId == resource.data.businessId
+          && request.resource.data.email == resource.data.email
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.staffUid == request.auth.uid
+          && request.resource.data.status == 'active'
+          && request.resource.data.inviteToken == null
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'staffUid', 'status', 'inviteToken'
+          ])
+          && getAfter(staffIndexPath(request.auth.uid)).data.businessId == resource.data.businessId
+          && getAfter(staffIndexPath(request.auth.uid)).data.role == 'salesperson'
+          && getAfter(staffIndexPath(request.auth.uid)).data.status == 'active'
+          && getAfter(staffIndexPath(request.auth.uid)).data.staffId == staffId
+        )
+      );
+
+      allow delete: if ownsExistingBusinessDocument();
+    }
+
+    // ── Clients: the only directly shared business collection ───────────────
+
+    match /clients/{id} {
+      allow read: if isBusinessMember(resource.data.businessId);
+
+      allow create: if isBusinessMember(request.resource.data.businessId)
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.keys().hasAll([
+          'userId', 'businessId', 'name', 'email', 'createdAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'userId', 'businessId', 'name', 'email', 'phone', 'business', 'createdAt'
+        ])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 200
+        && request.resource.data.email is string
+        && request.resource.data.email.size() <= 320
+        && request.resource.data.createdAt == request.time;
+
+      allow update: if isOwner(resource.data.businessId) || (
+        isActiveSalespersonFor(resource.data.businessId)
+        && request.resource.data.businessId == resource.data.businessId
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'name', 'email', 'phone', 'business'
+        ])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 200
+        && request.resource.data.email is string
+        && request.resource.data.email.size() <= 320
+      );
+
+      allow delete: if isOwner(resource.data.businessId)
+        || isActiveSalespersonFor(resource.data.businessId);
+    }
+
+    // ── POS shifts: salesperson may manage only their own shift lifecycle ───
+
+    match /shifts/{id} {
+      allow read: if isOwner(resource.data.businessId) || (
+        isActiveSalespersonFor(resource.data.businessId)
+        && resource.data.userId == request.auth.uid
+      );
+
+      allow create: if isOwner(request.resource.data.businessId) || (
+        isActiveSalespersonFor(request.resource.data.businessId)
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'open'
+        && request.resource.data.openedAt == request.time
+        && request.resource.data.openingCash is number
+        && request.resource.data.openingCash >= 0
+        && request.resource.data.keys().hasAll([
+          'businessId', 'userId', 'userName', 'openingCash', 'openedAt', 'status'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'businessId', 'userId', 'userName', 'openingCash', 'openedAt', 'status'
+        ])
+      );
+
+      allow update: if isOwner(resource.data.businessId) || (
+        isActiveSalespersonFor(resource.data.businessId)
+        && resource.data.userId == request.auth.uid
+        && resource.data.status == 'open'
+        && request.resource.data.businessId == resource.data.businessId
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.openedAt == resource.data.openedAt
+        && request.resource.data.openingCash == resource.data.openingCash
+        && request.resource.data.status == 'closed'
+        && request.resource.data.closedAt == request.time
+        && request.resource.data.actualCash is number
+        && request.resource.data.actualCash >= 0
+        && request.resource.data.expectedCash == resource.data.openingCash
+        && request.resource.data.cashDifference == request.resource.data.actualCash - request.resource.data.expectedCash
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'closedAt', 'actualCash', 'expectedCash', 'cashDifference', 'status'
+        ])
+      );
+
+      allow delete: if ownsExistingBusinessDocument();
+    }
+
+    // ── Owner-only business data ────────────────────────────────────────────
+    // Salespeople receive a sanitized POS catalog/profile and submit sales via
+    // authenticated server endpoints. They therefore have no direct Firestore
+    // access to inventory, invoices, payments, reports, or business settings.
+
+    match /products/{id} {
+      allow read, update, delete: if ownsExistingBusinessDocument();
+      allow create: if ownsIncomingBusinessDocument();
+    }
+
+    match /invoices/{id} {
+      allow read, update, delete: if ownsExistingBusinessDocument();
+      allow create: if ownsIncomingBusinessDocument();
+    }
+
+    match /payments/{id} {
+      allow read, update, delete: if ownsExistingBusinessDocument();
+      allow create: if ownsIncomingBusinessDocument();
+    }
+
+    match /suppliers/{id} {
+      allow read, update, delete: if ownsExistingBusinessDocument();
+      allow create: if ownsIncomingBusinessDocument();
+    }
+
+    match /purchaseOrders/{id} {
+      allow read, update, delete: if ownsExistingBusinessDocument();
+      allow create: if ownsIncomingBusinessDocument();
+    }
+
+    match /creditNotes/{id} {
+      allow read, update, delete: if ownsExistingBusinessDocument();
+      allow create: if ownsIncomingBusinessDocument();
+    }
+
+    match /vouchers/{id} {
+      allow read, update, delete: if ownsExistingBusinessDocument();
+      allow create: if ownsIncomingBusinessDocument();
+    }
+
+    match /stockMovements/{id} {
+      allow read: if ownsExistingBusinessDocument();
+      allow create: if ownsIncomingBusinessDocument();
+      allow update, delete: if false;
+    }
+
+    match /businessProfiles/{businessId} {
+      allow read, write: if isOwner(businessId);
+    }
+
+    match /notifications/{id} {
+      allow read, update, delete: if ownsExistingBusinessDocument();
+      allow create: if ownsIncomingBusinessDocument();
+    }
+
+    // Default deny for all current and future collections.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
