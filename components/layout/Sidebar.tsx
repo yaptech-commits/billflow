@@ -5,14 +5,15 @@ import { usePathname } from "next/navigation";
 import { 
   LayoutDashboard, FileText, Users, Ticket, 
   CreditCard, BarChart3, Settings, Package, 
-  ChevronLeft, ChevronRight, ShoppingCart, Truck, UserCircle, Shield
+  ChevronLeft, ChevronRight, ShoppingCart, Truck, UserCircle, Shield,
+  LogOut
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { role } = useAuth();
+  const { role, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
@@ -50,15 +51,33 @@ export default function Sidebar() {
       "fixed top-0 left-0 h-full bg-[#111118] border-right border-[#1E1E2E] z-40 transition-all duration-300 flex flex-col",
       collapsed ? "w-[70px]" : "w-[240px]"
     )}>
-      <div className="p-6 mb-4 flex items-center justify-between">
+      <div className="p-6 mb-4 flex items-center justify-between group/logo">
         {!collapsed && (
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gold rounded-lg flex items-center justify-center text-black font-bold">B</div>
-            <span className="font-grotesk font-bold text-white text-lg">BillFlow</span>
+          <div className="flex items-center justify-between w-full">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-gold rounded-lg flex items-center justify-center text-black font-bold">B</div>
+              <span className="font-grotesk font-bold text-white text-lg">BillFlow</span>
+            </div>
+            <button 
+              onClick={() => logout?.()}
+              className="p-1.5 text-muted hover:text-red hover:bg-red/10 rounded-lg transition-all"
+              title="Log Out"
+            >
+              <LogOut size={18} />
+            </button>
           </div>
         )}
         {collapsed && (
-          <div className="w-8 h-8 bg-gold rounded-lg flex items-center justify-center text-black font-bold mx-auto">B</div>
+          <div className="relative group/collapsed">
+            <div className="w-8 h-8 bg-gold rounded-lg flex items-center justify-center text-black font-bold mx-auto">B</div>
+            <button 
+              onClick={() => logout?.()}
+              className="absolute -top-1 -right-1 p-1 bg-red text-white rounded-full opacity-0 group-hover/collapsed:opacity-100 transition-opacity shadow-lg"
+              title="Log Out"
+            >
+              <LogOut size={10} />
+            </button>
+          </div>
         )}
       </div>
 
