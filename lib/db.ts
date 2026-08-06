@@ -103,7 +103,9 @@ export interface Product {
   name: string;
   sku?: string;
   categoryId?: string;
+  category?: string;
   unit?: string;
+  description?: string;
   price: number;
   wholesalePrice?: number;
   costPrice?: number;
@@ -147,6 +149,7 @@ export interface Supplier {
   contactPerson?: string;
   phone?: string;
   email?: string;
+  address?: string;
   notes?: string;
   createdAt?: Timestamp | null;
 }
@@ -159,6 +162,7 @@ export interface Client {
   email: string;
   phone?: string;
   business?: string;
+  address?: string;
   createdAt?: Timestamp | null;
 }
 
