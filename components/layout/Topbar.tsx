@@ -129,7 +129,10 @@ export default function Topbar({ title, onRefresh }: { title: string; onRefresh?
                       </p>
                       <div className="flex items-center gap-1.5 mt-2 text-[9px] text-muted/60 uppercase font-bold">
                         <Clock size={10} />
-                        {formatDistanceToNow(n.createdAt.toDate(), { addSuffix: true })}
+                        {n.createdAt && formatDistanceToNow(
+                          typeof n.createdAt.toDate === 'function' ? n.createdAt.toDate() : new Date(n.createdAt as any), 
+                          { addSuffix: true }
+                        )}
                       </div>
                     </div>
                   </div>

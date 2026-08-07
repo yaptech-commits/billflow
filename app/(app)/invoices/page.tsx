@@ -399,7 +399,7 @@ export default function InvoicesPage() {
                   </td>
                   <td className="py-3 text-muted text-xs">{inv.paymentMethod === "momo" ? "📱 MoMo" : inv.paymentMethod === "card" ? "💳 Card" : "💵 Cash"}</td>
                   <td className="py-3 text-muted text-xs">
-                    {inv.dueAt ? inv.dueAt.toDate().toLocaleDateString("en-GH") : "—"}
+                    {inv.dueAt ? (typeof inv.dueAt.toDate === 'function' ? inv.dueAt.toDate().toLocaleDateString("en-GH") : new Date(inv.dueAt as any).toLocaleDateString("en-GH")) : "—"}
                   </td>
                   <td className="py-3"><Badge status={inv.status} /></td>
                   <td className="py-3">

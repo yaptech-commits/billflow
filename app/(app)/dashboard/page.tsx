@@ -80,22 +80,36 @@ export default function DashboardPage() {
     const dateStr = d.toDateString();
     
     const revenue = invoices
-      .filter(inv => inv.status === "paid" && inv.issuedAt?.toDate().toDateString() === dateStr)
+      .filter(inv => {
+        if (inv.status !== "paid" || !inv.issuedAt) return false;
+        try {
+          const date = typeof inv.issuedAt.toDate === 'function' ? inv.issuedAt.toDate() : new Date(inv.issuedAt as any);
+          return date.toDateString() === dateStr;
+        } catch (e) {
+          return false;
+        }
+      })
       .reduce((sum, inv) => sum + inv.amount, 0);
       
     return { name: dayStr, revenue };
   });
 
-  // Calculate top products (mock logic based on invoice item strings)
+  // Calculate top products (logic based on both legacy text and new items array)
   const topProducts = invoices
     .filter(i => i.status === "paid")
     .reduce((acc, inv) => {
-      const items = inv.item.split(", ");
-      items.forEach(item => {
-        const [name, qtyStr] = item.split(" ×");
-        const qty = parseInt(qtyStr) || 1;
-        acc[name] = (acc[name] || 0) + qty;
-      });
+      if (inv.items && Array.isArray(inv.items)) {
+        inv.items.forEach(item => {
+          acc[item.productName] = (acc[item.productName] || 0) + item.quantity;
+        });
+      } else if (inv.item) {
+        const items = inv.item.split(", ");
+        items.forEach(item => {
+          const [name, qtyStr] = item.split(" ×");
+          const qty = parseInt(qtyStr) || 1;
+          acc[name] = (acc[name] || 0) + qty;
+        });
+      }
       return acc;
     }, {} as Record<string, number>);
 

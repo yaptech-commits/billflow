@@ -1243,6 +1243,7 @@ export async function clearOldNotifications(businessId: string) {
 }
 
 export async function checkLowStockAndNotify(businessId: string) {
+  if (typeof window === "undefined") return;
   // Throttle this check to run at most once every 6 hours per session to save quota
   const lastCheckKey = `last_low_stock_check_${businessId}`;
   const lastCheck = localStorage.getItem(lastCheckKey);

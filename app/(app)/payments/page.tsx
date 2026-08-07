@@ -183,7 +183,7 @@ export default function PaymentsPage() {
             <tbody>
               {payments.map(p => (
                 <tr key={p.id} className="border-t border-border hover:bg-white/[0.02]">
-                  <td className="py-3 text-muted text-xs">{p.createdAt?.toDate().toLocaleDateString("en-GH")}</td>
+                  <td className="py-3 text-muted text-xs">{p.createdAt ? (typeof p.createdAt.toDate === 'function' ? p.createdAt.toDate().toLocaleDateString("en-GH") : new Date(p.createdAt as any).toLocaleDateString("en-GH")) : "Recent"}</td>
                   <td className="py-3 font-medium text-surface">{p.clientName}</td>
                   <td className="py-3 text-sm">{p.method === "momo" ? "📱 MoMo" : p.method === "card" ? "💳 Card" : "💵 Cash"}</td>
                   <td className="py-3 text-muted text-xs font-grotesk">{p.reference}</td>

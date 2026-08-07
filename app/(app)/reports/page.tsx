@@ -71,7 +71,15 @@ export default function ReportsPage() {
     const dateStr = d.toDateString();
     
     const revenue = invoices
-      .filter(inv => inv.status === "paid" && inv.issuedAt?.toDate().toDateString() === dateStr)
+      .filter(inv => {
+        if (inv.status !== "paid" || !inv.issuedAt) return false;
+        try {
+          const date = typeof inv.issuedAt.toDate === 'function' ? inv.issuedAt.toDate() : new Date(inv.issuedAt as any);
+          return date.toDateString() === dateStr;
+        } catch (e) {
+          return false;
+        }
+      })
       .reduce((sum, inv) => sum + inv.amount, 0);
       
     return { name: d.getDate().toString(), revenue };
