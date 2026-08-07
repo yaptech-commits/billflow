@@ -96,7 +96,11 @@ export default function PosPage() {
     }
   };
 
-  useEffect(() => { load(); }, [user, businessId]);
+  useEffect(() => { 
+    load(); 
+    window.addEventListener("billflow_refresh", load);
+    return () => window.removeEventListener("billflow_refresh", load);
+  }, [user, businessId]);
 
   useEffect(() => {
     const checkStatus = () => {
@@ -262,6 +266,10 @@ export default function PosPage() {
 
   const handleCharge = async () => {
     if (!user || !businessId) return;
+    if (businessId === "SUPER_ADMIN") {
+      toast.error("Please select a specific business to process sales.");
+      return;
+    }
     if (!activeShift) {
       toast.error("You must open a shift before making sales");
       setShiftModalOpen(true);

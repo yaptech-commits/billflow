@@ -43,6 +43,8 @@ export default function ProductsPage() {
     if (businessId) {
       fetchData();
     }
+    window.addEventListener("billflow_refresh", fetchData);
+    return () => window.removeEventListener("billflow_refresh", fetchData);
   }, [businessId]);
 
   const fetchData = async () => {

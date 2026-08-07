@@ -54,7 +54,11 @@ export default function PaymentsPage() {
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, [user, businessId]);
+  useEffect(() => { 
+    load(); 
+    window.addEventListener("billflow_refresh", load);
+    return () => window.removeEventListener("billflow_refresh", load);
+  }, [user, businessId]);
 
   const momoTotal = payments.filter(p => p.method === "momo" && p.status === "success").reduce((s, p) => s + p.amount, 0);
   const cardTotal = payments.filter(p => p.method === "card" && p.status === "success").reduce((s, p) => s + p.amount, 0);
@@ -62,6 +66,10 @@ export default function PaymentsPage() {
 
   const handleRecord = async () => {
     if (!user || !businessId || !form.clientId || !form.amount) { toast.error("Fill all required fields"); return; }
+    if (businessId === "SUPER_ADMIN") {
+      toast.error("Please select a specific business to record payments.");
+      return;
+    }
     setSaving(true);
     const client = clients.find(c => c.id === form.clientId);
     

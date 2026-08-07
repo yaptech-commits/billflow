@@ -6,15 +6,24 @@ import {
   LayoutDashboard, FileText, Users, Ticket, 
   CreditCard, BarChart3, Settings, Package, 
   ChevronLeft, ChevronRight, ShoppingCart, Truck, UserCircle, Shield,
-  LogOut
+  LogOut, Building2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
+import { getBusinesses, BusinessProfile } from "@/lib/db";
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { role, logout } = useAuth();
+  const { role, logout, selectedBusinessId, setSelectedBusinessId } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
+  const [businesses, setBusinesses] = useState<BusinessProfile[]>([]);
+  const [showBusinessSwitcher, setShowBusinessSwitcher] = useState(false);
+
+  useEffect(() => {
+    if (role === "super_admin") {
+      getBusinesses().then(setBusinesses);
+    }
+  }, [role]);
 
   useEffect(() => {
     const saved = localStorage.getItem("sidebar-collapsed");
@@ -29,22 +38,23 @@ export default function Sidebar() {
   };
 
   const menuItems = [
-    { name: "Dashboard", icon: LayoutDashboard, path: "/dashboard", roles: ["owner", "salesperson"] },
-    { name: "POS", icon: ShoppingCart, path: "/pos", roles: ["owner", "salesperson"] },
-    { name: "Invoices", icon: FileText, path: "/invoices", roles: ["owner", "salesperson"] },
-    { name: "Products", icon: Package, path: "/products", roles: ["owner", "salesperson"] },
-    { name: "Clients", icon: Users, path: "/clients", roles: ["owner", "salesperson"] },
-    { name: "Payments", icon: CreditCard, path: "/payments", roles: ["owner", "salesperson"] },
-    { name: "Suppliers", icon: Truck, path: "/suppliers", roles: ["owner"] },
-    { name: "Purchase Orders", icon: BarChart3, path: "/purchase-orders", roles: ["owner"] },
-    { name: "WiFi Vouchers", icon: Ticket, path: "/vouchers", roles: ["owner", "salesperson"] },
-    { name: "Reports", icon: BarChart3, path: "/reports", roles: ["owner"] },
-    { name: "Staff", icon: UserCircle, path: "/staff", roles: ["owner"] },
-    { name: "Settings", icon: Settings, path: "/settings", roles: ["owner"] },
+    { name: "Dashboard", icon: LayoutDashboard, path: "/dashboard", roles: ["owner", "salesperson", "super_admin"] },
+    { name: "POS", icon: ShoppingCart, path: "/pos", roles: ["owner", "salesperson", "super_admin"] },
+    { name: "Invoices", icon: FileText, path: "/invoices", roles: ["owner", "salesperson", "super_admin"] },
+    { name: "Products", icon: Package, path: "/products", roles: ["owner", "salesperson", "super_admin"] },
+    { name: "Clients", icon: Users, path: "/clients", roles: ["owner", "salesperson", "super_admin"] },
+    { name: "Payments", icon: CreditCard, path: "/payments", roles: ["owner", "salesperson", "super_admin"] },
+    { name: "Suppliers", icon: Truck, path: "/suppliers", roles: ["owner", "super_admin"] },
+    { name: "Purchase Orders", icon: BarChart3, path: "/purchase-orders", roles: ["owner", "super_admin"] },
+    { name: "WiFi Vouchers", icon: Ticket, path: "/vouchers", roles: ["owner", "salesperson", "super_admin"] },
+    { name: "Reports", icon: BarChart3, path: "/reports", roles: ["owner", "super_admin"] },
+    { name: "Staff", icon: UserCircle, path: "/staff", roles: ["owner", "super_admin"] },
+    { name: "Settings", icon: Settings, path: "/settings", roles: ["owner", "super_admin"] },
     { name: "Admin", icon: Shield, path: "/admin", roles: ["super_admin"] },
   ];
 
   const filteredItems = menuItems.filter(item => item.roles.includes(role || ""));
+  const currentBusiness = businesses.find(b => b.businessId === selectedBusinessId);
 
   return (
     <aside className={cn(
@@ -82,6 +92,65 @@ export default function Sidebar() {
       </div>
 
       <nav className="flex-1 px-3 space-y-1 overflow-y-auto custom-scrollbar">
+        {role === "super_admin" && (
+          <div className="mb-4 px-3">
+            <div className="text-[10px] font-bold text-muted uppercase tracking-wider mb-2 px-1">
+              {collapsed ? "BIZ" : "Switch Business"}
+            </div>
+            <button
+              onClick={() => setShowBusinessSwitcher(!showBusinessSwitcher)}
+              className={cn(
+                "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border border-white/10 hover:bg-white/5 transition-all",
+                collapsed && "justify-center px-0"
+              )}
+            >
+              <Building2 size={20} className={selectedBusinessId ? "text-gold" : "text-muted"} />
+              {!collapsed && (
+                <div className="flex-1 text-left truncate">
+                  <div className="text-xs font-bold text-white truncate">
+                    {currentBusiness?.businessName || "Global View"}
+                  </div>
+                  <div className="text-[10px] text-muted truncate">
+                    {selectedBusinessId ? "Impersonating" : "System Wide"}
+                  </div>
+                </div>
+              )}
+            </button>
+
+            {!collapsed && showBusinessSwitcher && (
+              <div className="mt-2 bg-[#1E1E2E] rounded-xl border border-white/10 overflow-hidden shadow-2xl max-h-[200px] overflow-y-auto custom-scrollbar">
+                <button
+                  onClick={() => {
+                    setSelectedBusinessId(null);
+                    setShowBusinessSwitcher(false);
+                  }}
+                  className={cn(
+                    "w-full text-left px-4 py-2 text-xs hover:bg-white/5 transition-all",
+                    !selectedBusinessId ? "text-gold font-bold bg-gold/5" : "text-white"
+                  )}
+                >
+                  Global View (All)
+                </button>
+                {businesses.map(b => (
+                  <button
+                    key={b.businessId}
+                    onClick={() => {
+                      setSelectedBusinessId(b.businessId);
+                      setShowBusinessSwitcher(false);
+                    }}
+                    className={cn(
+                      "w-full text-left px-4 py-2 text-xs hover:bg-white/5 transition-all border-t border-white/5",
+                      selectedBusinessId === b.businessId ? "text-gold font-bold bg-gold/5" : "text-white"
+                    )}
+                  >
+                    {b.businessName}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {filteredItems.map((item) => {
           const active = pathname === item.path;
           return (

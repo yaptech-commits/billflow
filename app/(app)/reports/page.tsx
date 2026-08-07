@@ -14,7 +14,7 @@ export default function ReportsPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
 
-  useEffect(() => {
+  const load = () => {
     if (!user || !businessId) return;
     const invoiceOpts = role === "salesperson" ? { onlyUserId: user.uid } : undefined;
     Promise.all([getInvoices(businessId, invoiceOpts), getPayments(businessId)]).then(([inv, pay]) => {
@@ -41,6 +41,12 @@ export default function ReportsPage() {
       setInvoices([...offlineInvoices, ...inv]); 
       setPayments([...offlinePayments, ...pay]);
     });
+  };
+
+  useEffect(() => {
+    load();
+    window.addEventListener("billflow_refresh", load);
+    return () => window.removeEventListener("billflow_refresh", load);
   }, [user, businessId, role]);
 
   const totalRevenue = invoices.filter(i => i.status === "paid").reduce((s, i) => s + i.amount, 0);
@@ -58,19 +64,20 @@ export default function ReportsPage() {
     { name: "Card", value: cardTotal, color: "#3B82F6" },
   ].filter(d => d.value > 0);
 
-  // Generate dynamic chart data for the last 7 days
-  const dailyData = Array.from({ length: 7 }, (_, i) => {
+  // Generate dynamic chart data for the last 30 days
+  const monthlyData = Array.from({ length: 30 }, (_, i) => {
     const d = new Date();
-    d.setDate(d.getDate() - (6 - i));
-    const dayStr = d.toLocaleDateString("en-US", { weekday: "short" });
+    d.setDate(d.getDate() - (29 - i));
     const dateStr = d.toDateString();
     
     const revenue = invoices
       .filter(inv => inv.status === "paid" && inv.issuedAt?.toDate().toDateString() === dateStr)
       .reduce((sum, inv) => sum + inv.amount, 0);
       
-    return { name: dayStr, revenue };
+    return { name: d.getDate().toString(), revenue };
   });
+
+  const dailyData = monthlyData.slice(-7);
 
   return (
     <div>
@@ -84,18 +91,31 @@ export default function ReportsPage() {
       <div className="grid grid-cols-3 gap-5">
         <div className="col-span-2 card">
           <div className="flex items-center justify-between mb-5">
-            <h2 className="font-grotesk font-semibold text-white">Daily Revenue — Last 7 Days</h2>
+            <div>
+              <h2 className="font-grotesk font-semibold text-white">Revenue Trend</h2>
+              <p className="text-[10px] text-muted uppercase tracking-wider font-bold mt-1">Monthly snapshot — Last 30 Days</p>
+            </div>
             <div className="flex gap-4 text-xs text-muted">
-              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-gold inline-block" />Revenue</span>
+              <span className="flex items-center gap-1.5 font-bold uppercase tracking-tighter"><span className="w-2.5 h-2.5 rounded-sm bg-gold inline-block" /> Revenue</span>
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={dailyData} barSize={24}>
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={monthlyData} barSize={12}>
+              <defs>
+                <linearGradient id="colorRevRep" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#F5A623" stopOpacity={0.8}/>
+                  <stop offset="95%" stopColor="#F5A623" stopOpacity={0.1}/>
+                </linearGradient>
+              </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#1E1E2E" vertical={false} />
-              <XAxis dataKey="name" tick={{ fill: "#7B7B9A", fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: "#7B7B9A", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `₵${v}`} />
-              <Tooltip contentStyle={{ background: "#16161F", border: "1px solid #1E1E2E", borderRadius: 8, fontSize: 12 }} formatter={(v: number) => [`GH₵ ${v}`, "Revenue"]} />
-              <Bar dataKey="revenue" fill="#F5A623" radius={[3, 3, 0, 0]} />
+              <XAxis dataKey="name" tick={{ fill: "#7B7B9A", fontSize: 9 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: "#7B7B9A", fontSize: 9 }} axisLine={false} tickLine={false} tickFormatter={v => `₵${v}`} />
+              <Tooltip 
+                cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                contentStyle={{ background: "#16161F", border: "1px solid #1E1E2E", borderRadius: 8, fontSize: 12 }} 
+                formatter={(v: number) => [`GH₵ ${v.toLocaleString()}`, "Revenue"]} 
+              />
+              <Bar dataKey="revenue" fill="url(#colorRevRep)" radius={[2, 2, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>

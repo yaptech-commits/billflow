@@ -6,15 +6,16 @@ import { getNotifications, markNotificationAsRead, Notification } from "@/lib/db
 import Modal from "@/components/ui/Modal";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
+import toast from "react-hot-toast";
 
-export default function Topbar({ title }: { title: string }) {
+export default function Topbar({ title, onRefresh }: { title: string; onRefresh?: () => void }) {
   const { user, businessId, role } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const fetchNotifications = async () => {
-    if (!businessId || role !== "owner") return;
+    if (!businessId || (role !== "owner" && role !== "super_admin")) return;
     setLoading(true);
     try {
       const data = await getNotifications(businessId);
@@ -36,7 +37,13 @@ export default function Topbar({ title }: { title: string }) {
   const unreadCount = notifications.filter(n => !n.read).length;
 
   const handleRefresh = () => {
-    window.location.reload();
+    if (onRefresh) {
+      onRefresh();
+    } else {
+      window.dispatchEvent(new Event("billflow_refresh"));
+      // Also show a small toast to indicate refresh
+      toast.success("Refreshing data...", { duration: 1000, icon: "🔄" });
+    }
   };
 
   const handleMarkRead = async (id: string) => {
@@ -56,7 +63,7 @@ export default function Topbar({ title }: { title: string }) {
           <RefreshCw size={18} />
         </button>
 
-        {role === "owner" && (
+        {(role === "owner" || role === "super_admin") && (
           <button 
             onClick={() => setShowNotifications(true)}
             className="relative text-muted hover:text-surface transition-colors p-2 rounded-full hover:bg-white/5"

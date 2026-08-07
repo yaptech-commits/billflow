@@ -17,8 +17,9 @@ export default function DashboardPage() {
   const [profile, setProfile] = useState<BusinessProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const loadData = () => {
     if (!user || !businessId) return;
+    setLoading(true);
     const invoiceOpts = role === "salesperson" ? { onlyUserId: user.uid } : undefined;
     Promise.all([
       getInvoices(businessId, invoiceOpts),
@@ -57,6 +58,13 @@ export default function DashboardPage() {
       setProfile(prof);
       setLoading(false);
     });
+  };
+
+  useEffect(() => {
+    loadData();
+    
+    window.addEventListener("billflow_refresh", loadData);
+    return () => window.removeEventListener("billflow_refresh", loadData);
   }, [user, businessId, role]);
 
   const totalRevenue = invoices.filter(i => i.status === "paid").reduce((s, i) => s + i.amount, 0);
@@ -77,6 +85,24 @@ export default function DashboardPage() {
       
     return { name: dayStr, revenue };
   });
+
+  // Calculate top products (mock logic based on invoice item strings)
+  const topProducts = invoices
+    .filter(i => i.status === "paid")
+    .reduce((acc, inv) => {
+      const items = inv.item.split(", ");
+      items.forEach(item => {
+        const [name, qtyStr] = item.split(" ×");
+        const qty = parseInt(qtyStr) || 1;
+        acc[name] = (acc[name] || 0) + qty;
+      });
+      return acc;
+    }, {} as Record<string, number>);
+
+  const topProductsData = Object.entries(topProducts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([name, value]) => ({ name, value }));
 
   // Payment method breakdown
   const methodTotals = payments.reduce((acc, p) => {
@@ -167,39 +193,52 @@ export default function DashboardPage() {
       <div className="grid grid-cols-3 gap-5">
         <div className="col-span-2 card">
           <div className="flex items-center justify-between mb-5">
-            <h2 className="font-grotesk font-semibold text-white">Daily Revenue — Last 7 Days</h2>
-            <span className="text-xs text-muted">{profile?.businessName}</span>
+            <div>
+              <h2 className="font-grotesk font-semibold text-white">Revenue Performance</h2>
+              <p className="text-[10px] text-muted uppercase tracking-wider font-bold mt-1">Daily trend — Last 7 Days</p>
+            </div>
+            <div className="text-right">
+              <p className="text-lg font-grotesk font-bold text-gold">{formatMoney(totalRevenue, currencyCode)}</p>
+              <p className="text-[9px] text-muted uppercase font-bold tracking-tighter">Total Period Revenue</p>
+            </div>
           </div>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={dailyData} barSize={32}>
+          <ResponsiveContainer width="100%" height={250}>
+            <BarChart data={dailyData} barSize={36}>
+              <defs>
+                <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#F5A623" stopOpacity={0.8}/>
+                  <stop offset="95%" stopColor="#F5A623" stopOpacity={0.1}/>
+                </linearGradient>
+              </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#1E1E2E" vertical={false} />
               <XAxis dataKey="name" tick={{ fill: "#7B7B9A", fontSize: 11 }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fill: "#7B7B9A", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${profile?.currency ? CURRENCIES[profile.currency as keyof typeof CURRENCIES]?.symbol : ''}${v}`} />
               <Tooltip
+                cursor={{ fill: 'rgba(255,255,255,0.05)' }}
                 contentStyle={{ background: "#16161F", border: "1px solid #1E1E2E", borderRadius: 8, fontSize: 12 }}
                 formatter={(v: number) => [`${profile?.currency ? CURRENCIES[profile.currency as keyof typeof CURRENCIES]?.symbol : ''} ${v.toLocaleString()}`, "Revenue"]}
               />
-              <Bar dataKey="revenue" fill="#F5A623" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="revenue" fill="url(#colorRev)" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
 
-        <div className="card">
-          <h2 className="font-grotesk font-semibold text-white mb-5">Sales by Method</h2>
-          <div className="h-[200px] flex flex-col justify-center">
-            {methodData.length === 0 ? (
-              <p className="text-center text-muted text-sm">No sales data</p>
-            ) : (
-              <div className="space-y-4">
-                {methodData.map((d) => {
+        <div className="flex flex-col gap-5">
+          <div className="card flex-1">
+            <h2 className="font-grotesk font-semibold text-white mb-5">Sales by Method</h2>
+            <div className="space-y-4">
+              {methodData.length === 0 ? (
+                <p className="text-center text-muted text-sm py-4">No sales data</p>
+              ) : (
+                methodData.map((d) => {
                   const percentage = ((d.value / totalRevenue) * 100).toFixed(1);
                   return (
                     <div key={d.name}>
-                      <div className="flex justify-between text-xs mb-1.5">
-                        <span className="text-muted">{d.name}</span>
-                        <span className="text-white font-medium">{percentage}%</span>
+                      <div className="flex justify-between text-[10px] mb-1.5">
+                        <span className="text-muted font-bold uppercase">{d.name}</span>
+                        <span className="text-white font-bold">{percentage}%</span>
                       </div>
-                      <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden">
+                      <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
                         <div 
                           className="h-full rounded-full transition-all duration-500" 
                           style={{ width: `${percentage}%`, backgroundColor: d.color }} 
@@ -207,9 +246,28 @@ export default function DashboardPage() {
                       </div>
                     </div>
                   );
-                })}
-              </div>
-            )}
+                })
+              )}
+            </div>
+          </div>
+
+          <div className="card flex-1">
+            <h2 className="font-grotesk font-semibold text-white mb-4 text-sm">Top Products</h2>
+            <div className="space-y-3">
+              {topProductsData.length === 0 ? (
+                <p className="text-center text-muted text-[10px] py-2">No product data</p>
+              ) : (
+                topProductsData.map((p, idx) => (
+                  <div key={p.name} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-[10px] text-muted font-bold w-3">{idx + 1}.</span>
+                      <span className="text-xs text-surface truncate">{p.name}</span>
+                    </div>
+                    <span className="text-[10px] bg-white/5 px-2 py-0.5 rounded text-muted font-bold">{p.value} sold</span>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
       </div>

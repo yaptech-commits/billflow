@@ -2,25 +2,18 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { 
-  getDocs, collection, query, where, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, orderBy
+  addDoc, updateDoc, deleteDoc, doc, serverTimestamp, collection
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { 
+  getSuppliers, Supplier, createSupplier, updateSupplier, deleteSupplier
+} from "@/lib/db";
 import { 
   Truck, Plus, Search, Edit, Trash2, 
   Phone, Mail, MapPin, Building2
 } from "lucide-react";
 import Modal from "@/components/ui/Modal";
 import toast from "react-hot-toast";
-
-interface Supplier {
-  id?: string;
-  name: string;
-  contactPerson?: string;
-  email?: string;
-  phone?: string;
-  address?: string;
-  businessId: string;
-}
 
 export default function SuppliersPage() {
   const { businessId, role } = useAuth();
@@ -45,15 +38,11 @@ export default function SuppliersPage() {
   }, [businessId]);
 
   const fetchSuppliers = async () => {
+    if (!businessId) return;
     setLoading(true);
     try {
-      const q = query(
-        collection(db, "suppliers"), 
-        where("businessId", "==", businessId),
-        orderBy("name")
-      );
-      const snap = await getDocs(q);
-      setSuppliers(snap.docs.map(d => ({ id: d.id, ...d.data() } as Supplier)));
+      const data = await getSuppliers(businessId);
+      setSuppliers(data);
     } catch (err) {
       console.error(err);
       toast.error("Failed to load suppliers");
@@ -65,20 +54,21 @@ export default function SuppliersPage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!businessId) return;
+    if (businessId === "SUPER_ADMIN") {
+      toast.error("Please select a specific business to manage suppliers.");
+      return;
+    }
 
     try {
       if (editingSupplier) {
-        await updateDoc(doc(db, "suppliers", editingSupplier.id!), {
-          ...formData,
-          updatedAt: serverTimestamp()
-        });
+        await updateSupplier(editingSupplier.id!, formData);
         toast.success("Supplier updated");
       } else {
-        await addDoc(collection(db, "suppliers"), { 
+        await createSupplier({ 
           ...formData, 
           businessId,
-          createdAt: serverTimestamp() 
-        });
+          userId: businessId // Using businessId as userId for simplicity in this helper
+        } as any);
         toast.success("Supplier created");
       }
       setShowModal(false);
@@ -91,7 +81,7 @@ export default function SuppliersPage() {
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this supplier?")) return;
     try {
-      await deleteDoc(doc(db, "suppliers", id));
+      await deleteSupplier(id);
       toast.success("Supplier deleted");
       fetchSuppliers();
     } catch (err) {
@@ -105,12 +95,12 @@ export default function SuppliersPage() {
     s.phone?.includes(search)
   );
 
-  if (role !== "owner") {
+  if (role !== "owner" && role !== "super_admin") {
     return (
       <div className="flex flex-col items-center justify-center py-20">
         <Truck size={48} className="text-muted mb-4" />
         <h1 className="text-xl font-bold text-white">Access Denied</h1>
-        <p className="text-muted text-sm mt-2">Only business owners can manage suppliers.</p>
+        <p className="text-muted text-sm mt-2">Only business owners or super admins can manage suppliers.</p>
       </div>
     );
   }

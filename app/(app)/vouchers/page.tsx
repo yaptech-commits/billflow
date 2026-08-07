@@ -2,10 +2,11 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { 
-  getDocs, collection, query, where, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, orderBy
+  addDoc, deleteDoc, doc, serverTimestamp, collection
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { formatCedi } from "@/lib/utils";
+import { getVouchers } from "@/lib/db";
 import { 
   Ticket, Plus, Search, Trash2, 
   Wifi, Clock, Calendar, CheckCircle2, XCircle
@@ -41,18 +42,16 @@ export default function VouchersPage() {
     if (businessId) {
       fetchVouchers();
     }
+    window.addEventListener("billflow_refresh", fetchVouchers);
+    return () => window.removeEventListener("billflow_refresh", fetchVouchers);
   }, [businessId]);
 
   const fetchVouchers = async () => {
+    if (!businessId) return;
     setLoading(true);
     try {
-      const q = query(
-        collection(db, "vouchers"), 
-        where("businessId", "==", businessId),
-        orderBy("createdAt", "desc")
-      );
-      const snap = await getDocs(q);
-      setVouchers(snap.docs.map(d => ({ id: d.id, ...d.data() } as Voucher)));
+      const data = await getVouchers(businessId);
+      setVouchers(data);
     } catch (err) {
       console.error(err);
       toast.error("Failed to load vouchers");
@@ -64,6 +63,10 @@ export default function VouchersPage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!businessId) return;
+    if (businessId === "SUPER_ADMIN") {
+      toast.error("Please select a specific business to generate vouchers.");
+      return;
+    }
 
     try {
       await addDoc(collection(db, "vouchers"), { 

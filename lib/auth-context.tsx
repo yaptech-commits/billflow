@@ -8,7 +8,10 @@ import { useRouter } from "next/navigation";
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  businessId: string | null;
+  businessId: string | null; // Effective business ID (selected or SUPER_ADMIN for super admins)
+  realBusinessId: string | null; // Actual business ID of the logged-in user
+  selectedBusinessId: string | null;
+  setSelectedBusinessId: (id: string | null) => void;
   role: StaffRole | null;
   permissions: string[];
   logout: () => Promise<void>;
@@ -18,6 +21,9 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
   businessId: null,
+  realBusinessId: null,
+  selectedBusinessId: null,
+  setSelectedBusinessId: () => {},
   role: null,
   permissions: [],
   logout: async () => {},
@@ -25,11 +31,16 @@ const AuthContext = createContext<AuthContextType>({
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [businessId, setBusinessId] = useState<string | null>(null);
+  const [realBusinessId, setRealBusinessId] = useState<string | null>(null);
+  const [selectedBusinessId, setSelectedBusinessId] = useState<string | null>(null);
   const [role, setRole] = useState<StaffRole | null>(null);
   const [permissions, setPermissions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+
+  const businessId = role === "super_admin" 
+    ? (selectedBusinessId || "SUPER_ADMIN") 
+    : realBusinessId;
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
@@ -37,9 +48,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (u && u.email) {
         try {
           const ctx = await resolveBusinessContext(u.uid, u.email);
-          setBusinessId(ctx.businessId);
+          setRealBusinessId(ctx.businessId);
           setRole(ctx.role);
           setPermissions(ctx.permissions || []);
+          
+          // For super admins, check if there's a saved selected business
+          if (ctx.role === "super_admin") {
+            const saved = localStorage.getItem("superadmin_selected_business");
+            if (saved) setSelectedBusinessId(saved);
+          }
         } catch (err: any) {
           // If it's an approval error, log out and let the login page show the message
           if (err.message?.includes("Contact BillFlow Official")) {
@@ -47,13 +64,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             router.push(`/auth/login?error=${encodeURIComponent(err.message)}`);
           } else {
             // Fall back to treating them as an independent owner if resolution fails for other reasons.
-            setBusinessId(u.uid);
+            setRealBusinessId(u.uid);
             setRole("owner");
             setPermissions([]);
           }
         }
       } else {
-        setBusinessId(null);
+        setRealBusinessId(null);
         setRole(null);
         setPermissions([]);
       }
@@ -62,13 +79,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return unsub;
   }, []);
 
+  const handleSetSelectedBusinessId = (id: string | null) => {
+    setSelectedBusinessId(id);
+    if (id) {
+      localStorage.setItem("superadmin_selected_business", id);
+    } else {
+      localStorage.removeItem("superadmin_selected_business");
+    }
+  };
+
   const logout = async () => {
     await signOut(auth);
+    localStorage.removeItem("superadmin_selected_business");
     router.push("/auth/login");
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, businessId, role, permissions, logout }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      loading, 
+      businessId, 
+      realBusinessId,
+      selectedBusinessId,
+      setSelectedBusinessId: handleSetSelectedBusinessId,
+      role, 
+      permissions, 
+      logout 
+    }}>
       {children}
     </AuthContext.Provider>
   );

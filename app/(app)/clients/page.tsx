@@ -29,6 +29,8 @@ export default function ClientsPage() {
     if (businessId) {
       fetchClients();
     }
+    window.addEventListener("billflow_refresh", fetchClients);
+    return () => window.removeEventListener("billflow_refresh", fetchClients);
   }, [businessId]);
 
   const fetchClients = async () => {
@@ -46,6 +48,10 @@ export default function ClientsPage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!businessId) return;
+    if (businessId === "SUPER_ADMIN") {
+      toast.error("Please select a specific business to manage clients.");
+      return;
+    }
 
     try {
       if (editingClient) {

@@ -111,7 +111,11 @@ export default function InvoicesPage() {
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, [user, businessId, role]);
+  useEffect(() => { 
+    load(); 
+    window.addEventListener("billflow_refresh", load);
+    return () => window.removeEventListener("billflow_refresh", load);
+  }, [user, businessId, role]);
 
   const filtered = tab === "all" ? invoices : invoices.filter(i => i.status === tab);
 

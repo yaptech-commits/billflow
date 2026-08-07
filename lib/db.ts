@@ -387,14 +387,16 @@ export async function createInvoice(data: Omit<Invoice, "id" | "invoiceNumber">)
  * see only invoices they personally created (userId match).
  */
 export async function getInvoices(businessId: string, opts?: { onlyUserId?: string }): Promise<Invoice[]> {
-  const q = opts?.onlyUserId
-    ? query(
-        col("invoices"),
-        where("businessId", "==", businessId),
-        where("userId", "==", opts.onlyUserId),
-        orderBy("createdAt", "desc")
-      )
-    : businessQuery("invoices", businessId);
+  let q;
+  if (opts?.onlyUserId) {
+    if (businessId === "SUPER_ADMIN") {
+      q = query(col("invoices"), where("userId", "==", opts.onlyUserId), orderBy("createdAt", "desc"));
+    } else {
+      q = query(col("invoices"), where("businessId", "==", businessId), where("userId", "==", opts.onlyUserId), orderBy("createdAt", "desc"));
+    }
+  } else {
+    q = businessQuery("invoices", businessId);
+  }
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Invoice));
 }
@@ -613,14 +615,9 @@ export async function openShift(data: Omit<Shift, "id" | "openedAt" | "status">)
 }
 
 export async function getActiveShift(businessId: string, userId: string): Promise<Shift | null> {
-  const q = query(
-    col("shifts"),
-    where("businessId", "==", businessId),
-    where("userId", "==", userId),
-    where("status", "==", "open"),
-    orderBy("openedAt", "desc"),
-    limit(1)
-  );
+  const q = businessId === "SUPER_ADMIN"
+    ? query(col("shifts"), where("userId", "==", userId), where("status", "==", "open"), orderBy("openedAt", "desc"), limit(1))
+    : query(col("shifts"), where("businessId", "==", businessId), where("userId", "==", userId), where("status", "==", "open"), orderBy("openedAt", "desc"), limit(1));
   const snap = await getDocs(q);
   return snap.empty ? null : ({ id: snap.docs[0].id, ...snap.docs[0].data() } as Shift);
 }
@@ -856,9 +853,10 @@ export async function deleteSupplier(id: string) {
 
 /** Generates the next PO number for a business, e.g. PO-0007. Not race-proof under heavy concurrency, but fine for typical single/small-team usage. */
 export async function nextPoNumber(businessId: string): Promise<string> {
-  const snap = await getDocs(
-    query(col("purchaseOrders"), where("businessId", "==", businessId))
-  );
+  const q = businessId === "SUPER_ADMIN" 
+    ? col("purchaseOrders")
+    : query(col("purchaseOrders"), where("businessId", "==", businessId));
+  const snap = await getDocs(q);
   return `PO-${String(snap.size + 1).padStart(4, "0")}`;
 }
 
@@ -1019,12 +1017,10 @@ export async function inviteSalesperson(businessId: string, email: string, permi
 
 export async function getStaff(businessId: string): Promise<Staff[]> {
   try {
-    const snap = await getDocs(
-      query(
-        col("staff"),
-        where("businessId", "==", businessId)
-      )
-    );
+    const q = businessId === "SUPER_ADMIN"
+      ? col("staff")
+      : query(col("staff"), where("businessId", "==", businessId));
+    const snap = await getDocs(q);
     const staff = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Staff));
     // Sort manually to avoid needing a composite index
     return staff.sort((a, b) => {
@@ -1070,9 +1066,10 @@ export async function updateStaff(id: string, data: Partial<Staff>) {
 // ─── CREDIT NOTES ─────────────────────────────────────────────────────────────
 
 export async function nextCreditNoteNumber(businessId: string): Promise<string> {
-  const snap = await getDocs(
-    query(col("creditNotes"), where("businessId", "==", businessId))
-  );
+  const q = businessId === "SUPER_ADMIN"
+    ? col("creditNotes")
+    : query(col("creditNotes"), where("businessId", "==", businessId));
+  const snap = await getDocs(q);
   return `CN-${String(snap.size + 1).padStart(4, "0")}`;
 }
 
@@ -1191,14 +1188,16 @@ export async function getCreditNotes(businessId: string): Promise<CreditNote[]> 
 
 /** Full movement history for a business, most recent first. Optionally scoped to one product. */
 export async function getStockMovements(businessId: string, opts?: { productId?: string }): Promise<StockMovement[]> {
-  const q = opts?.productId
-    ? query(
-        col("stockMovements"),
-        where("businessId", "==", businessId),
-        where("productId", "==", opts.productId),
-        orderBy("createdAt", "desc")
-      )
-    : businessQuery("stockMovements", businessId);
+  let q;
+  if (opts?.productId) {
+    if (businessId === "SUPER_ADMIN") {
+      q = query(col("stockMovements"), where("productId", "==", opts.productId), orderBy("createdAt", "desc"));
+    } else {
+      q = query(col("stockMovements"), where("businessId", "==", businessId), where("productId", "==", opts.productId), orderBy("createdAt", "desc"));
+    }
+  } else {
+    q = businessQuery("stockMovements", businessId);
+  }
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as StockMovement));
 }
@@ -1217,12 +1216,9 @@ export async function getNotifications(businessId: string): Promise<Notification
   const oneWeekAgo = new Date();
   oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
-  const q = query(
-    col("notifications"),
-    where("businessId", "==", businessId),
-    where("createdAt", ">=", oneWeekAgo),
-    orderBy("createdAt", "desc")
-  );
+  const q = businessId === "SUPER_ADMIN"
+    ? query(col("notifications"), where("createdAt", ">=", oneWeekAgo), orderBy("createdAt", "desc"))
+    : query(col("notifications"), where("businessId", "==", businessId), where("createdAt", ">=", oneWeekAgo), orderBy("createdAt", "desc"));
   
   const snap = await getDocs(q);
   return snap.docs.map(d => ({ id: d.id, ...d.data() } as Notification));
@@ -1236,11 +1232,9 @@ export async function clearOldNotifications(businessId: string) {
   const oneWeekAgo = new Date();
   oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
-  const q = query(
-    col("notifications"),
-    where("businessId", "==", businessId),
-    where("createdAt", "<", oneWeekAgo)
-  );
+  const q = businessId === "SUPER_ADMIN"
+    ? query(col("notifications"), where("createdAt", "<", oneWeekAgo))
+    : query(col("notifications"), where("businessId", "==", businessId), where("createdAt", "<", oneWeekAgo));
 
   const snap = await getDocs(q);
   const batch = writeBatch(db);
@@ -1327,3 +1321,8 @@ export const CURRENCIES = {
   GBP: { symbol: "£", name: "British Pound" },
   NGN: { symbol: "₦", name: "Nigerian Naira" },
 };
+
+export async function getBusinesses(): Promise<BusinessProfile[]> {
+  const snap = await getDocs(query(col("businessProfiles"), orderBy("businessName", "asc")));
+  return snap.docs.map(d => d.data() as BusinessProfile);
+}

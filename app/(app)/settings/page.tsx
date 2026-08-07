@@ -121,6 +121,22 @@ export default function SettingsPage() {
     }
   };
 
+  const handleClearOfflineData = () => {
+    const confirmText = "clear offline data";
+    const input = prompt(`This will permanently delete all offline-queued sales, invoices, and payments that haven't been synced. Type "${confirmText}" to confirm:`);
+    
+    if (input !== confirmText) {
+      if (input !== null) toast.error("Incorrect confirmation text");
+      return;
+    }
+
+    localStorage.removeItem("billflow_offline_sales");
+    localStorage.removeItem("billflow_offline_invoices");
+    localStorage.removeItem("billflow_offline_payments");
+    toast.success("Offline data cleared successfully");
+    window.dispatchEvent(new Event("billflow_refresh"));
+  };
+
   const handleSave = async () => {
     if (!auth.currentUser) return;
     setSaving(true);
@@ -332,13 +348,20 @@ export default function SettingsPage() {
 
       {/* Connectivity */}
       <div className="card">
-        <h2 className="font-grotesk font-semibold text-white mb-5">Connectivity</h2>
-        <div className="flex items-center justify-between py-3.5">
+        <h2 className="font-grotesk font-semibold text-white mb-5">Connectivity & Offline Data</h2>
+        <div className="flex items-center justify-between py-3.5 border-b border-border">
           <div>
             <p className="text-sm text-surface">Force Offline Mode</p>
             <p className="text-xs text-muted mt-0.5">Work without internet. Data will sync when you go back online.</p>
           </div>
           <Toggle on={toggles.offlineMode} onToggle={() => toggle("offlineMode")} />
+        </div>
+        <div className="flex items-center justify-between py-3.5 mt-2">
+          <div>
+            <p className="text-sm text-red font-bold">Clear Offline Queue</p>
+            <p className="text-xs text-muted mt-0.5">Permanently delete all unsynced offline records.</p>
+          </div>
+          <button onClick={handleClearOfflineData} className="btn-ghost text-red text-xs hover:bg-red/10">Clear Now</button>
         </div>
       </div>
 

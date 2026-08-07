@@ -2,10 +2,11 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { 
-  getDocs, collection, query, where, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, orderBy
+  updateDoc, deleteDoc, doc
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { formatCedi } from "@/lib/utils";
+import { getPurchaseOrders } from "@/lib/db";
 import { 
   BarChart3, Plus, Search, Trash2, 
   Eye, FileText, Truck, Calendar, CheckCircle2, Clock
@@ -37,18 +38,16 @@ export default function PurchaseOrdersPage() {
     if (businessId) {
       fetchOrders();
     }
+    window.addEventListener("billflow_refresh", fetchOrders);
+    return () => window.removeEventListener("billflow_refresh", fetchOrders);
   }, [businessId]);
 
   const fetchOrders = async () => {
+    if (!businessId) return;
     setLoading(true);
     try {
-      const q = query(
-        collection(db, "purchaseOrders"), 
-        where("businessId", "==", businessId),
-        orderBy("createdAt", "desc")
-      );
-      const snap = await getDocs(q);
-      setOrders(snap.docs.map(d => ({ id: d.id, ...d.data() } as PurchaseOrder)));
+      const data = await getPurchaseOrders(businessId);
+      setOrders(data);
     } catch (err) {
       console.error(err);
       toast.error("Failed to load purchase orders");
@@ -83,12 +82,12 @@ export default function PurchaseOrdersPage() {
     o.supplierName.toLowerCase().includes(search.toLowerCase())
   );
 
-  if (role !== "owner") {
+  if (role !== "owner" && role !== "super_admin") {
     return (
       <div className="flex flex-col items-center justify-center py-20">
         <BarChart3 size={48} className="text-muted mb-4" />
         <h1 className="text-xl font-bold text-white">Access Denied</h1>
-        <p className="text-muted text-sm mt-2">Only business owners can manage purchase orders.</p>
+        <p className="text-muted text-sm mt-2">Only business owners or super admins can manage purchase orders.</p>
       </div>
     );
   }

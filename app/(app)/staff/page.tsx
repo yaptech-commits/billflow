@@ -54,6 +54,10 @@ export default function StaffPage() {
 
   const handleInvite = async () => {
     if (!businessId || !email) { toast.error("Enter an email address"); return; }
+    if (businessId === "SUPER_ADMIN") {
+      toast.error("Please select a specific business to invite staff to.");
+      return;
+    }
     setSaving(true);
     try {
       await inviteSalesperson(businessId, email.trim().toLowerCase(), selectedPermissions);
@@ -99,10 +103,10 @@ export default function StaffPage() {
 
   if (authLoading) return <p className="text-muted text-sm py-10 text-center">Loading...</p>;
 
-  if (role !== "owner") {
+  if (role !== "owner" && role !== "super_admin") {
     return (
       <div className="card text-center py-16">
-        <p className="text-muted">Only the business owner can manage staff.</p>
+        <p className="text-muted">Only the business owner or a super admin can manage staff.</p>
       </div>
     );
   }
