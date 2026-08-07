@@ -6,7 +6,7 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { formatCedi } from "@/lib/utils";
-import { getVouchers } from "@/lib/db";
+import { getVouchers, Voucher } from "@/lib/db";
 import { 
   Ticket, Plus, Search, Trash2, 
   Wifi, Clock, Calendar, CheckCircle2, XCircle
@@ -15,18 +15,8 @@ import Modal from "@/components/ui/Modal";
 import Badge from "@/components/ui/Badge";
 import toast from "react-hot-toast";
 
-interface Voucher {
-  id?: string;
-  code: string;
-  duration: string;
-  price: number;
-  status: "active" | "used" | "expired";
-  businessId: string;
-  createdAt: any;
-}
-
 export default function VouchersPage() {
-  const { businessId } = useAuth();
+  const { businessId, user } = useAuth();
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -70,9 +60,13 @@ export default function VouchersPage() {
 
     try {
       await addDoc(collection(db, "vouchers"), { 
-        ...formData, 
-        status: "active",
+        code: formData.code,
+        validity: formData.duration,
+        price: formData.price,
+        data: `WiFi Access - ${formData.duration}`,
+        used: false,
         businessId,
+        userId: user?.uid,
         createdAt: serverTimestamp() 
       });
       toast.success("Voucher created");
@@ -96,7 +90,7 @@ export default function VouchersPage() {
 
   const filtered = vouchers.filter(v => 
     v.code.toLowerCase().includes(search.toLowerCase()) || 
-    v.duration.toLowerCase().includes(search.toLowerCase())
+    v.validity.toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -156,13 +150,13 @@ export default function VouchersPage() {
             <div className="flex items-center justify-between text-sm">
               <div className="flex items-center gap-2 text-muted">
                 <Clock size={14} />
-                <span>{voucher.duration}</span>
+                <span>{voucher.validity}</span>
               </div>
               <p className="font-bold text-gold">{formatCedi(voucher.price)}</p>
             </div>
             
             <div className="mt-4 pt-4 border-t border-border flex items-center justify-between">
-              <Badge status={voucher.status} />
+              <Badge status={voucher.used ? "used" : "active"} />
               <p className="text-[10px] text-muted uppercase font-bold tracking-tighter">
                 {voucher.createdAt?.toDate ? voucher.createdAt.toDate().toLocaleDateString() : "Recent"}
               </p>

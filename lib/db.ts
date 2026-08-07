@@ -398,7 +398,7 @@ export async function getInvoices(businessId: string, opts?: { onlyUserId?: stri
     q = businessQuery("invoices", businessId);
   }
   const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Invoice));
+  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) } as Invoice));
 }
 
 export async function updateInvoice(id: string, data: Partial<Invoice>) {
@@ -593,7 +593,7 @@ export async function createClient(data: Omit<Client, "id">) {
 
 export async function getClients(businessId: string): Promise<Client[]> {
   const snap = await getDocs(businessQuery("clients", businessId));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Client));
+  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) } as Client));
 }
 
 export async function deleteClient(id: string) {
@@ -672,7 +672,7 @@ export async function createVouchers(vouchers: Omit<Voucher, "id">[]) {
 
 export async function getVouchers(businessId: string): Promise<Voucher[]> {
   const snap = await getDocs(businessQuery("vouchers", businessId));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Voucher));
+  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) } as Voucher));
 }
 
 export async function markVoucherUsed(id: string) {
@@ -691,7 +691,7 @@ export async function deletePayment(id: string) {
 
 export async function getPayments(businessId: string): Promise<Payment[]> {
   const snap = await getDocs(businessQuery("payments", businessId));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Payment));
+  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) } as Payment));
 }
 
 // ─── PRODUCTS ─────────────────────────────────────────────────────────────────
@@ -745,7 +745,7 @@ export async function createProduct(data: Omit<Product, "id">) {
 
 export async function getProducts(businessId: string): Promise<Product[]> {
   const snap = await getDocs(businessQuery("products", businessId));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Product));
+  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) } as Product));
 }
 
 export async function updateProduct(id: string, data: Partial<Product>) {
@@ -764,7 +764,7 @@ export async function createCategory(data: Omit<Category, "id">) {
 
 export async function getCategories(businessId: string): Promise<Category[]> {
   const snap = await getDocs(businessQuery("categories", businessId));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Category));
+  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) } as Category));
 }
 
 export async function updateCategory(id: string, data: Partial<Category>) {
@@ -838,7 +838,7 @@ export async function createSupplier(data: Omit<Supplier, "id">) {
 
 export async function getSuppliers(businessId: string): Promise<Supplier[]> {
   const snap = await getDocs(businessQuery("suppliers", businessId));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Supplier));
+  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) } as Supplier));
 }
 
 export async function updateSupplier(id: string, data: Partial<Supplier>) {
@@ -866,7 +866,7 @@ export async function createPurchaseOrder(data: Omit<PurchaseOrder, "id">) {
 
 export async function getPurchaseOrders(businessId: string): Promise<PurchaseOrder[]> {
   const snap = await getDocs(businessQuery("purchaseOrders", businessId));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as PurchaseOrder));
+  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) } as PurchaseOrder));
 }
 
 export async function updatePurchaseOrder(id: string, data: Partial<PurchaseOrder>) {
@@ -1021,7 +1021,7 @@ export async function getStaff(businessId: string): Promise<Staff[]> {
       ? col("staff")
       : query(col("staff"), where("businessId", "==", businessId));
     const snap = await getDocs(q);
-    const staff = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Staff));
+    const staff = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) } as Staff));
     // Sort manually to avoid needing a composite index
     return staff.sort((a, b) => {
       const dateA = a.createdAt?.seconds || 0;
@@ -1181,7 +1181,7 @@ export async function createCreditNote(
 
 export async function getCreditNotes(businessId: string): Promise<CreditNote[]> {
   const snap = await getDocs(businessQuery("creditNotes", businessId));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as CreditNote));
+  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) } as CreditNote));
 }
 
 // ─── STOCK MOVEMENTS (AUDIT LOG) ───────────────────────────────────────────────
@@ -1199,7 +1199,7 @@ export async function getStockMovements(businessId: string, opts?: { productId?:
     q = businessQuery("stockMovements", businessId);
   }
   const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as StockMovement));
+  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) } as StockMovement));
 }
 
 // ─── BUSINESS PROFILE (INVOICE / RECEIPT BRANDING) ────────────────────────────
@@ -1221,7 +1221,7 @@ export async function getNotifications(businessId: string): Promise<Notification
     : query(col("notifications"), where("businessId", "==", businessId), where("createdAt", ">=", oneWeekAgo), orderBy("createdAt", "desc"));
   
   const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() } as Notification));
+  return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) } as Notification));
 }
 
 export async function markNotificationAsRead(id: string) {
@@ -1253,7 +1253,7 @@ export async function checkLowStockAndNotify(businessId: string) {
   localStorage.setItem(lastCheckKey, now.toString());
 
   const productsSnap = await getDocs(query(col("products"), where("businessId", "==", businessId)));
-  const products = productsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Product));
+  const products = productsSnap.docs.map(d => ({ id: d.id, ...(d.data() as any) } as Product));
   
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);

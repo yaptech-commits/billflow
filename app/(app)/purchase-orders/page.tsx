@@ -6,7 +6,7 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { formatCedi } from "@/lib/utils";
-import { getPurchaseOrders } from "@/lib/db";
+import { getPurchaseOrders, PurchaseOrder, POStatus } from "@/lib/db";
 import { 
   BarChart3, Plus, Search, Trash2, 
   Eye, FileText, Truck, Calendar, CheckCircle2, Clock
@@ -14,18 +14,6 @@ import {
 import Modal from "@/components/ui/Modal";
 import Badge from "@/components/ui/Badge";
 import toast from "react-hot-toast";
-
-interface PurchaseOrder {
-  id?: string;
-  orderNumber: string;
-  supplierId: string;
-  supplierName: string;
-  totalAmount: number;
-  status: "pending" | "ordered" | "received" | "cancelled";
-  items: any[];
-  businessId: string;
-  createdAt: any;
-}
 
 export default function PurchaseOrdersPage() {
   const { businessId, role } = useAuth();
@@ -56,7 +44,7 @@ export default function PurchaseOrdersPage() {
     }
   };
 
-  const handleUpdateStatus = async (id: string, status: string) => {
+  const handleUpdateStatus = async (id: string, status: POStatus) => {
     try {
       await updateDoc(doc(db, "purchaseOrders", id), { status });
       toast.success(`Order marked as ${status}`);
@@ -78,7 +66,7 @@ export default function PurchaseOrdersPage() {
   };
 
   const filtered = orders.filter(o => 
-    o.orderNumber.toLowerCase().includes(search.toLowerCase()) || 
+    o.poNumber.toLowerCase().includes(search.toLowerCase()) || 
     o.supplierName.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -148,7 +136,7 @@ export default function PurchaseOrdersPage() {
                         <FileText size={20} />
                       </div>
                       <div>
-                        <p className="text-sm font-bold text-white">{order.orderNumber}</p>
+                        <p className="text-sm font-bold text-white">{order.poNumber}</p>
                         <p className="text-[10px] text-muted flex items-center gap-1">
                           <Calendar size={10} />
                           {order.createdAt?.toDate ? order.createdAt.toDate().toLocaleDateString() : "Recent"}
@@ -163,7 +151,7 @@ export default function PurchaseOrdersPage() {
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <p className="text-sm font-bold text-gold">{formatCedi(order.totalAmount)}</p>
+                    <p className="text-sm font-bold text-gold">{formatCedi(order.totalCost)}</p>
                     <p className="text-[10px] text-muted">{order.items?.length || 0} items</p>
                   </td>
                   <td className="px-6 py-4">
@@ -180,7 +168,7 @@ export default function PurchaseOrdersPage() {
                           <CheckCircle2 size={16} />
                         </button>
                       )}
-                      {order.status === "pending" && (
+                      {order.status === "draft" && (
                         <button 
                           onClick={() => handleUpdateStatus(order.id!, "ordered")}
                           className="p-2 text-blue hover:bg-blue/10 rounded-lg transition-all"
