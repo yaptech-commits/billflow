@@ -76,7 +76,7 @@ export default function Sidebar() {
         {!collapsed && (
           <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-gold rounded-lg flex items-center justify-center text-black font-bold">B</div>
+              <img src="/billflow-logo.png" alt="BillFlow" className="w-8 h-8 object-contain" />
               <span className="font-grotesk font-bold text-white text-lg">BillFlow</span>
             </div>
             <button 
@@ -90,7 +90,7 @@ export default function Sidebar() {
         )}
         {collapsed && (
           <div className="relative group/collapsed">
-            <div className="w-8 h-8 bg-gold rounded-lg flex items-center justify-center text-black font-bold mx-auto">B</div>
+            <img src="/billflow-logo.png" alt="BillFlow" className="w-8 h-8 object-contain mx-auto" />
             <button 
               onClick={() => logout?.()}
               className="absolute -top-1 -right-1 p-1 bg-red text-white rounded-full opacity-0 group-hover/collapsed:opacity-100 transition-opacity shadow-lg"

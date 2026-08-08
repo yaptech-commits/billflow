@@ -52,10 +52,8 @@ function LoginForm() {
         <div className="backdrop-blur-2xl bg-white/10 border border-white/20 rounded-[40px] p-8 md:p-12 shadow-2xl">
           {/* Logo Area */}
           <div className="mb-8 flex flex-col items-center">
-            <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mb-4 border border-white/30 backdrop-blur-md">
-              <div className="w-12 h-12 bg-gradient-to-br from-yellow-300 to-yellow-500 rounded-lg flex items-center justify-center text-black font-bold text-2xl shadow-lg">B</div>
-            </div>
-            <h1 className="text-white text-5xl font-bold tracking-tight">Login</h1>
+            <img src="/billflow-logo.png" alt="BillFlow" className="w-32 h-32 object-contain mb-6 drop-shadow-2xl" />
+            <h1 className="text-white text-4xl font-bold tracking-tight">Login</h1>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-6">
