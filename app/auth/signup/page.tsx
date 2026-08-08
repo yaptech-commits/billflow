@@ -72,6 +72,9 @@ export default function SignupPage() {
       <div className="relative z-10 w-full max-w-[500px]">
         <div className="backdrop-blur-2xl bg-white/10 border border-white/20 rounded-[40px] p-8 md:p-12 shadow-2xl">
           <div className="mb-8 text-center">
+            <div className="mb-4 flex justify-center">
+              <img src="/images/logo.png" alt="BillFlow Logo" className="h-16 w-auto" />
+            </div>
             <h1 className="text-white text-4xl font-bold tracking-tight mb-2">Create Account</h1>
             <p className="text-white/70">Join BillFlow and manage your business</p>
           </div>

@@ -52,7 +52,9 @@ function LoginForm() {
         <div className="backdrop-blur-2xl bg-white/10 border border-white/20 rounded-[40px] p-8 md:p-12 shadow-2xl">
           {/* Logo Area */}
           <div className="mb-8">
-            <div className="text-white text-2xl font-medium opacity-90 mb-2">Your logo</div>
+            <div className="mb-4">
+              <img src="/images/logo.png" alt="BillFlow Logo" className="h-16 w-auto" />
+            </div>
             <h1 className="text-white text-5xl font-bold tracking-tight">Login</h1>
           </div>
 

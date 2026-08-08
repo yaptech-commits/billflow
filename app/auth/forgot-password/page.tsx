@@ -32,6 +32,9 @@ export default function ForgotPasswordPage() {
       <div className="relative z-10 w-full max-w-[450px]">
         <div className="backdrop-blur-2xl bg-white/10 border border-white/20 rounded-[40px] p-8 md:p-12 shadow-2xl">
           <div className="mb-8 text-center">
+            <div className="mb-4 flex justify-center">
+              <img src="/images/logo.png" alt="BillFlow Logo" className="h-16 w-auto" />
+            </div>
             <h1 className="text-white text-3xl font-bold tracking-tight mb-2">Reset Password</h1>
             <p className="text-white/70 text-sm">Enter your email to receive a reset link</p>
           </div>
