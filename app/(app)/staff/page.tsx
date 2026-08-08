@@ -22,9 +22,10 @@ export default function StaffPage() {
     { path: "/invoices", label: "Invoices" },
     { path: "/clients", label: "Clients" },
     { path: "/products", label: "Products" },
-    { path: "/inventory", label: "Inventory" },
+    { path: "/payments", label: "Payments" },
     { path: "/suppliers", label: "Suppliers" },
     { path: "/purchase-orders", label: "Purchase Orders" },
+    { path: "/vouchers", label: "WiFi Vouchers" },
     { path: "/reports", label: "Reports" },
   ];
 

@@ -13,7 +13,7 @@ import { useAuth } from "@/lib/auth-context";
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { role, logout } = useAuth();
+  const { role, permissions, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
@@ -35,16 +35,25 @@ export default function Sidebar() {
     { name: "Products", icon: Package, path: "/products", roles: ["owner", "salesperson"] },
     { name: "Clients", icon: Users, path: "/clients", roles: ["owner", "salesperson"] },
     { name: "Payments", icon: CreditCard, path: "/payments", roles: ["owner", "salesperson"] },
-    { name: "Suppliers", icon: Truck, path: "/suppliers", roles: ["owner"] },
-    { name: "Purchase Orders", icon: BarChart3, path: "/purchase-orders", roles: ["owner"] },
+    { name: "Suppliers", icon: Truck, path: "/suppliers", roles: ["owner", "salesperson"] },
+    { name: "Purchase Orders", icon: BarChart3, path: "/purchase-orders", roles: ["owner", "salesperson"] },
     { name: "WiFi Vouchers", icon: Ticket, path: "/vouchers", roles: ["owner", "salesperson"] },
-    { name: "Reports", icon: BarChart3, path: "/reports", roles: ["owner"] },
+    { name: "Reports", icon: BarChart3, path: "/reports", roles: ["owner", "salesperson"] },
     { name: "Staff", icon: UserCircle, path: "/staff", roles: ["owner"] },
     { name: "Settings", icon: Settings, path: "/settings", roles: ["owner"] },
     { name: "Admin", icon: Shield, path: "/admin", roles: ["super_admin"] },
   ];
 
-  const filteredItems = menuItems.filter(item => item.roles.includes(role || ""));
+  const filteredItems = menuItems.filter(item => {
+    if (role === "super_admin") return item.roles.includes("super_admin");
+    if (role === "owner") return item.roles.includes("owner");
+    if (role === "salesperson") {
+      // Salespeople can only see pages they have explicit permission for.
+      // If permissions array is empty/missing, they see nothing by default (safer).
+      return item.roles.includes("salesperson") && permissions.includes(item.path);
+    }
+    return false;
+  });
 
   return (
     <aside className={cn(

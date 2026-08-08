@@ -10,14 +10,34 @@ import { syncOfflineSales, syncOfflineInvoices, syncOfflinePayments } from "@/li
 import { createPosSale } from "@/lib/pos-api";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading, businessId, role } = useAuth();
+  const { user, loading, businessId, role, permissions } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   useEffect(() => {
-    if (!loading && !user) router.replace("/auth/login");
-  }, [user, loading, router]);
+    if (!loading && !user) {
+      router.replace("/auth/login");
+      return;
+    }
+
+    // Permission enforcement for salespeople
+    if (!loading && user && role === "salesperson") {
+      const publicPaths = ["/auth/login", "/auth/signup", "/auth/forgot-password"];
+      if (publicPaths.includes(pathname)) return;
+
+      // If the current page is not in their allowed list, redirect to the first allowed page
+      if (!permissions.includes(pathname)) {
+        const firstAllowed = permissions.length > 0 ? permissions[0] : null;
+        if (firstAllowed && pathname !== firstAllowed) {
+          router.replace(firstAllowed);
+        } else if (!firstAllowed && pathname !== "/dashboard") {
+          // If no permissions, they shouldn't really be here, but let's not loop infinitely
+          // Maybe show an access denied message instead of redirecting
+        }
+      }
+    }
+  }, [user, loading, role, permissions, pathname, router]);
 
   useEffect(() => {
     const saved = localStorage.getItem("sidebar-collapsed");
