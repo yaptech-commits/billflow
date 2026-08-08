@@ -54,8 +54,14 @@ export default function Sidebar() {
   ];
 
   const filteredItems = menuItems.filter(item => {
-    if (role === "owner" || role === "super_admin") {
+    if (role === "super_admin") {
       return item.roles.includes(role);
+    }
+    if (role === "owner") {
+      if (!permissions || permissions.length === 0) {
+        return item.roles.includes("owner");
+      }
+      return permissions.includes(item.path);
     }
     if (role === "salesperson") {
       if (!permissions || permissions.length === 0) {
@@ -111,42 +117,38 @@ export default function Sidebar() {
             <button
               onClick={() => setShowBusinessSwitcher(!showBusinessSwitcher)}
               className={cn(
-                "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border border-white/10 hover:bg-white/5 transition-all",
-                collapsed && "justify-center px-0"
+                "w-full text-left px-3 py-2 text-xs rounded-lg border transition-all flex items-center justify-between",
+                selectedBusinessId === "SUPER_ADMIN" || !selectedBusinessId
+                  ? "bg-gold/10 border-gold text-gold font-bold"
+                  : "bg-white/5 border-border text-muted hover:bg-white/10"
               )}
             >
-              <Building2 size={20} className={selectedBusinessId ? "text-gold" : "text-muted"} />
-              {!collapsed && (
-                <div className="flex-1 text-left truncate">
-                  <div className="text-xs font-bold text-white truncate">
-                    {currentBusiness?.businessName || "Global View"}
-                  </div>
-                  <div className="text-[10px] text-muted truncate">
-                    {selectedBusinessId ? "Impersonating" : "System Wide"}
-                  </div>
-                </div>
-              )}
+              <span className="truncate">
+                {collapsed ? "Global" : (currentBusiness?.businessName || "Global View")}
+              </span>
+              <ChevronRight size={12} className={showBusinessSwitcher ? "rotate-90" : ""} />
             </button>
-
-            {!collapsed && showBusinessSwitcher && (
-              <div className="mt-2 bg-[#1E1E2E] rounded-xl border border-white/10 overflow-hidden shadow-2xl max-h-[200px] overflow-y-auto custom-scrollbar">
+            {showBusinessSwitcher && (
+              <div className="absolute left-0 top-[180px] w-[220px] bg-[#1a1a24] border border-border rounded-lg shadow-lg z-50 max-h-[300px] overflow-y-auto">
                 <button
                   onClick={() => {
                     setSelectedBusinessId(null);
+                    localStorage.removeItem("superadmin_selected_business");
                     setShowBusinessSwitcher(false);
                   }}
                   className={cn(
-                    "w-full text-left px-4 py-2 text-xs hover:bg-white/5 transition-all",
+                    "w-full text-left px-4 py-2 text-xs hover:bg-white/5 transition-all border-b border-white/5",
                     !selectedBusinessId ? "text-gold font-bold bg-gold/5" : "text-white"
                   )}
                 >
-                  Global View (All)
+                  Global View (All Data)
                 </button>
                 {businesses.map(b => (
                   <button
                     key={b.businessId}
                     onClick={() => {
                       setSelectedBusinessId(b.businessId);
+                      localStorage.setItem("superadmin_selected_business", b.businessId);
                       setShowBusinessSwitcher(false);
                     }}
                     className={cn(
@@ -164,15 +166,19 @@ export default function Sidebar() {
 
         {filteredItems.map((item) => {
           const active = pathname === item.path;
+          const isDisabled = (role === "owner" || role === "salesperson") && permissions && permissions.length > 0 && !permissions.includes(item.path);
           return (
             <Link 
               key={item.path} 
-              href={item.path}
+              href={isDisabled ? "#" : item.path}
+              onClick={(e) => isDisabled && e.preventDefault()}
               className={cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group",
                 active ? "bg-gold text-black font-bold" : "text-muted hover:text-white hover:bg-white/5",
+                isDisabled && "opacity-50 cursor-not-allowed hover:bg-transparent hover:text-muted",
                 collapsed && "justify-center px-0"
               )}
+              title={isDisabled ? "You don't have permission to access this page" : ""}
             >
               <item.icon size={20} className={cn(active ? "text-black" : "text-muted group-hover:text-gold")} />
               {!collapsed && <span>{item.name}</span>}

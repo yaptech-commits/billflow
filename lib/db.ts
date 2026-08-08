@@ -225,6 +225,8 @@ export interface BusinessProfile {
   nextInvoiceNumber?: number;
   status?: "pending" | "active" | "suspended";
   autoDeleteOutOfStock?: boolean;
+  /** List of page paths the business owner can access. If unset/empty, they see all pages. */
+  permissions?: string[];
   createdAt?: Timestamp | null;
   updatedAt?: Timestamp | null;
 }
@@ -983,7 +985,7 @@ export async function resolveBusinessContext(
     if (data.status === "pending") {
       throw new Error("Account pending approval. Contact BillFlow Official for approval.");
     }
-    return { businessId: uid, role: "owner" };
+    return { businessId: uid, role: "owner", permissions: data.permissions };
   }
 
   // New account - set as pending by default

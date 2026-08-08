@@ -643,6 +643,34 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
               Auto-delete products when stock reaches 0
             </label>
           </div>
+
+          <div className="pt-4 border-t border-border">
+            <p className="text-sm font-bold text-surface mb-3">Owner Page Permissions</p>
+            <p className="text-xs text-muted mb-3">Select pages this business owner can access. Leave empty for full access.</p>
+            <div className="grid grid-cols-2 gap-2">
+              {ALL_PAGES.map(page => {
+                const checked = (editForm.permissions || []).includes(page.id);
+                return (
+                  <button
+                    key={page.id}
+                    onClick={() => {
+                      const current = editForm.permissions || [];
+                      const next = checked ? current.filter(p => p !== page.id) : [...current, page.id];
+                      setEditForm({ ...editForm, permissions: next });
+                    }}
+                    className={cn(
+                      "flex items-center justify-between p-2 rounded-lg border text-xs font-medium transition-all",
+                      checked ? "bg-gold/10 border-gold text-gold" : "bg-white/5 border-border text-muted"
+                    )}
+                  >
+                    {page.label}
+                    {checked ? <Check size={12} /> : <div className="w-2.5 h-2.5 border border-muted rounded" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <div className="flex gap-3 pt-4">
             <button className="btn-ghost flex-1 justify-center" onClick={() => setShowEdit(false)}>Cancel</button>
             <button className="btn-primary flex-1 justify-center" onClick={handleUpdateBusiness}>Save Changes</button>
