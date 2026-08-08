@@ -51,9 +51,9 @@ function LoginForm() {
         {/* Glassmorphism Card */}
         <div className="backdrop-blur-2xl bg-white/10 border border-white/20 rounded-[40px] p-8 md:p-12 shadow-2xl">
           {/* Logo Area */}
-          <div className="mb-8">
-            <div className="mb-4">
-              <img src="/images/logo.png" alt="BillFlow Logo" className="h-16 w-auto" />
+          <div className="mb-8 text-center">
+            <div className="mb-4 flex justify-center">
+              <img src="/images/logo.png" alt="BillFlow Logo" className="h-32 w-auto" />
             </div>
             <h1 className="text-white text-5xl font-bold tracking-tight">Login</h1>
           </div>
