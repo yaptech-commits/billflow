@@ -10,7 +10,7 @@ import { syncOfflineSales, syncOfflineInvoices, syncOfflinePayments } from "@/li
 import { createPosSale } from "@/lib/pos-api";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading, businessId, role } = useAuth();
+  const { user, loading, businessId, role, permissions } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -18,6 +18,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!loading && !user) router.replace("/auth/login");
   }, [user, loading, router]);
+
+  // Check page-level permissions for salespersons
+  useEffect(() => {
+    if (!loading && user && role === "salesperson" && permissions && permissions.length > 0) {
+      const hasAccess = permissions.some(p => pathname.startsWith(p));
+      if (!hasAccess && !pathname.includes("/settings")) {
+        router.replace("/dashboard");
+      }
+    }
+  }, [pathname, user, loading, role, permissions, router]);
 
   useEffect(() => {
     const saved = localStorage.getItem("sidebar-collapsed");
@@ -65,6 +75,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
+  // Determine if current page is accessible
+  const isPageAccessible = () => {
+    if (role === "owner" || role === "super_admin") return true;
+    if (role === "salesperson" && (!permissions || permissions.length === 0)) return true;
+    if (role === "salesperson" && permissions) {
+      return permissions.some(p => pathname.startsWith(p));
+    }
+    return true;
+  };
+
   const pageTitle: Record<string, string> = {
     "/dashboard": "Dashboard",
     "/invoices": "Invoices",
@@ -74,6 +94,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     "/reports": "Reports",
     "/settings": "Settings",
   };
+
+  if (!isPageAccessible()) {
+    return (
+      <div className="flex min-h-screen bg-black items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-white mb-2">Access Denied</h1>
+          <p className="text-muted mb-6">You do not have permission to access this page.</p>
+          <button 
+            onClick={() => router.push("/dashboard")}
+            className="btn-primary"
+          >
+            Go to Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen bg-black">

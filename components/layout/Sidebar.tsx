@@ -14,7 +14,7 @@ import { getBusinesses, BusinessProfile } from "@/lib/db";
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { role, logout, selectedBusinessId, setSelectedBusinessId } = useAuth();
+  const { role, logout, selectedBusinessId, setSelectedBusinessId, permissions } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [businesses, setBusinesses] = useState<BusinessProfile[]>([]);
   const [showBusinessSwitcher, setShowBusinessSwitcher] = useState(false);
@@ -53,7 +53,18 @@ export default function Sidebar() {
     { name: "Admin", icon: Shield, path: "/admin", roles: ["super_admin"] },
   ];
 
-  const filteredItems = menuItems.filter(item => item.roles.includes(role || ""));
+  const filteredItems = menuItems.filter(item => {
+    if (role === "owner" || role === "super_admin") {
+      return item.roles.includes(role);
+    }
+    if (role === "salesperson") {
+      if (!permissions || permissions.length === 0) {
+        return item.roles.includes("salesperson");
+      }
+      return permissions.includes(item.path);
+    }
+    return item.roles.includes(role || "");
+  });
   const currentBusiness = businesses.find(b => b.businessId === selectedBusinessId);
 
   return (
