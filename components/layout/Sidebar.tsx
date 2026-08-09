@@ -10,20 +10,24 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
-import { getBusinesses, BusinessProfile } from "@/lib/db";
+import { getBusinesses, BusinessProfile, getBusinessProfile } from "@/lib/db";
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { role, logout, selectedBusinessId, setSelectedBusinessId, permissions } = useAuth();
+  const { role, logout, selectedBusinessId, setSelectedBusinessId, permissions, businessId } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [businesses, setBusinesses] = useState<BusinessProfile[]>([]);
   const [showBusinessSwitcher, setShowBusinessSwitcher] = useState(false);
+  const [currentBusinessProfile, setCurrentBusinessProfile] = useState<BusinessProfile | null>(null);
 
   useEffect(() => {
     if (role === "super_admin") {
       getBusinesses().then(setBusinesses);
     }
-  }, [role]);
+    if (businessId) {
+      getBusinessProfile(businessId).then(setCurrentBusinessProfile);
+    }
+  }, [role, businessId]);
 
   useEffect(() => {
     const saved = localStorage.getItem("sidebar-collapsed");
@@ -42,6 +46,7 @@ export default function Sidebar() {
     { name: "POS", icon: ShoppingCart, path: "/pos", roles: ["owner", "salesperson", "super_admin"] },
     { name: "Invoices", icon: FileText, path: "/invoices", roles: ["owner", "salesperson", "super_admin"] },
     { name: "Products", icon: Package, path: "/products", roles: ["owner", "salesperson", "super_admin"] },
+    { name: "Drugs", icon: Pill, path: "/drugs", roles: ["owner", "salesperson", "super_admin"], pharmacy: true },
     { name: "Clients", icon: Users, path: "/clients", roles: ["owner", "salesperson", "super_admin"] },
     { name: "Payments", icon: CreditCard, path: "/payments", roles: ["owner", "salesperson", "super_admin"] },
     { name: "Suppliers", icon: Truck, path: "/suppliers", roles: ["owner", "super_admin"] },
@@ -56,6 +61,12 @@ export default function Sidebar() {
   ];
 
   const filteredItems = menuItems.filter(item => {
+    // Check pharmacy requirement
+    const isPharmacy = (currentBusinessProfile as any)?.businessType === "pharmacy";
+    if ((item as any).pharmacy && !isPharmacy) {
+      return false;
+    }
+    
     if (role === "super_admin") {
       return item.roles.includes(role);
     }

@@ -32,7 +32,7 @@ export default function SettingsPage() {
     businessName: "", address: "", phone: "", email: "",
     accentColor: DEFAULT_ACCENT_COLOR, footerNote: "", currency: DEFAULT_CURRENCY,
     taxRate: DEFAULT_TAX_RATE, taxInclusive: false, taxLabel: DEFAULT_TAX_LABEL,
-    paystackPublicKey: "",
+    paystackPublicKey: "", businessType: "general" as "general" | "pharmacy",
   });
   const [logoDataUrl, setLogoDataUrl] = useState<string | undefined>(undefined);
   const [brandLoading, setBrandLoading] = useState(true);
@@ -55,6 +55,7 @@ export default function SettingsPage() {
           taxInclusive: profile.taxInclusive ?? false,
           taxLabel: profile.taxLabel ?? DEFAULT_TAX_LABEL,
           paystackPublicKey: profile.paystackPublicKey ?? "",
+          businessType: (profile as any).businessType ?? "general",
         });
         setLogoDataUrl(profile.logoDataUrl);
       }
@@ -238,6 +239,15 @@ export default function SettingsPage() {
               <div>
                 <label className="label">Business Name *</label>
                 <input className="input" value={brand.businessName} onChange={e => setBrand(b => ({ ...b, businessName: e.target.value }))} placeholder="Y.A.P Multimedia & Tech" />
+              </div>
+
+              <div>
+                <label className="label">Business Type</label>
+                <select className="input" value={brand.businessType} onChange={e => setBrand(b => ({ ...b, businessType: e.target.value as "general" | "pharmacy" }))}>
+                  <option value="general">General Retail</option>
+                  <option value="pharmacy">Pharmacy</option>
+                </select>
+                <p className="text-[11px] text-muted mt-1.5">Pharmacy businesses will have access to the Drugs page and prescription management features.</p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
