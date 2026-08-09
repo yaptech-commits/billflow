@@ -78,10 +78,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // Determine if current page is accessible
   const isPageAccessible = () => {
     if (role === "super_admin") return true;
-    if (role === "owner" && (!permissions || permissions.length === 0)) return true;
-    if (role === "owner" && permissions) {
-      return permissions.some(p => pathname.startsWith(p));
-    }
+    if (role === "owner") return true;
     if (role === "salesperson" && (!permissions || permissions.length === 0)) return true;
     if (role === "salesperson" && permissions) {
       return permissions.some(p => pathname.startsWith(p));
