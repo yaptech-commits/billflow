@@ -8,6 +8,13 @@ export const runtime = "nodejs";
 type RequestedLine = { productId: string; quantity: number };
 type PaymentMethod = "momo" | "card" | "cash";
 
+interface PrescriptionValidation {
+  productId: string;
+  requiresPrescription: boolean;
+  prescriptionId?: string;
+  refillsRemaining?: number;
+}
+
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function parseBody(value: unknown) {
@@ -153,6 +160,11 @@ export async function POST(request: NextRequest) {
         }
         if (product.stockQty < requested.quantity) {
           throw new HttpError(409, `Not enough stock for ${product.name}`);
+        }
+
+        // Prescription validation for pharmacy products
+        if (product?.isPrescriptionRequired === true) {
+          throw new HttpError(400, `${product.name} requires a valid prescription. Please provide a prescription ID.`);
         }
 
         lineTotalCents += toCents(product.price) * requested.quantity;
