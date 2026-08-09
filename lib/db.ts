@@ -29,6 +29,10 @@ export interface InvoiceLineItem {
   productName: string;
   quantity: number;
   unitPrice: number;
+  /** Batch ID this line item was deducted from (for tracked products). */
+  batchId?: string;
+  /** Expiry date of the batch (for audit/receipt purposes). */
+  expiryDate?: Timestamp | null;
 }
 
 export interface Invoice {
@@ -113,6 +117,10 @@ export interface Product {
   /** Stock level at/below which this product is considered low-stock. Defaults to 5 if unset. */
   reorderLevel?: number;
   supplierId?: string;
+  /** Enable batch-level tracking for this product (pharmacy items). */
+  trackBatches?: boolean;
+  /** Mark this product as requiring a valid prescription before sale. */
+  isPrescriptionRequired?: boolean;
   createdAt?: Timestamp | null;
 }
 
@@ -183,8 +191,25 @@ export interface StockMovement {
   referenceLabel?: string;
   note?: string;
   userId: string;
+  /** Batch ID this movement is associated with (for tracked products). */
+  batchId?: string;
   createdAt?: Timestamp | null;
 }
+
+export interface ProductBatch {
+  id?: string;
+  businessId: string;
+  productId: string;
+  batchNumber: string;
+  expiryDate: Timestamp;
+  quantity: number;
+  costPrice: number;
+  sellingPrice?: number;
+  supplierId?: string;
+  dateReceived?: Timestamp | null;
+  createdAt?: Timestamp | null;
+}
+
 export type StaffStatus = "pending" | "active";
 export type StaffRole = "owner" | "salesperson" | "super_admin";
 
@@ -1328,4 +1353,219 @@ export const CURRENCIES = {
 export async function getBusinesses(): Promise<BusinessProfile[]> {
   const snap = await getDocs(query(col("businessProfiles"), orderBy("businessName", "asc")));
   return snap.docs.map(d => d.data() as BusinessProfile);
+}
+
+
+// ─── BATCH MANAGEMENT & FEFO LOGIC ────────────────────────────────────────────
+
+/**
+ * Get all active batches for a product, sorted by expiry date (FEFO order).
+ * Returns batches with quantity > 0, ordered by expiryDate ascending (earliest first).
+ */
+export async function getBatchesByProduct(
+  businessId: string,
+  productId: string
+): Promise<ProductBatch[]> {
+  const batches = await getDocs(
+    query(
+      col("productBatches"),
+      where("businessId", "==", businessId),
+      where("productId", "==", productId),
+      orderBy("expiryDate", "asc")
+    )
+  );
+  return batches.docs
+    .map(d => d.data() as ProductBatch)
+    .filter(b => b.quantity > 0);
+}
+
+/**
+ * Deduct stock from the batch with the nearest expiry date (FEFO).
+ * If the product is not batch-tracked, falls back to simple stockQty decrement.
+ * Returns the batch ID used (or undefined if not batch-tracked).
+ */
+export async function deductStockFEFO(
+  tx: Transaction,
+  businessId: string,
+  productId: string,
+  quantityNeeded: number,
+  product: Product
+): Promise<{ batchId?: string; expiryDate?: Timestamp }> {
+  // If batch tracking is not enabled, use legacy stockQty logic
+  if (!product.trackBatches) {
+    const newQty = Math.max(0, product.stockQty - quantityNeeded);
+    tx.update(doc(db, "products", productId), { stockQty: newQty });
+    logStockMovement(tx, {
+      businessId,
+      productId,
+      productName: product.name,
+      delta: -quantityNeeded,
+      resultingQty: newQty,
+      source: "sale",
+      userId: product.userId,
+    });
+    return {};
+  }
+
+  // Batch-tracked: deduct from FEFO batches
+  const batches = await getBatchesByProduct(businessId, productId);
+  if (batches.length === 0) {
+    throw new Error(`No active batches for product ${product.name}`);
+  }
+
+  let remaining = quantityNeeded;
+  let usedBatchId: string | undefined;
+  let usedExpiryDate: Timestamp | undefined;
+
+  for (const batch of batches) {
+    if (remaining <= 0) break;
+
+    const deductFromBatch = Math.min(remaining, batch.quantity);
+    const newBatchQty = batch.quantity - deductFromBatch;
+
+    tx.update(doc(db, "productBatches", batch.id!), {
+      quantity: newBatchQty,
+    });
+
+    logStockMovement(tx, {
+      businessId,
+      productId,
+      productName: product.name,
+      delta: -deductFromBatch,
+      resultingQty: newBatchQty,
+      source: "sale",
+      batchId: batch.id,
+      userId: product.userId,
+    });
+
+    usedBatchId = batch.id;
+    usedExpiryDate = batch.expiryDate;
+    remaining -= deductFromBatch;
+  }
+
+  if (remaining > 0) {
+    throw new Error(
+      `Insufficient stock for ${product.name}. Needed ${quantityNeeded}, but only ${quantityNeeded - remaining} available across all batches.`
+    );
+  }
+
+  return { batchId: usedBatchId, expiryDate: usedExpiryDate };
+}
+
+/**
+ * Create a default batch for a product with its current stockQty.
+ * Used during stock migration when batch tracking is first enabled.
+ */
+export async function createDefaultBatch(
+  businessId: string,
+  productId: string,
+  product: Product
+): Promise<string> {
+  const batchRef = doc(col("productBatches"));
+  const defaultExpiryDate = new Date();
+  defaultExpiryDate.setFullYear(defaultExpiryDate.getFullYear() + 5); // 5 years in the future
+
+  await setDoc(batchRef, {
+    businessId,
+    productId,
+    batchNumber: `DEFAULT-${new Date().getTime()}`,
+    expiryDate: Timestamp.fromDate(defaultExpiryDate),
+    quantity: product.stockQty,
+    costPrice: product.costPrice || 0,
+    sellingPrice: product.price,
+    supplierId: product.supplierId,
+    dateReceived: serverTimestamp(),
+    createdAt: serverTimestamp(),
+  });
+
+  return batchRef.id;
+}
+
+/**
+ * Migrate all products in a business to batch tracking.
+ * For each product, creates a default batch containing its current stockQty.
+ * Only migrates products that don't already have batches.
+ */
+export async function migrateProductsToBatches(businessId: string): Promise<number> {
+  const products = await getDocs(
+    businessQuery("products", businessId)
+  );
+
+  let migratedCount = 0;
+
+  for (const productSnap of products.docs) {
+    const product = productSnap.data() as Product;
+    const productId = productSnap.id;
+
+    // Check if this product already has batches
+    const existingBatches = await getDocs(
+      query(
+        col("productBatches"),
+        where("businessId", "==", businessId),
+        where("productId", "==", productId)
+      )
+    );
+
+    if (existingBatches.empty && product.stockQty > 0) {
+      await createDefaultBatch(businessId, productId, product);
+      migratedCount++;
+    }
+  }
+
+  return migratedCount;
+}
+
+/**
+ * Add a new batch for a product (e.g., from a purchase order receipt).
+ */
+export async function addProductBatch(
+  businessId: string,
+  productId: string,
+  batchData: Omit<ProductBatch, "id" | "businessId" | "productId" | "createdAt">
+): Promise<string> {
+  const batchRef = doc(col("productBatches"));
+  await setDoc(batchRef, {
+    ...batchData,
+    businessId,
+    productId,
+    createdAt: serverTimestamp(),
+  });
+  return batchRef.id;
+}
+
+/**
+ * Get batches expiring within a given number of days.
+ * Used for expiry alerts.
+ */
+export async function getBatchesExpiringWithin(
+  businessId: string,
+  daysFromNow: number = 30
+): Promise<(ProductBatch & { productName: string })[]> {
+  const now = new Date();
+  const expiryThreshold = new Date(now.getTime() + daysFromNow * 24 * 60 * 60 * 1000);
+
+  const batches = await getDocs(
+    query(
+      col("productBatches"),
+      where("businessId", "==", businessId),
+      where("expiryDate", "<=", Timestamp.fromDate(expiryThreshold))
+    )
+  );
+
+  const results: (ProductBatch & { productName: string })[] = [];
+
+  for (const batchSnap of batches.docs) {
+    const batch = batchSnap.data() as ProductBatch;
+    const productSnap = await getDoc(doc(db, "products", batch.productId));
+    const product = productSnap.data() as Product | undefined;
+
+    if (product) {
+      results.push({
+        ...batch,
+        productName: product.name,
+      });
+    }
+  }
+
+  return results.sort((a, b) => a.expiryDate.toDate().getTime() - b.expiryDate.toDate().getTime());
 }
