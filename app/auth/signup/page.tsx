@@ -13,6 +13,7 @@ export default function SignupPage() {
   const [businessName, setBusinessName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [businessType, setBusinessType] = useState<"general" | "pharmacy">("general");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -34,6 +35,7 @@ export default function SignupPage() {
       // Create business record
       await setDoc(doc(db, "businesses", businessId), {
         businessName,
+        businessType,
         ownerUid: user.uid,
         email,
         status: "pending", // New accounts require approval
@@ -87,6 +89,34 @@ export default function SignupPage() {
                 onChange={(e) => setBusinessName(e.target.value)}
                 required
               />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-white text-lg font-medium block">Business Type</label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setBusinessType("general")}
+                  className={`py-3 px-4 rounded-xl border text-base font-semibold transition-all ${
+                    businessType === "general"
+                      ? "border-white bg-white text-[#0066FF] shadow-md"
+                      : "border-white/30 bg-white/10 text-white hover:border-white/60"
+                  }`}
+                >
+                  General Business
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBusinessType("pharmacy")}
+                  className={`py-3 px-4 rounded-xl border text-base font-semibold transition-all ${
+                    businessType === "pharmacy"
+                      ? "border-white bg-white text-[#0066FF] shadow-md"
+                      : "border-white/30 bg-white/10 text-white hover:border-white/60"
+                  }`}
+                >
+                  Pharmacy
+                </button>
+              </div>
             </div>
 
             <div className="space-y-2">

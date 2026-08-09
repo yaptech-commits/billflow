@@ -242,12 +242,39 @@ export default function SettingsPage() {
               </div>
 
               <div>
-                <label className="label">Business Type</label>
-                <select className="input" value={brand.businessType} onChange={e => setBrand(b => ({ ...b, businessType: e.target.value as "general" | "pharmacy" }))}>
-                  <option value="general">General Retail</option>
-                  <option value="pharmacy">Pharmacy</option>
-                </select>
-                <p className="text-[11px] text-muted mt-1.5">Pharmacy businesses will have access to the Drugs page and prescription management features.</p>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="label mb-0">Business Type</label>
+                  {role !== "owner" && role !== "super_admin" && (
+                    <span className="text-[11px] text-muted">Editable by Super Admin / Owner only</span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-3 mt-1">
+                  <button
+                    type="button"
+                    disabled={role !== "owner" && role !== "super_admin"}
+                    onClick={() => setBrand(b => ({ ...b, businessType: "general" }))}
+                    className={`py-2 px-3 rounded-lg border text-sm font-medium transition-colors ${
+                      brand.businessType === "general"
+                        ? "border-gold bg-gold/10 text-gold"
+                        : "border-border bg-surface/5 text-muted hover:border-gold/50"
+                    } ${role !== "owner" && role !== "super_admin" ? "opacity-60 cursor-not-allowed" : ""}`}
+                  >
+                    General Business
+                  </button>
+                  <button
+                    type="button"
+                    disabled={role !== "owner" && role !== "super_admin"}
+                    onClick={() => setBrand(b => ({ ...b, businessType: "pharmacy" }))}
+                    className={`py-2 px-3 rounded-lg border text-sm font-medium transition-colors ${
+                      brand.businessType === "pharmacy"
+                        ? "border-gold bg-gold/10 text-gold"
+                        : "border-border bg-surface/5 text-muted hover:border-gold/50"
+                    } ${role !== "owner" && role !== "super_admin" ? "opacity-60 cursor-not-allowed" : ""}`}
+                  >
+                    Pharmacy
+                  </button>
+                </div>
+                <p className="text-[11px] text-muted mt-1.5">Pharmacy businesses have access to the Drugs page and prescription management features.</p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
