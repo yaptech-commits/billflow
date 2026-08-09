@@ -6,7 +6,7 @@ import {
   LayoutDashboard, FileText, Users, Ticket, 
   CreditCard, BarChart3, Settings, Package, 
   ChevronLeft, ChevronRight, ShoppingCart, Truck, UserCircle, Shield,
-  LogOut, Building2, AlertCircle
+  LogOut, Building2, AlertCircle, Pill
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -49,6 +49,7 @@ export default function Sidebar() {
     { name: "WiFi Vouchers", icon: Ticket, path: "/vouchers", roles: ["owner", "salesperson", "super_admin"] },
     { name: "Reports", icon: BarChart3, path: "/reports", roles: ["owner", "super_admin"] },
     { name: "Expiry Alerts", icon: AlertCircle, path: "/expiry-alerts", roles: ["owner", "super_admin"] },
+    { name: "Prescriptions", icon: Pill, path: "/prescriptions", roles: ["owner", "super_admin"] },
     { name: "Staff", icon: UserCircle, path: "/staff", roles: ["owner", "super_admin"] },
     { name: "Settings", icon: Settings, path: "/settings", roles: ["owner", "super_admin"] },
     { name: "Admin", icon: Shield, path: "/admin", roles: ["super_admin"] },

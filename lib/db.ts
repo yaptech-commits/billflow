@@ -171,6 +171,10 @@ export interface Client {
   phone?: string;
   business?: string;
   address?: string;
+  /** Date of birth (for pharmacy patient records). */
+  dateOfBirth?: Timestamp | null;
+  /** Unique patient ID (for pharmacy systems). */
+  patientId?: string;
   createdAt?: Timestamp | null;
 }
 
@@ -207,6 +211,33 @@ export interface ProductBatch {
   sellingPrice?: number;
   supplierId?: string;
   dateReceived?: Timestamp | null;
+  createdAt?: Timestamp | null;
+}
+
+export type PrescriptionStatus = "pending" | "dispensed" | "completed" | "expired" | "cancelled";
+
+export interface PrescriptionItem {
+  productId: string;
+  productName: string;
+  dosage: string;
+  frequency: string;
+  duration: string;
+  quantityPrescribed: number;
+}
+
+export interface Prescription {
+  id?: string;
+  businessId: string;
+  clientId: string;
+  clientName: string;
+  prescribingDoctor: string;
+  items: PrescriptionItem[];
+  refillsAllowed: number;
+  refillsRemaining: number;
+  status: PrescriptionStatus;
+  notes?: string;
+  issuedAt: Timestamp | null;
+  expiresAt?: Timestamp | null;
   createdAt?: Timestamp | null;
 }
 
@@ -1568,4 +1599,128 @@ export async function getBatchesExpiringWithin(
   }
 
   return results.sort((a, b) => a.expiryDate.toDate().getTime() - b.expiryDate.toDate().getTime());
+}
+
+
+// ─── PRESCRIPTION MANAGEMENT ──────────────────────────────────────────────────
+
+/**
+ * Create a new prescription for a client.
+ */
+export async function createPrescription(
+  businessId: string,
+  clientId: string,
+  clientName: string,
+  prescriptionData: Omit<Prescription, "id" | "businessId" | "clientId" | "clientName" | "createdAt">
+): Promise<string> {
+  const prescriptionRef = doc(col("prescriptions"));
+  await setDoc(prescriptionRef, {
+    businessId,
+    clientId,
+    clientName,
+    ...prescriptionData,
+    createdAt: serverTimestamp(),
+  });
+  return prescriptionRef.id;
+}
+
+/**
+ * Get all prescriptions for a client.
+ */
+export async function getPrescriptionsByClient(
+  businessId: string,
+  clientId: string
+): Promise<Prescription[]> {
+  const prescriptions = await getDocs(
+    query(
+      col("prescriptions"),
+      where("businessId", "==", businessId),
+      where("clientId", "==", clientId),
+      orderBy("issuedAt", "desc")
+    )
+  );
+  return prescriptions.docs.map(d => d.data() as Prescription);
+}
+
+/**
+ * Get all active prescriptions for a product (for sales validation).
+ */
+export async function getActivePrescriptionsForProduct(
+  businessId: string,
+  clientId: string,
+  productId: string
+): Promise<Prescription[]> {
+  const prescriptions = await getDocs(
+    query(
+      col("prescriptions"),
+      where("businessId", "==", businessId),
+      where("clientId", "==", clientId),
+      where("status", "in", ["pending", "dispensed"])
+    )
+  );
+
+  return prescriptions.docs
+    .map(d => d.data() as Prescription)
+    .filter(p => p.items.some(item => item.productId === productId && item.quantityPrescribed > 0));
+}
+
+/**
+ * Update prescription refills remaining after a sale.
+ */
+export async function updatePrescriptionRefills(
+  prescriptionId: string,
+  quantitySold: number
+): Promise<void> {
+  const prescriptionRef = doc(db, "prescriptions", prescriptionId);
+  const prescriptionSnap = await getDoc(prescriptionRef);
+
+  if (!prescriptionSnap.exists()) {
+    throw new Error("Prescription not found");
+  }
+
+  const prescription = prescriptionSnap.data() as Prescription;
+  const newRefillsRemaining = Math.max(0, prescription.refillsRemaining - 1);
+  const newStatus: PrescriptionStatus = newRefillsRemaining === 0 ? "completed" : prescription.status;
+
+  await updateDoc(prescriptionRef, {
+    refillsRemaining: newRefillsRemaining,
+    status: newStatus,
+  });
+}
+
+/**
+ * Get all prescriptions for a business (for admin view).
+ */
+export async function getPrescriptionsByBusiness(
+  businessId: string,
+  statusFilter?: PrescriptionStatus
+): Promise<Prescription[]> {
+  let q;
+  if (statusFilter) {
+    q = query(
+      col("prescriptions"),
+      where("businessId", "==", businessId),
+      where("status", "==", statusFilter),
+      orderBy("issuedAt", "desc")
+    );
+  } else {
+    q = query(
+      col("prescriptions"),
+      where("businessId", "==", businessId),
+      orderBy("issuedAt", "desc")
+    );
+  }
+
+  const prescriptions = await getDocs(q);
+  return prescriptions.docs.map(d => d.data() as Prescription);
+}
+
+/**
+ * Mark a prescription as expired (e.g., after expiry date).
+ */
+export async function expirePrescription(prescriptionId: string): Promise<void> {
+  const prescriptionRef = doc(db, "prescriptions", prescriptionId);
+  await updateDoc(prescriptionRef, {
+    status: "expired" as PrescriptionStatus,
+  });
 }
