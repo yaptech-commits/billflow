@@ -13,7 +13,7 @@ export default function SignupPage() {
   const [businessName, setBusinessName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [businessType, setBusinessType] = useState<"general" | "pharmacy">("general");
+  const [businessType, setBusinessType] = useState<"general" | "pharmacy" | "hotel" | "coldstore" | "school">("general");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -115,6 +115,39 @@ export default function SignupPage() {
                   }`}
                 >
                   Pharmacy
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBusinessType("hotel")}
+                  className={`py-3 px-4 rounded-xl border text-base font-semibold transition-all ${
+                    businessType === "hotel"
+                      ? "border-white bg-white text-[#0066FF] shadow-md"
+                      : "border-white/30 bg-white/10 text-white hover:border-white/60"
+                  }`}
+                >
+                  Hotel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBusinessType("coldstore")}
+                  className={`py-3 px-4 rounded-xl border text-base font-semibold transition-all ${
+                    businessType === "coldstore"
+                      ? "border-white bg-white text-[#0066FF] shadow-md"
+                      : "border-white/30 bg-white/10 text-white hover:border-white/60"
+                  }`}
+                >
+                  Coldstore
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBusinessType("school")}
+                  className={`py-3 px-4 rounded-xl border text-base font-semibold transition-all ${
+                    businessType === "school"
+                      ? "border-white bg-white text-[#0066FF] shadow-md"
+                      : "border-white/30 bg-white/10 text-white hover:border-white/60"
+                  }`}
+                >
+                  School
                 </button>
               </div>
             </div>
