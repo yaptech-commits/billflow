@@ -283,6 +283,8 @@ export interface BusinessProfile {
   autoDeleteOutOfStock?: boolean;
   /** List of page paths the business owner can access. If unset/empty, they see all pages. */
   permissions?: string[];
+  /** List of page paths the business owner is allowed to access. Managed by super admin during approval. */
+  allowedPages?: string[];
   createdAt?: Timestamp | null;
   updatedAt?: Timestamp | null;
 }
@@ -1723,4 +1725,103 @@ export async function expirePrescription(prescriptionId: string): Promise<void> 
   await updateDoc(prescriptionRef, {
     status: "expired" as PrescriptionStatus,
   });
+}
+
+
+// ─── PHARMACY FEATURES ────────────────────────────────────────────────────────
+
+export type InsuranceType = "nhis" | "private";
+export type ClaimStatus = "submitted" | "pending" | "approved" | "rejected" | "paid";
+
+export interface InsuranceClaim {
+  id?: string;
+  businessId: string;
+  invoiceId: string;
+  invoiceNumber: string | number;
+  clientId: string;
+  clientName: string;
+  insuranceType: InsuranceType;
+  insuranceId: string; // Patient's insurance/membership ID
+  claimAmount: number;
+  copayAmount: number;
+  insurerAmount: number;
+  status: ClaimStatus;
+  submittedAt?: Timestamp | null;
+  approvedAt?: Timestamp | null;
+  paidAt?: Timestamp | null;
+  notes?: string;
+  createdAt?: Timestamp | null;
+}
+
+export type StockAdjustmentReason = "damage" | "wastage" | "theft" | "expired" | "inventory_correction" | "other";
+
+export interface StockAdjustment {
+  id?: string;
+  businessId: string;
+  productId: string;
+  productName: string;
+  batchId?: string;
+  quantityAdjusted: number; // Positive or negative
+  reason: StockAdjustmentReason;
+  staffId: string;
+  staffName: string;
+  notes?: string;
+  createdAt?: Timestamp | null;
+}
+
+export type ReturnType = "customer_return" | "supplier_return";
+export type ReturnStatus = "pending" | "approved" | "rejected" | "completed";
+
+export interface ReturnLineItem {
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  batchId?: string;
+}
+
+export interface Return {
+  id?: string;
+  businessId: string;
+  returnType: ReturnType;
+  referenceId: string; // Invoice ID for customer returns, PO ID for supplier returns
+  referenceNumber: string | number;
+  lineItems: ReturnLineItem[];
+  totalAmount: number;
+  refundAmount?: number;
+  reason: string;
+  status: ReturnStatus;
+  approvedBy?: string;
+  refundMethod?: PaymentMethod;
+  refundedAt?: Timestamp | null;
+  notes?: string;
+  createdAt?: Timestamp | null;
+}
+
+export interface ControlledSubstanceLog {
+  id?: string;
+  businessId: string;
+  productId: string;
+  productName: string;
+  batchId?: string;
+  quantityDispensed: number;
+  prescriberId: string;
+  prescriberName: string;
+  patientId: string;
+  patientName: string;
+  dispensingStaffId: string;
+  dispensingStaffName: string;
+  prescriptionNumber?: string;
+  notes?: string;
+  dispensedAt: Timestamp | null;
+  createdAt?: Timestamp | null;
+}
+
+export interface ProductBarcode {
+  id?: string;
+  businessId: string;
+  productId: string;
+  barcode: string;
+  barcodeType?: string; // "ean13", "ean8", "upca", etc.
+  createdAt?: Timestamp | null;
 }
