@@ -4,6 +4,7 @@ import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { getPagesForBusinessType } from "@/lib/business-type-config";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import toast from "react-hot-toast";
@@ -32,13 +33,15 @@ export default function SignupPage() {
       // 3. Create Business Profile & Initial Staff Record (Owner)
       const businessId = `biz_${user.uid}`;
       
-      // Create business record
+      // Create business record with automatically assigned pages based on business type
+      const allowedPages = getPagesForBusinessType(businessType as any);
       await setDoc(doc(db, "businesses", businessId), {
         businessName,
         businessType,
         ownerUid: user.uid,
         email,
         status: "pending", // New accounts require approval
+        allowedPages, // Auto-assign pages based on business type
         createdAt: serverTimestamp(),
         currency: "GHS",
         taxRate: 0,
