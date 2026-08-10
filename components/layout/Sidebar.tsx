@@ -63,6 +63,7 @@ export default function Sidebar() {
     { name: "Staff", icon: UserCircle, path: "/staff", roles: ["owner", "super_admin"] },
     { name: "Settings", icon: Settings, path: "/settings", roles: ["owner", "super_admin"] },
     { name: "Admin", icon: Shield, path: "/admin", roles: ["super_admin"] },
+    { name: "Admin Utilities", icon: Shield, path: "/admin-utilities", roles: ["super_admin"] },
   ];
 
   const filteredItems = menuItems.filter(item => {
