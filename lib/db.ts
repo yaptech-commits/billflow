@@ -1577,30 +1577,35 @@ export async function getBatchesExpiringWithin(
   const now = new Date();
   const expiryThreshold = new Date(now.getTime() + daysFromNow * 24 * 60 * 60 * 1000);
 
+  // Fetch all batches for the business and filter on client side to avoid index requirements
   const batches = await getDocs(
     query(
       col("productBatches"),
-      where("businessId", "==", businessId),
-      where("expiryDate", "<=", Timestamp.fromDate(expiryThreshold))
+      where("businessId", "==", businessId)
     )
   );
 
   const results: (ProductBatch & { productName: string })[] = [];
+  const thresholdTime = expiryThreshold.getTime();
 
   for (const batchSnap of batches.docs) {
-    const batch = batchSnap.data() as ProductBatch;
-    const productSnap = await getDoc(doc(db, "products", batch.productId));
-    const product = productSnap.data() as Product | undefined;
+    const batch = { ...batchSnap.data(), id: batchSnap.id } as ProductBatch;
+    
+    // Check if batch is expiring within the threshold
+    if (batch.expiryDate && batch.expiryDate.toMillis() <= thresholdTime) {
+      const productSnap = await getDoc(doc(db, "products", batch.productId));
+      const product = productSnap.data() as Product | undefined;
 
-    if (product) {
-      results.push({
-        ...batch,
-        productName: product.name,
-      });
+      if (product) {
+        results.push({
+          ...batch,
+          productName: product.name,
+        });
+      }
     }
   }
 
-  return results.sort((a, b) => a.expiryDate.toDate().getTime() - b.expiryDate.toDate().getTime());
+  return results;
 }
 
 

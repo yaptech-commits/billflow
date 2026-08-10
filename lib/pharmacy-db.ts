@@ -68,11 +68,15 @@ export async function getInsuranceClaimsForBusiness(businessId: string) {
   const snap = await getDocs(
     query(
       collection(db, "insuranceClaims"),
-      where("businessId", "==", businessId),
-      orderBy("createdAt", "desc")
+      where("businessId", "==", businessId)
     )
   );
-  return snap.docs.map((d) => ({ ...d.data(), id: d.id } as InsuranceClaim));
+  const data = snap.docs.map((d) => ({ ...d.data(), id: d.id } as InsuranceClaim));
+  return data.sort((a, b) => {
+    const dateA = a.createdAt?.toMillis() || 0;
+    const dateB = b.createdAt?.toMillis() || 0;
+    return dateB - dateA;
+  });
 }
 
 export async function updateClaimStatus(claimId: string, status: string, approvedAt?: Timestamp) {
@@ -95,11 +99,15 @@ export async function getStockAdjustmentsForBusiness(businessId: string) {
   const snap = await getDocs(
     query(
       collection(db, "stockAdjustments"),
-      where("businessId", "==", businessId),
-      orderBy("createdAt", "desc")
+      where("businessId", "==", businessId)
     )
   );
-  return snap.docs.map((d) => ({ ...d.data(), id: d.id } as StockAdjustment));
+  const data = snap.docs.map((d) => ({ ...d.data(), id: d.id } as StockAdjustment));
+  return data.sort((a, b) => {
+    const dateA = a.createdAt?.toMillis() || 0;
+    const dateB = b.createdAt?.toMillis() || 0;
+    return dateB - dateA;
+  });
 }
 
 // ─── RETURNS & REFUNDS ────────────────────────────────────────────────────────
@@ -116,11 +124,15 @@ export async function getReturnsForBusiness(businessId: string) {
   const snap = await getDocs(
     query(
       collection(db, "returns"),
-      where("businessId", "==", businessId),
-      orderBy("createdAt", "desc")
+      where("businessId", "==", businessId)
     )
   );
-  return snap.docs.map((d) => ({ ...d.data(), id: d.id } as Return));
+  const data = snap.docs.map((d) => ({ ...d.data(), id: d.id } as Return));
+  return data.sort((a, b) => {
+    const dateA = a.createdAt?.toMillis() || 0;
+    const dateB = b.createdAt?.toMillis() || 0;
+    return dateB - dateA;
+  });
 }
 
 export async function updateReturnStatus(returnId: string, status: string, refundedAt?: Timestamp) {
@@ -143,11 +155,15 @@ export async function getControlledSubstanceLogsForBusiness(businessId: string) 
   const snap = await getDocs(
     query(
       collection(db, "controlledSubstanceLogs"),
-      where("businessId", "==", businessId),
-      orderBy("dispensedAt", "desc")
+      where("businessId", "==", businessId)
     )
   );
-  return snap.docs.map((d) => ({ ...d.data(), id: d.id } as ControlledSubstanceLog));
+  const data = snap.docs.map((d) => ({ ...d.data(), id: d.id } as ControlledSubstanceLog));
+  return data.sort((a, b) => {
+    const dateA = a.dispensedAt?.toMillis() || 0;
+    const dateB = b.dispensedAt?.toMillis() || 0;
+    return dateB - dateA;
+  });
 }
 
 // ─── BARCODE MANAGEMENT ────────────────────────────────────────────────────────
