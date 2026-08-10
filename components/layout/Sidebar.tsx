@@ -68,7 +68,8 @@ export default function Sidebar() {
   const filteredItems = menuItems.filter(item => {
     // Check pharmacy requirement
     const isPharmacy = (currentBusinessProfile as any)?.businessType === "pharmacy";
-    if ((item as any).pharmacy && !isPharmacy) {
+    // Super admin can see pharmacy pages regardless of business type
+    if ((item as any).pharmacy && !isPharmacy && role !== "super_admin") {
       return false;
     }
     
