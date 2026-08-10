@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { collection, getDocs, updateDoc, doc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { getAdminDb } from "@/lib/firebase-admin";
 import { getPagesForBusinessType } from "@/lib/business-type-config";
 
 export async function POST(request: NextRequest) {
   try {
+    const db = getAdminDb();
     // Get all businesses
-    const businessesRef = collection(db, "businesses");
-    const snapshot = await getDocs(businessesRef);
+    const snapshot = await db.collection("businesses").get();
 
     let updated = 0;
     let skipped = 0;
@@ -27,7 +26,7 @@ export async function POST(request: NextRequest) {
       const allowedPages = getPagesForBusinessType(businessType);
 
       // Update business with allowedPages
-      await updateDoc(doc(db, "businesses", docSnap.id), {
+      await db.collection("businesses").doc(docSnap.id).update({
         allowedPages,
       });
 
