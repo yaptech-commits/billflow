@@ -53,6 +53,9 @@ export default function PosPage() {
   const [receipt, setReceipt] = useState<{
     invoiceId: string;
     amount: number;
+    subtotal: number;
+    discountAmount: number;
+    taxAmount: number;
     items: CartLine[];
     customerName: string;
     method: PaymentMethod;
@@ -306,6 +309,9 @@ export default function PosPage() {
               setReceipt({
                 invoiceId: result.invoiceId,
                 amount: result.amount,
+                subtotal,
+                discountAmount: discountVal,
+                taxAmount: tax,
                 items: cart,
                 customerName: customerName || "Walk-in Customer",
                 method: payMethod,
@@ -354,6 +360,9 @@ export default function PosPage() {
         setReceipt({
           invoiceId: `OFFLINE-${offlineSale.id.slice(0, 5)}`,
           amount: total,
+          subtotal,
+          discountAmount: discountVal,
+          taxAmount: tax,
           items: cart,
           customerName: customerName || "Walk-in Customer",
           method: payMethod,
@@ -371,6 +380,9 @@ export default function PosPage() {
         setReceipt({
           invoiceId: result.invoiceId,
           amount: result.amount,
+          subtotal,
+          discountAmount: discountVal,
+          taxAmount: tax,
           items: cart,
           customerName: customerName || "Walk-in Customer",
           method: payMethod,
@@ -564,32 +576,38 @@ export default function PosPage() {
           <div className="flex justify-center overflow-hidden rounded-lg border border-border bg-white">
             <div id="receipt-content" className="p-4" style={{ width: receiptWidth === 58 ? "220px" : "300px" }}>
               {receipt && (
-                <BrandedDocument profile={profile} docType="RECEIPT" docNumber={receipt.invoiceId.slice(-6).toUpperCase()} date={receipt.timestamp} clientName={receipt.customerName} items={receipt.items} amount={receipt.amount} paymentMethod={receipt.method} currencyCode={profile?.currency || "GHS"} width={receiptWidth} />
+                <BrandedDocument profile={profile} docType="INVOICE" docNumber={receipt.invoiceId.slice(-6).toUpperCase()} date={receipt.timestamp} clientName={receipt.customerName} items={receipt.items} amount={receipt.amount} subtotal={receipt.subtotal} discountAmount={receipt.discountAmount} taxAmount={receipt.taxAmount} taxRate={profile?.taxRate || 0} taxLabel="VAT" paymentMethod={receipt.method} currencyCode={profile?.currency || "GHS"} width={receiptWidth} />
               )}
             </div>
           </div>
           <div className="flex gap-3">
-            <button 
-              className="btn-ghost flex-1 justify-center gap-2" 
-              onClick={() => {
-                if (!receipt || !profile) return;
-                printReceipt({
-                  businessName: profile.businessName,
-                  businessAddress: profile.address,
-                  businessPhone: profile.phone,
-                  invoiceNumber: receipt.invoiceId,
-                  items: receipt.items,
-                  total: receipt.amount,
-                  paymentMethod: receipt.method,
-                  amountPaid: receipt.amountPaid,
-                  change: receipt.change,
-                  customerName: receipt.customerName,
-                  cashierName: user?.displayName || "Staff"
-                });
-              }}
-            >
-              <Printer size={18} /> Print
-            </button>
+              <button 
+                className="btn-ghost flex-1 justify-center gap-2" 
+                onClick={() => {
+                  if (!receipt || !profile) return;
+                  printReceipt({
+                    businessName: profile.businessName,
+                    businessAddress: profile.address,
+                    businessPhone: profile.phone,
+                    invoiceNumber: receipt.invoiceId,
+                    items: receipt.items,
+                    subtotal: receipt.subtotal,
+                    discountAmount: receipt.discountAmount,
+                    taxAmount: receipt.taxAmount,
+                    taxRate: profile?.taxRate || 0,
+                    taxLabel: "VAT",
+                    total: receipt.amount,
+                    paymentMethod: receipt.method,
+                    amountPaid: receipt.amountPaid,
+                    change: receipt.change,
+                    customerName: receipt.customerName,
+                    cashierName: user?.displayName || "Staff",
+                    currencyCode: profile?.currency || "GHS"
+                  });
+                }}
+              >
+                <Printer size={18} /> Print
+              </button>
             <button className="btn-primary flex-1 justify-center" onClick={() => setReceipt(null)}>DONE</button>
           </div>
         </div>
