@@ -51,6 +51,8 @@ export default function Sidebar() {
     { name: "Reservations", icon: CalendarDays, path: "/hotel/reservations", roles: ["owner", "salesperson", "super_admin"], hotel: true },
     { name: "Front Desk", icon: ConciergeBell, path: "/hotel/front-desk", roles: ["owner", "salesperson", "super_admin"], hotel: true },
     { name: "Guests", icon: UserRound, path: "/hotel/guests", roles: ["owner", "salesperson", "super_admin"], hotel: true },
+    { name: "Revenue & Audit", icon: BarChart3, path: "/hotel/reports", roles: ["owner", "salesperson", "super_admin"], hotel: true },
+    { name: "Online Booking", icon: Ticket, path: "/hotel/booking-widget", roles: ["owner", "salesperson", "super_admin"], hotel: true },
     { name: "Clients", icon: Users, path: "/clients", roles: ["owner", "salesperson", "super_admin"] },
     { name: "Payments", icon: CreditCard, path: "/payments", roles: ["owner", "salesperson", "super_admin"] },
     { name: "Suppliers", icon: Truck, path: "/suppliers", roles: ["owner", "super_admin"] },
@@ -78,7 +80,7 @@ export default function Sidebar() {
     if (role !== "super_admin" && isHotel) {
       const hotelPaths = new Set([
         "/dashboard", "/hotel/rooms", "/hotel/reservations", "/hotel/front-desk", "/hotel/guests",
-        "/invoices", "/payments", "/reports", "/staff", "/settings",
+        "/hotel/reports", "/hotel/booking-widget", "/invoices", "/payments", "/reports", "/staff", "/settings",
       ]);
       if (!hotelPaths.has(item.path)) return false;
     }

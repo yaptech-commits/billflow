@@ -2136,3 +2136,475 @@ export async function saveHotelWaitlistEntry(entry: Omit<HotelWaitlistEntry, "id
   const ref = await addDoc(col("hotelWaitlist"), { ...entry, createdAt: serverTimestamp() });
   return ref.id;
 }
+
+
+// ─── HOTEL GUEST FOLIOS & NIGHT AUDIT ─────────────────────────────────────────
+
+export type FolioItemType = "room_charge" | "food_beverage" | "service" | "tax" | "adjustment" | "deposit" | "payment";
+
+export interface FolioItem {
+  id: string;
+  businessId: string;
+  propertyId: string;
+  reservationId: string;
+  guestId: string;
+  roomNumber: string;
+  type: FolioItemType;
+  description: string;
+  amount: number;
+  payerType: "primary" | "company" | "split_guest";
+  payerName?: string;
+  postedAt: any;
+  postedBy: string;
+  isVoided?: boolean;
+  referenceId?: string; // e.g. invoice id or payment id
+}
+
+export interface GuestFolio {
+  reservationId: string;
+  businessId: string;
+  propertyId: string;
+  guestName: string;
+  roomNumber: string;
+  status: "open" | "settled" | "refunded";
+  chargesTotal: number;
+  paymentsTotal: number;
+  depositsTotal: number;
+  balanceDue: number;
+  items: FolioItem[];
+  updatedAt: any;
+}
+
+export async function getGuestFolio(businessId: string, reservationId: string): Promise<GuestFolio | null> {
+  const q = query(
+    col("hotelFolioItems"),
+    where("businessId", "==", businessId),
+    where("reservationId", "==", reservationId)
+  );
+  const snap = await getDocs(q);
+  const items: FolioItem[] = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+  
+  if (items.length === 0) {
+    // Check if reservation exists to build initial folio shell
+    const resRef = doc(db, "hotelReservations", reservationId);
+    const resSnap = await getDoc(resRef);
+    if (!resSnap.exists()) return null;
+    const res = resSnap.data() as any;
+    return {
+      reservationId,
+      businessId,
+      propertyId: res.propertyId,
+      guestName: res.guestName,
+      roomNumber: res.roomNumber || "Unassigned",
+      status: "open",
+      chargesTotal: 0,
+      paymentsTotal: 0,
+      depositsTotal: 0,
+      balanceDue: 0,
+      items: [],
+      updatedAt: serverTimestamp(),
+    };
+  }
+
+  const resSnap = await getDoc(doc(db, "hotelReservations", reservationId));
+  const res = resSnap.exists() ? (resSnap.data() as any) : {};
+
+  let chargesTotal = 0;
+  let paymentsTotal = 0;
+  let depositsTotal = 0;
+
+  for (const item of items) {
+    if (item.isVoided) continue;
+    if (item.type === "payment") {
+      paymentsTotal += item.amount;
+    } else if (item.type === "deposit") {
+      depositsTotal += item.amount;
+    } else if (item.type === "adjustment") {
+      chargesTotal += item.amount; // adjustments can be negative or positive
+    } else {
+      chargesTotal += item.amount;
+    }
+  }
+
+  const balanceDue = chargesTotal - (paymentsTotal + depositsTotal);
+
+  return {
+    reservationId,
+    businessId,
+    propertyId: res.propertyId || items[0].propertyId,
+    guestName: res.guestName || items[0].guestId,
+    roomNumber: res.roomNumber || items[0].roomNumber,
+    status: balanceDue <= 0 && items.length > 0 ? "settled" : "open",
+    chargesTotal,
+    paymentsTotal,
+    depositsTotal,
+    balanceDue,
+    items: items.sort((a, b) => (b.postedAt?.seconds || 0) - (a.postedAt?.seconds || 0)),
+    updatedAt: serverTimestamp(),
+  };
+}
+
+export async function addFolioItem(data: Omit<FolioItem, "id" | "postedAt">) {
+  return addDoc(col("hotelFolioItems"), {
+    ...data,
+    postedAt: serverTimestamp(),
+    isVoided: false,
+  });
+}
+
+export async function voidFolioItem(itemId: string, reason: string) {
+  const ref = doc(db, "hotelFolioItems", itemId);
+  return updateDoc(ref, {
+    isVoided: true,
+    voidReason: reason,
+  });
+}
+
+/** Night Audit: Automatically posts nightly room rate & taxes for all checked-in reservations */
+export async function runNightAudit(businessId: string, propertyId: string, userId: string) {
+  const q = query(
+    col("hotelReservations"),
+    where("businessId", "==", businessId),
+    where("propertyId", "==", propertyId),
+    where("status", "==", "checked-in")
+  );
+  const snap = await getDocs(q);
+  const checkedInReservations = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+
+  const postedCount = { rooms: 0, totalAmount: 0 };
+
+  for (const res of checkedInReservations) {
+    const rate = res.nightlyRate || 100;
+    const tax = rate * 0.125; // 12.5% standard tax rule
+    const totalCharge = rate + tax;
+
+    await addFolioItem({
+      businessId,
+      propertyId,
+      reservationId: res.id,
+      guestId: res.guestId || res.guestName,
+      roomNumber: res.roomNumber || "General",
+      type: "room_charge",
+      description: `Night Audit Room Charge (${new Date().toISOString().split("T")[0]})`,
+      amount: rate,
+      payerType: "primary",
+      postedBy: userId,
+    });
+
+    await addFolioItem({
+      businessId,
+      propertyId,
+      reservationId: res.id,
+      guestId: res.guestId || res.guestName,
+      roomNumber: res.roomNumber || "General",
+      type: "tax",
+      description: `Occupancy Tax / VAT (12.5%)`,
+      amount: tax,
+      payerType: "primary",
+      postedBy: userId,
+    });
+
+    postedCount.rooms += 1;
+    postedCount.totalAmount += totalCharge;
+  }
+
+  // Record night audit log
+  await addDoc(col("hotelNightAudits"), {
+    businessId,
+    propertyId,
+    auditDate: new Date().toISOString().split("T")[0],
+    roomsProcessed: postedCount.rooms,
+    totalPosted: postedCount.totalAmount,
+    runBy: userId,
+    createdAt: serverTimestamp(),
+  });
+
+  return postedCount;
+}
+
+
+// ─── HOUSEKEEPING & MAINTENANCE ───────────────────────────────────────────────
+
+export type HousekeepingStatus = "clean" | "dirty" | "inspecting" | "out-of-service";
+export type MaintenancePriority = "low" | "medium" | "high" | "urgent";
+
+export interface HousekeepingTask {
+  id: string;
+  businessId: string;
+  propertyId: string;
+  roomNumber: string;
+  taskType: "checkout_clean" | "stayover_clean" | "deep_clean" | "inspection";
+  status: "pending" | "in-progress" | "completed";
+  assignedTo?: string;
+  notes?: string;
+  createdAt: any;
+  completedAt?: any;
+}
+
+export interface MaintenanceWorkOrder {
+  id: string;
+  businessId: string;
+  propertyId: string;
+  roomNumber: string;
+  issueTitle: string;
+  description: string;
+  priority: MaintenancePriority;
+  status: "reported" | "in-repair" | "resolved";
+  reportedBy: string;
+  assignedTo?: string;
+  createdAt: any;
+  resolvedAt?: any;
+}
+
+export async function getHousekeepingTasks(businessId: string, propertyId: string): Promise<HousekeepingTask[]> {
+  const q = query(
+    col("hotelHousekeeping"),
+    where("businessId", "==", businessId),
+    where("propertyId", "==", propertyId)
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+}
+
+export async function createHousekeepingTask(data: Omit<HousekeepingTask, "id" | "createdAt">) {
+  return addDoc(col("hotelHousekeeping"), {
+    ...data,
+    createdAt: serverTimestamp(),
+  });
+}
+
+export async function updateHousekeepingTask(id: string, data: Partial<HousekeepingTask>) {
+  const ref = doc(db, "hotelHousekeeping", id);
+  if (data.status === "completed") {
+    (data as any).completedAt = serverTimestamp();
+  }
+  return updateDoc(ref, data);
+}
+
+export async function getMaintenanceWorkOrders(businessId: string, propertyId: string): Promise<MaintenanceWorkOrder[]> {
+  const q = query(
+    col("hotelMaintenance"),
+    where("businessId", "==", businessId),
+    where("propertyId", "==", propertyId)
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+}
+
+export async function createMaintenanceWorkOrder(data: Omit<MaintenanceWorkOrder, "id" | "createdAt">) {
+  return addDoc(col("hotelMaintenance"), {
+    ...data,
+    createdAt: serverTimestamp(),
+  });
+}
+
+export async function updateMaintenanceWorkOrder(id: string, data: Partial<MaintenanceWorkOrder>) {
+  const ref = doc(db, "hotelMaintenance", id);
+  if (data.status === "resolved") {
+    (data as any).resolvedAt = serverTimestamp();
+  }
+  return updateDoc(ref, data);
+}
+
+
+// ─── RATE & REVENUE MANAGEMENT ───────────────────────────────────────────────
+
+export interface RatePlanRestrictions {
+  minStayDays?: number;
+  maxStayDays?: number;
+  isNonRefundable?: boolean;
+  advanceBookingDaysMin?: number;
+}
+
+export interface HotelRevenueMetrics {
+  totalRooms: number;
+  occupiedRooms: number;
+  occupancyRate: number; // percentage
+  totalRoomRevenue: number;
+  adr: number; // Average Daily Rate
+  revPar: number; // Revenue Per Available Room
+}
+
+export async function calculateHotelMetrics(businessId: string, propertyId: string): Promise<HotelRevenueMetrics> {
+  const roomsSnap = await getDocs(
+    query(col("hotelRooms"), where("businessId", "==", businessId), where("propertyId", "==", propertyId))
+  );
+  const totalRooms = roomsSnap.size || 1;
+
+  const resSnap = await getDocs(
+    query(col("hotelReservations"), where("businessId", "==", businessId), where("propertyId", "==", propertyId))
+  );
+  const reservations = resSnap.docs.map(d => d.data() as any);
+
+  let occupiedRooms = 0;
+  let totalRoomRevenue = 0;
+
+  for (const res of reservations) {
+    if (res.status === "checked-in") {
+      occupiedRooms += 1;
+    }
+    if (res.status === "checked-in" || res.status === "checked-out") {
+      totalRoomRevenue += (res.nightlyRate || 0) * (res.numberOfNights || 1);
+    }
+  }
+
+  const occupancyRate = Number(((occupiedRooms / totalRooms) * 100).toFixed(1));
+  const roomsSold = reservations.filter(r => r.status === "checked-in" || r.status === "checked-out").length || 1;
+  const adr = Number((totalRoomRevenue / roomsSold).toFixed(2));
+  const revPar = Number((totalRoomRevenue / totalRooms).toFixed(2));
+
+  return {
+    totalRooms,
+    occupiedRooms,
+    occupancyRate,
+    totalRoomRevenue,
+    adr,
+    revPar,
+  };
+}
+
+
+// ─── HOTEL ROLE-BASED ACCESS CONTROL ──────────────────────────────────────────
+
+export type HotelRole = "front_desk" | "housekeeping" | "manager" | "owner" | "super_admin";
+
+export interface HotelPermissionRule {
+  role: HotelRole;
+  canViewRooms: boolean;
+  canModifyRooms: boolean;
+  canManageReservations: boolean;
+  canPerformCheckInOut: boolean;
+  canAccessFolios: boolean;
+  canManageHousekeeping: boolean;
+  canViewReports: boolean;
+  canManageRatePlans: boolean;
+}
+
+export const HOTEL_ROLE_PERMISSIONS: Record<HotelRole, HotelPermissionRule> = {
+  super_admin: {
+    role: "super_admin",
+    canViewRooms: true, canModifyRooms: true, canManageReservations: true,
+    canPerformCheckInOut: true, canAccessFolios: true, canManageHousekeeping: true,
+    canViewReports: true, canManageRatePlans: true,
+  },
+  owner: {
+    role: "owner",
+    canViewRooms: true, canModifyRooms: true, canManageReservations: true,
+    canPerformCheckInOut: true, canAccessFolios: true, canManageHousekeeping: true,
+    canViewReports: true, canManageRatePlans: true,
+  },
+  manager: {
+    role: "manager",
+    canViewRooms: true, canModifyRooms: true, canManageReservations: true,
+    canPerformCheckInOut: true, canAccessFolios: true, canManageHousekeeping: true,
+    canViewReports: true, canManageRatePlans: true,
+  },
+  front_desk: {
+    role: "front_desk",
+    canViewRooms: true, canModifyRooms: false, canManageReservations: true,
+    canPerformCheckInOut: true, canAccessFolios: true, canManageHousekeeping: false,
+    canViewReports: false, canManageRatePlans: false,
+  },
+  housekeeping: {
+    role: "housekeeping",
+    canViewRooms: true, canModifyRooms: false, canManageReservations: false,
+    canPerformCheckInOut: false, canAccessFolios: false, canManageHousekeeping: true,
+    canViewReports: false, canManageRatePlans: false,
+  },
+};
+
+export function checkHotelPermission(role: string, action: keyof HotelPermissionRule): boolean {
+  const normRole = (role || "front_desk") as HotelRole;
+  const rule = HOTEL_ROLE_PERMISSIONS[normRole] || HOTEL_ROLE_PERMISSIONS.front_desk;
+  return Boolean(rule[action]);
+}
+
+
+// ─── CHANNEL-READY ONLINE BOOKING FOUNDATION ──────────────────────────────────
+
+export interface ExternalBookingRequest {
+  businessId: string;
+  propertyId: string;
+  channel: "direct_widget" | "booking_com" | "expedia" | "airbnb" | "other";
+  externalReferenceId?: string;
+  guestName: string;
+  guestEmail: string;
+  guestPhone: string;
+  checkInDate: string;
+  checkOutDate: string;
+  roomTypeId: string;
+  specialRequests?: string;
+}
+
+export async function createExternalChannelReservation(req: ExternalBookingRequest) {
+  return runTransaction(db, async (tx) => {
+    // 1. Check date availability for the requested room type
+    const roomsSnap = await getDocs(
+      query(
+        col("hotelRooms"),
+        where("businessId", "==", req.businessId),
+        where("propertyId", "==", req.propertyId),
+        where("type", "==", req.roomTypeId)
+      )
+    );
+
+    const availableRooms = roomsSnap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+    if (availableRooms.length === 0) {
+      throw new Error(`No rooms available for room type: ${req.roomTypeId}`);
+    }
+
+    // Check date overlap against existing reservations
+    const existingResSnap = await getDocs(
+      query(
+        col("hotelReservations"),
+        where("businessId", "==", req.businessId),
+        where("propertyId", "==", req.propertyId),
+        where("status", "in", ["booked", "checked-in"])
+      )
+    );
+
+    const inRange = (d: string, start: string, end: string) => d >= start && d < end;
+    const isOverlapping = (start1: string, end1: string, start2: string, end2: string) =>
+      Math.max(new Date(start1).getTime(), new Date(start2).getTime()) < Math.min(new Date(end1).getTime(), new Date(end2).getTime());
+
+    let assignedRoomNumber = "";
+    for (const rm of availableRooms) {
+      const roomBooked = existingResSnap.docs.some(d => {
+        const res = d.data() as any;
+        return res.roomNumber === rm.roomNumber && isOverlapping(req.checkInDate, req.checkOutDate, res.checkInDate, res.checkOutDate);
+      });
+      if (!roomBooked) {
+        assignedRoomNumber = rm.roomNumber;
+        break;
+      }
+    }
+
+    if (!assignedRoomNumber) {
+      throw new Error("Selected dates are fully booked for this room type.");
+    }
+
+    // 2. Create reservation record
+    const resRef = doc(collection(db, "hotelReservations"));
+    const newRes = {
+      businessId: req.businessId,
+      propertyId: req.propertyId,
+      guestName: req.guestName,
+      guestEmail: req.guestEmail,
+      guestPhone: req.guestPhone,
+      checkInDate: req.checkInDate,
+      checkOutDate: req.checkOutDate,
+      numberOfNights: Math.max(1, Math.round((new Date(req.checkOutDate).getTime() - new Date(req.checkInDate).getTime()) / (1000 * 60 * 60 * 24))),
+      roomNumber: assignedRoomNumber,
+      roomType: req.roomTypeId,
+      nightlyRate: 150, // default rate or fetched from rate plan
+      status: "booked",
+      bookingSource: req.channel,
+      externalReferenceId: req.externalReferenceId || "",
+      specialRequests: req.specialRequests || "",
+      createdAt: serverTimestamp(),
+    };
+
+    tx.set(resRef, newRes);
+    return { reservationId: resRef.id, roomNumber: assignedRoomNumber };
+  });
+}
