@@ -35,3 +35,10 @@
 - [ ] Add clickable links for module metrics and preserve pure Hotel-only dashboard behavior.
 - [ ] Verify TypeScript, dashboard routes, permissions, and module gating.
 - [ ] Commit and push the modular dashboard implementation.
+
+
+## Shared Financial Pages Access & Data Scope
+- [x] Audit business-type page maps in business-type-config.ts and sidebar gating.
+- [x] Ensure Invoices, Payments, and Reports are present for Hotel, Pharmacy, Cold Store, and General business accounts.
+- [x] Verify that data queries filter strictly by businessId and salesperson scope.
+- [x] Validate TypeScript compilation, commit, and push changes to main.

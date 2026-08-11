@@ -110,6 +110,7 @@ export const BUSINESS_TYPE_CONFIG: Record<BusinessType, BusinessTypeConfig> = {
       "/stock-adjustments",
       "/returns",
       "/barcode-management",
+      "/temperature-monitoring",
       "/staff",
       "/settings",
     ],

@@ -87,7 +87,7 @@ export default function Sidebar() {
     if (role !== "super_admin" && isHotel) {
       const hotelPaths = new Set([
         "/dashboard", "/hotel/rooms", "/hotel/reservations", "/hotel/front-desk", "/hotel/guests",
-        "/hotel/reports", "/hotel/booking-widget", "/hotel/room-pos", "/invoices", "/payments", "/reports", "/staff", "/settings",
+        "/hotel/reports", "/hotel/booking-widget", "/hotel/room-pos", "/invoices", "/payments", "/reports", "/staff", "/settings", "/products", "/pos",
       ]);
       if (!hotelPaths.has(item.path)) return false;
     }
