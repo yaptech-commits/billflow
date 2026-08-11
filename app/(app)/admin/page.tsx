@@ -273,8 +273,8 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
   }, [activeTab]);
 
   const handleDeleteItem = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this item?")) return;
-    const t = toast.loading("Deleting...");
+    if (!confirm("Are you sure you want to permanently delete this item?")) return;
+    const t = toast.loading("Permanently deleting from database...");
     try {
       const collectionName = {
         products: "products",
@@ -286,9 +286,9 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
         po: "purchaseOrders"
       }[activeTab!];
       await deleteDoc(doc(db, collectionName, id));
-      toast.success("Deleted successfully", { id: t });
-      fetchTabData(activeTab);
-      fetchStats(true);
+      toast.success("Permanently deleted", { id: t });
+      await fetchTabData(activeTab);
+      await fetchStats(true);
     } catch (e) {
       toast.error("Delete failed", { id: t });
     }
@@ -367,8 +367,8 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
   };
 
   const handleDeleteStaff = async (staff: Staff) => {
-    if (!confirm(`Are you sure you want to delete ${staff.email}? This will revoke all their access.`)) return;
-    const t = toast.loading("Deleting staff...");
+    if (!confirm(`Are you sure you want to permanently delete staff ${staff.email}? This will revoke all access.`)) return;
+    const t = toast.loading("Permanently deleting staff...");
     try {
       const batch = writeBatch(db);
       batch.delete(doc(db, "staff", staff.id!));
@@ -376,8 +376,8 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
         batch.delete(doc(db, "staffIndex", staff.staffUid));
       }
       await batch.commit();
-      toast.success("Staff deleted", { id: t });
-      fetchStats(true);
+      toast.success("Staff permanently deleted", { id: t });
+      await fetchStats(true);
     } catch (e) {
       toast.error("Deletion failed", { id: t });
     }
@@ -514,12 +514,20 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
             </button>
             <button 
               className="p-1.5 text-muted hover:text-red transition-colors" 
-              title="Delete Business Data"
+              title="Delete Business Completely"
               onClick={async () => {
-                if (confirm(`Are you sure you want to delete all data for ${business.businessName}? This cannot be undone.`)) {
-                  toast.loading("Deleting business data...");
-                  // Full deletion logic implementation
-                  toast.success("Feature coming soon");
+                if (confirm(`CRITICAL WARNING: Are you sure you want to permanently delete ${business.businessName} and all its associated records from the database? This action is IRREVERSIBLE.`)) {
+                  const t = toast.loading("Permanently deleting business and all records...");
+                  try {
+                    await deleteBusinessData(business.businessId);
+                    // Also delete businessProfile doc itself
+                    await deleteDoc(doc(db, "businessProfiles", business.businessId));
+                    toast.success("Business permanently deleted from database", { id: t });
+                    onUpdate();
+                  } catch (e) {
+                    console.error(e);
+                    toast.error("Failed to delete business completely", { id: t });
+                  }
                 }
               }}
             >

@@ -845,7 +845,9 @@ export async function deleteBusinessData(businessId: string) {
   const collections = [
     "products", "invoices", "clients", "payments", "categories", 
     "stockMovements", "staffIndex", "businessProfiles", "purchaseOrders", 
-    "suppliers", "vouchers", "shifts"
+    "suppliers", "vouchers", "shifts", "staff",
+    "productBatches", "insuranceClaims", "stockAdjustments", "returns",
+    "controlledSubstanceLogs", "productBarcodes", "prescriptions", "expiryAlerts"
   ];
 
   for (const colName of collections) {

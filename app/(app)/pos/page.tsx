@@ -205,9 +205,12 @@ export default function PosPage() {
   const removeLine = (productId: string) => setCart(prev => prev.filter(l => l.productId !== productId));
   const clearCart = () => setCart([]);
 
-  const lineTotal = cart.reduce((sum, l) => sum + l.quantity * l.unitPrice, 0);
+  const subtotal = cart.reduce((sum, l) => sum + l.quantity * l.unitPrice, 0);
   const discountVal = parseFloat(discountAmount) || 0;
-  const total = lineTotal - discountVal;
+  const taxable = Math.max(0, subtotal - discountVal);
+  const taxRate = profile?.taxRate ?? 0;
+  const tax = taxable * (taxRate / 100);
+  const total = taxable + tax;
 
   const filteredProducts = useMemo(() => {
     let list = products;
