@@ -40,7 +40,7 @@ const GOLD = "#E6A21A";
 const INK = "#111827";
 const RULE = "#D1D5DB";
 
-function BillFlowMark({ size }: { size?: number }) {
+function FallbackBillFlowMark({ size }: { size?: number }) {
   return (
     <svg viewBox="0 0 190 190" role="img" aria-label="BillFlow" className="h-[clamp(64px,18vw,190px)] w-[clamp(64px,18vw,190px)] max-w-[32vw] shrink-0" style={size ? { width: size, height: size } : undefined} xmlns="http://www.w3.org/2000/svg">
       <defs>
@@ -72,8 +72,24 @@ function BillFlowMark({ size }: { size?: number }) {
   );
 }
 
+function BillFlowMark({ size, logoDataUrl, businessName }: { size?: number; logoDataUrl?: string; businessName?: string }) {
+  if (logoDataUrl) {
+    return (
+      <div className="flex shrink-0 items-center justify-center overflow-hidden" style={size ? { width: size, height: size } : undefined}>
+        <img src={logoDataUrl} alt={businessName ? `${businessName} logo` : "Business logo"} className="h-full w-full object-contain" />
+      </div>
+    );
+  }
+  const initials = (businessName || "Business").trim().split(/\s+/).filter(Boolean).slice(0, 2).map(word => word[0]).join("").toUpperCase();
+  return (
+    <div className="flex h-[clamp(64px,18vw,190px)] w-[clamp(64px,18vw,190px)] max-w-[32vw] shrink-0 items-center justify-center rounded-[18%] bg-[#E6A21A] font-sans text-[clamp(24px,6vw,72px)] font-extrabold text-[#111827]" style={size ? { width: size, height: size } : undefined} aria-label={`${businessName || "Business"} logo`}>
+      {initials}
+    </div>
+  );
+}
+
 function ReferenceInvoice({
-  profile, docNumber, date, clientName, items, amount, subtotal, taxAmount, taxRate, taxLabel, discountAmount, currencyCode,
+  profile, docNumber, date, clientName, items, amount, subtotal, taxAmount, taxRate, taxLabel, discountAmount, currencyCode, width,
 }: BrandedDocumentProps) {
   const currency = currencyCode || "GHS";
   const calculatedSubtotal = subtotal ?? items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
@@ -92,7 +108,7 @@ function ReferenceInvoice({
           <h1 className="m-0 max-w-full overflow-hidden whitespace-nowrap font-sans font-extrabold leading-[.82] tracking-[.02em] text-[#1556B8]" style={{ fontSize: isNarrow ? 38 : isThermal ? 52 : undefined }}>INVOICE</h1>
           <div className="mt-[clamp(12px,3vw,34px)] h-[3px] max-w-full bg-[#E6A21A]" style={{ width: isNarrow ? "74%" : isThermal ? "82%" : "clamp(150px,45vw,360px)" }} />
         </div>
-        <BillFlowMark size={isNarrow ? 70 : isThermal ? 96 : undefined} />
+        <BillFlowMark size={isNarrow ? 70 : isThermal ? 96 : undefined} logoDataUrl={profile?.logoDataUrl} businessName={profile?.businessName} />
       </div>
 
       <div className="mt-[clamp(18px,5vw,64px)] grid min-w-0 grid-cols-2 gap-3 overflow-hidden pb-[clamp(18px,4vw,46px)]">

@@ -192,6 +192,7 @@ export default function PosPage() {
       toast.error(`No product found for "${term}"`);
     }
     setScanValue("");
+    setSearch("");
   };
 
   const updateQty = (productId: string, delta: number) => {
@@ -455,7 +456,17 @@ export default function PosPage() {
 
         <form onSubmit={handleScanSubmit} className="relative mb-5">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" size={20} />
-          <input ref={scanRef} className="input pl-12 h-14 text-lg font-grotesk" placeholder="Scan barcode or search products..." value={scanValue} onChange={e => setScanValue(e.target.value)} />
+          <input
+            ref={scanRef}
+            className="input pl-12 h-14 text-lg font-grotesk"
+            placeholder="Scan barcode or search products..."
+            value={scanValue}
+            onChange={e => {
+              const value = e.target.value;
+              setScanValue(value);
+              setSearch(value);
+            }}
+          />
         </form>
 
         <div className="flex gap-2 mb-6 overflow-x-auto pb-2 custom-scrollbar">
@@ -627,6 +638,8 @@ export default function PosPage() {
                     taxLabel: profile?.taxLabel || "VAT",
                     total: receipt.amount,
                     width: receiptWidth,
+                    logoDataUrl: profile.logoDataUrl,
+                    businessName: profile.businessName,
                     customerName: receipt.customerName,
                     currencyCode: profile?.currency || "GHS"
                   });

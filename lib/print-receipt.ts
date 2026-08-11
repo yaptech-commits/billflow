@@ -29,6 +29,8 @@ type ReceiptPrintData = {
   cashierName?: string;
   currencyCode?: string;
   footerNote?: string;
+  logoDataUrl?: string;
+  businessName?: string;
   width?: 58 | 80;
 };
 
@@ -110,6 +112,11 @@ export function printReceipt(data: ReceiptPrintData) {
   const taxLabel = data.taxLabel || "Tax";
   const taxText = data.taxRate != null ? `${taxLabel} (${escapeHtml(data.taxRate)}%)` : taxLabel;
   const thermalWidth = data.width === 58 || data.width === 80 ? data.width : undefined;
+  const safeLogoUrl = typeof data.logoDataUrl === "string" && /^(data:image\/|https?:\/\/)/i.test(data.logoDataUrl) ? data.logoDataUrl : "";
+  const initials = (data.businessName || "Business").trim().split(/\s+/).filter(Boolean).slice(0, 2).map(word => word[0]).join("").toUpperCase();
+  const markHtml = safeLogoUrl
+    ? `<img class="owner-logo" src="${escapeHtml(safeLogoUrl)}" alt="${escapeHtml(data.businessName || "Business logo")}" />`
+    : `<div class="owner-mark" aria-label="${escapeHtml(data.businessName || "Business")} logo">${escapeHtml(initials)}</div>`;
   const pageWidth = thermalWidth ? `${thermalWidth}mm` : "210mm";
   const pageMinHeight = thermalWidth ? "auto" : "297mm";
   const pagePadding = thermalWidth ? (thermalWidth === 58 ? "5mm 3mm 4mm" : "7mm 5mm 5mm") : "18mm 14mm 11mm";
@@ -159,7 +166,8 @@ export function printReceipt(data: ReceiptPrintData) {
           .invoice-heading { padding-top: 13mm; }
           h1 { margin: 0; color: ${BLUE}; font-size: ${titleSize}; line-height: .83; font-weight: 800; letter-spacing: ${thermalWidth ? ".15mm" : ".4mm"}; }
           .heading-rule { width: 91mm; height: .55mm; margin-top: 8mm; background: ${GOLD}; }
-          .billflow-mark { width: ${markSize}; height: ${markSize}; margin-right: 1mm; }
+          .billflow-mark, .owner-logo, .owner-mark { width: ${markSize}; height: ${markSize}; margin-right: 1mm; object-fit: contain; display: block; }
+          .owner-mark { display: flex; align-items: center; justify-content: center; border-radius: 18%; background: ${GOLD}; color: ${INK}; font-size: ${thermalWidth ? (thermalWidth === 58 ? "6mm" : "8mm") : "16mm"}; font-weight: 800; }
           .billing-row { display: grid; grid-template-columns: 1fr 1fr; min-height: ${thermalWidth ? (thermalWidth === 58 ? "28mm" : "34mm") : "43mm"}; margin-top: ${thermalWidth ? "4mm" : "8mm"}; margin-bottom: ${thermalWidth ? "5mm" : "10mm"}; }
           .bill-to { padding-top: 2mm; }
           .bill-to-title { color: ${BLUE}; font-size: ${thermalWidth ? (thermalWidth === 58 ? "2.5mm" : "3mm") : "4mm"}; line-height: 1; font-weight: 800; letter-spacing: .3mm; margin-bottom: ${thermalWidth ? "2mm" : "5mm"}; }
@@ -200,7 +208,7 @@ export function printReceipt(data: ReceiptPrintData) {
         <main class="page">
           <header class="header">
             <div class="invoice-heading"><h1>INVOICE</h1><div class="heading-rule"></div></div>
-            ${billFlowMark}
+            ${markHtml}
           </header>
 
           <section class="billing-row">
