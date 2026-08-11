@@ -1,6 +1,7 @@
-# Unified Receipt Preview and Print Mockup Alignment
+# 58MM/80MM Receipt Width Selector Restoration
 
-- [ ] Update `components/BrandedDocument.tsx` to match the exact blue-and-gold mockup layout (bold blue "INVOICE" title with gold underline, 3D BillFlow badge graphic, uppercase "BILL TO", two-column invoice meta block, deep blue table header bar, clean white rows, subtotal/tax/total hierarchy, and heart-icon footer).
-- [ ] Replace the POS "Sale Successful" modal preview component so it renders the exact same reference mockup instead of the old thermal receipt layout.
-- [ ] Remove the obsolete 58MM/80MM toggle from the POS receipt modal since the reference invoice is an A4 professional document.
-- [ ] Run a clean production build across all routes and commit/push using `ayindenabawisdom@gmail.com`.
+- [ ] Restore the `receiptWidth` state (`58` | `80`) in `app/(app)/pos/page.tsx`.
+- [ ] Add back the 58MM and 80MM selection buttons in the POS "Sale Successful" modal.
+- [ ] Pass `width={receiptWidth}` into `BrandedDocument` so the modal preview and thermal print function respect the user's selected width.
+- [ ] Ensure the reference invoice design adapts cleanly to both thermal (58mm/80mm) and A4 widths, and verify with a clean production build.
+- [ ] Commit and push changes using `ayindenabawisdom@gmail.com`.

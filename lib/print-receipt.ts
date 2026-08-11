@@ -29,6 +29,7 @@ type ReceiptPrintData = {
   cashierName?: string;
   currencyCode?: string;
   footerNote?: string;
+  width?: 58 | 80;
 };
 
 const BLUE = "#1556B8";
@@ -108,6 +109,13 @@ export function printReceipt(data: ReceiptPrintData) {
   const change = data.change != null ? Math.max(0, Number(data.change)) : undefined;
   const taxLabel = data.taxLabel || "Tax";
   const taxText = data.taxRate != null ? `${taxLabel} (${escapeHtml(data.taxRate)}%)` : taxLabel;
+  const thermalWidth = data.width === 58 || data.width === 80 ? data.width : undefined;
+  const pageWidth = thermalWidth ? `${thermalWidth}mm` : "210mm";
+  const pageMinHeight = thermalWidth ? "auto" : "297mm";
+  const pagePadding = thermalWidth ? (thermalWidth === 58 ? "5mm 3mm 4mm" : "7mm 5mm 5mm") : "18mm 14mm 11mm";
+  const titleSize = thermalWidth ? (thermalWidth === 58 ? "10mm" : "14mm") : "25mm";
+  const markSize = thermalWidth ? (thermalWidth === 58 ? "18mm" : "25mm") : "43mm";
+  const tableFontSize = thermalWidth ? (thermalWidth === 58 ? "2.7mm" : "3.2mm") : "4.25mm";
 
   const itemsHtml = items.map((item) => {
     const unitPrice = Number(item.unitPrice ?? item.price ?? 0);
@@ -136,7 +144,7 @@ export function printReceipt(data: ReceiptPrintData) {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Invoice - ${escapeHtml(data.invoiceNumber || "Invoice")}</title>
         <style>
-          @page { size: A4 portrait; margin: 0; }
+          @page { size: ${thermalWidth ? `${thermalWidth}mm auto` : "A4 portrait"}; margin: 0; }
           * { box-sizing: border-box; }
           html, body { margin: 0; padding: 0; background: #fff; }
           body {
@@ -146,44 +154,44 @@ export function printReceipt(data: ReceiptPrintData) {
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
           }
-          .page { width: 210mm; min-height: 297mm; padding: 18mm 14mm 11mm; margin: 0 auto; display: flex; flex-direction: column; }
+          .page { width: ${pageWidth}; min-height: ${pageMinHeight}; padding: ${pagePadding}; margin: 0 auto; display: flex; flex-direction: column; }
           .header { display: flex; align-items: flex-start; justify-content: space-between; min-height: 42mm; }
           .invoice-heading { padding-top: 13mm; }
-          h1 { margin: 0; color: ${BLUE}; font-size: 25mm; line-height: .83; font-weight: 800; letter-spacing: .4mm; }
+          h1 { margin: 0; color: ${BLUE}; font-size: ${titleSize}; line-height: .83; font-weight: 800; letter-spacing: ${thermalWidth ? ".15mm" : ".4mm"}; }
           .heading-rule { width: 91mm; height: .55mm; margin-top: 8mm; background: ${GOLD}; }
-          .billflow-mark { width: 43mm; height: 43mm; margin-right: 1mm; }
-          .billing-row { display: grid; grid-template-columns: 1fr 1fr; min-height: 43mm; margin-top: 8mm; margin-bottom: 10mm; }
+          .billflow-mark { width: ${markSize}; height: ${markSize}; margin-right: 1mm; }
+          .billing-row { display: grid; grid-template-columns: 1fr 1fr; min-height: ${thermalWidth ? (thermalWidth === 58 ? "28mm" : "34mm") : "43mm"}; margin-top: ${thermalWidth ? "4mm" : "8mm"}; margin-bottom: ${thermalWidth ? "5mm" : "10mm"}; }
           .bill-to { padding-top: 2mm; }
-          .bill-to-title { color: ${BLUE}; font-size: 4mm; line-height: 1; font-weight: 800; letter-spacing: .3mm; margin-bottom: 5mm; }
-          .customer-name { color: ${INK}; font-size: 5.4mm; font-weight: 700; margin-bottom: 4mm; }
-          .customer-details { color: ${INK}; font-size: 4.1mm; line-height: 1.65; }
-          .meta { border-left: .3mm solid ${RULE}; padding: 5mm 0 0 12mm; display: grid; align-content: start; row-gap: 5mm; }
-          .meta-row { display: grid; grid-template-columns: 32mm 1fr; align-items: baseline; }
-          .meta-label { color: ${BLUE}; font-size: 4mm; font-weight: 800; letter-spacing: .2mm; }
-          .meta-value { color: ${INK}; font-size: 4.2mm; font-weight: 400; }
+          .bill-to-title { color: ${BLUE}; font-size: ${thermalWidth ? (thermalWidth === 58 ? "2.5mm" : "3mm") : "4mm"}; line-height: 1; font-weight: 800; letter-spacing: .3mm; margin-bottom: ${thermalWidth ? "2mm" : "5mm"}; }
+          .customer-name { color: ${INK}; font-size: ${thermalWidth ? (thermalWidth === 58 ? "3.1mm" : "3.8mm") : "5.4mm"}; font-weight: 700; margin-bottom: ${thermalWidth ? "2mm" : "4mm"}; }
+          .customer-details { color: ${INK}; font-size: ${thermalWidth ? (thermalWidth === 58 ? "2.4mm" : "3mm") : "4.1mm"}; line-height: 1.45; }
+          .meta { border-left: .3mm solid ${RULE}; padding: ${thermalWidth ? "2mm 0 0 2.5mm" : "5mm 0 0 12mm"}; display: grid; align-content: start; row-gap: ${thermalWidth ? "2mm" : "5mm"}; }
+          .meta-row { display: grid; grid-template-columns: ${thermalWidth ? (thermalWidth === 58 ? "10mm 1fr" : "14mm 1fr") : "32mm 1fr"}; align-items: baseline; }
+          .meta-label { color: ${BLUE}; font-size: ${thermalWidth ? (thermalWidth === 58 ? "2.2mm" : "2.8mm") : "4mm"}; font-weight: 800; letter-spacing: .2mm; }
+          .meta-value { color: ${INK}; font-size: ${thermalWidth ? (thermalWidth === 58 ? "2.2mm" : "2.8mm") : "4.2mm"}; font-weight: 400; }
           .items { width: 100%; border: .25mm solid ${RULE}; border-radius: 2.2mm; border-collapse: separate; border-spacing: 0; overflow: hidden; }
-          .items thead th { height: 14mm; padding: 0 8mm; color: #fff; background: ${BLUE}; font-size: 4.5mm; font-weight: 700; text-align: left; }
+          .items thead th { height: ${thermalWidth ? (thermalWidth === 58 ? "8mm" : "10mm") : "14mm"}; padding: 0 ${thermalWidth ? (thermalWidth === 58 ? "1.5mm" : "3mm") : "8mm"}; color: #fff; background: ${BLUE}; font-size: ${thermalWidth ? (thermalWidth === 58 ? "2.8mm" : "3.4mm") : "4.5mm"}; font-weight: 700; text-align: left; }
           .items thead th:first-child { border-top-left-radius: 2mm; }
           .items thead th:last-child { border-top-right-radius: 2mm; }
           .items th:nth-child(1) { width: 48%; }
           .items th:nth-child(2) { width: 15%; text-align: center; }
           .items th:nth-child(3), .items th:nth-child(4) { width: 18.5%; text-align: right; }
-          .items tbody td { height: 18mm; padding: 0 8mm; border-bottom: .25mm solid ${RULE}; font-size: 4.25mm; }
+          .items tbody td { height: ${thermalWidth ? (thermalWidth === 58 ? "10mm" : "13mm") : "18mm"}; padding: 0 ${thermalWidth ? (thermalWidth === 58 ? "1.5mm" : "3mm") : "8mm"}; border-bottom: .25mm solid ${RULE}; font-size: ${tableFontSize}; }
           .items tbody tr:last-child td { border-bottom: 0; }
           .item-name { color: ${INK}; font-weight: 700; }
           .item-qty { color: ${INK}; text-align: center; }
           .item-number { color: ${INK}; text-align: right; white-space: nowrap; }
-          .totals-wrap { display: flex; justify-content: flex-end; margin-top: 14mm; }
-          .totals { width: 84mm; border-collapse: collapse; }
-          .totals td { height: 11mm; font-size: 4.2mm; color: ${INK}; }
+          .totals-wrap { display: flex; justify-content: flex-end; margin-top: ${thermalWidth ? (thermalWidth === 58 ? "6mm" : "8mm") : "14mm"}; }
+          .totals { width: ${thermalWidth ? (thermalWidth === 58 ? "30mm" : "42mm") : "84mm"}; border-collapse: collapse; }
+          .totals td { height: ${thermalWidth ? (thermalWidth === 58 ? "6mm" : "8mm") : "11mm"}; font-size: ${thermalWidth ? (thermalWidth === 58 ? "2.5mm" : "3.1mm") : "4.2mm"}; color: ${INK}; }
           .totals-label { font-weight: 700; text-transform: uppercase; letter-spacing: .15mm; }
           .totals-value { text-align: right; white-space: nowrap; }
-          .total-row td { border-top: .55mm solid ${GOLD}; height: 17mm; padding-top: 4mm; }
-          .total-row .totals-label, .total-row .totals-value { color: ${BLUE}; font-size: 7mm; font-weight: 800; }
-          .footer { margin-top: auto; border-top: .45mm solid ${BLUE}; padding-top: 9mm; text-align: center; }
-          .thanks { display: inline-flex; align-items: center; gap: 7mm; color: ${BLUE_DARK}; font-size: 5.6mm; }
-          .heart { width: 13mm; height: 13mm; border: .45mm solid ${BLUE}; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: ${GOLD}; font-family: Georgia, serif; font-size: 8mm; line-height: 1; }
-          .footer-note { margin: 4mm 0 0; color: ${MUTED}; font-size: 3.3mm; }
+          .total-row td { border-top: .55mm solid ${GOLD}; height: ${thermalWidth ? (thermalWidth === 58 ? "9mm" : "12mm") : "17mm"}; padding-top: ${thermalWidth ? "2mm" : "4mm"}; }
+          .total-row .totals-label, .total-row .totals-value { color: ${BLUE}; font-size: ${thermalWidth ? (thermalWidth === 58 ? "4mm" : "5mm") : "7mm"}; font-weight: 800; }
+          .footer { margin-top: ${thermalWidth ? "8mm" : "auto"}; border-top: .45mm solid ${BLUE}; padding-top: ${thermalWidth ? (thermalWidth === 58 ? "4mm" : "6mm") : "9mm"}; text-align: center; }
+          .thanks { display: inline-flex; align-items: center; gap: ${thermalWidth ? (thermalWidth === 58 ? "2mm" : "3mm") : "7mm"}; color: ${BLUE_DARK}; font-size: ${thermalWidth ? (thermalWidth === 58 ? "3mm" : "3.8mm") : "5.6mm"}; }
+          .heart { width: ${thermalWidth ? (thermalWidth === 58 ? "6mm" : "8mm") : "13mm"}; height: ${thermalWidth ? (thermalWidth === 58 ? "6mm" : "8mm") : "13mm"}; border: .45mm solid ${BLUE}; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: ${GOLD}; font-family: Georgia, serif; font-size: ${thermalWidth ? (thermalWidth === 58 ? "4mm" : "5mm") : "8mm"}; line-height: 1; }
+          .footer-note { margin: 4mm 0 0; color: ${MUTED}; font-size: ${thermalWidth ? "2.2mm" : "3.3mm"}; }
           @media screen and (max-width: 800px) { .page { width: 100%; min-height: 100vh; padding: 28px 24px; } h1 { font-size: clamp(42px, 12vw, 92px); } .heading-rule { width: 58%; } .header { min-height: auto; } .billflow-mark { width: 140px; height: 140px; } .billing-row { margin-top: 28px; } }
           @media print { .page { margin: 0; } }
         </style>
