@@ -2,7 +2,7 @@
 export const dynamic = "force-dynamic";
 import { useState, useEffect, Suspense } from "react";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { auth, isFirebaseConfigured } from "@/lib/firebase";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import toast from "react-hot-toast";
@@ -25,6 +25,10 @@ function LoginForm() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isFirebaseConfigured || !auth) {
+      toast.error("Firebase is not configured for this deployment. Please contact the BillFlow administrator.", { duration: 6000 });
+      return;
+    }
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);

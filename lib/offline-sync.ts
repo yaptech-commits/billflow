@@ -3,6 +3,8 @@
  * Stores pending sales in localStorage and attempts to sync them when online.
  */
 
+import { createSafeId } from "@/lib/safe-id";
+
 const SYNC_QUEUE_KEY = "billflow_offline_sales";
 
 export interface OfflineSale {
@@ -14,7 +16,7 @@ export interface OfflineSale {
 export function queueOfflineSale(saleData: any) {
   const queue: OfflineSale[] = JSON.parse(localStorage.getItem(SYNC_QUEUE_KEY) || "[]");
   const newSale: OfflineSale = {
-    id: crypto.randomUUID(),
+    id: createSafeId("offline-sale"),
     data: saleData,
     timestamp: Date.now(),
   };

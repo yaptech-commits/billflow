@@ -15,6 +15,7 @@ import toast from "react-hot-toast";
 import { Search, Plus, Minus, Trash2, ShoppingCart, Printer, X, Wifi, WifiOff, ArrowRight, CreditCard } from "lucide-react";
 import { printReceipt } from "@/lib/print-receipt";
 import { queueOfflineSale, syncOfflineSales, getOfflineQueue } from "@/lib/offline-sync";
+import { createSafeId } from "@/lib/safe-id";
 
 interface CartLine {
   productId: string;
@@ -117,7 +118,7 @@ export default function PosPage() {
       
       syncOfflineSales(async (data: any) => {
         return createPosSale({
-          idempotencyKey: crypto.randomUUID(),
+          idempotencyKey: createSafeId("pos"),
           shiftId: activeShift.id!,
           customerName: data.customerName || "Walk-in Customer",
           items: data.items.map((l: any) => ({ productId: l.productId, quantity: l.quantity })),
@@ -378,7 +379,7 @@ export default function PosPage() {
         const result = await createPosSale({
           ...saleData,
           shiftId: activeShift.id!,
-          idempotencyKey: crypto.randomUUID(),
+          idempotencyKey: createSafeId("pos"),
         });
         setReceipt({
           invoiceId: result.invoiceId,
@@ -508,7 +509,7 @@ export default function PosPage() {
 
         <div className="p-5 bg-black/40 border-t border-border space-y-4">
           <div className="space-y-2">
-            <div className="flex justify-between text-sm text-muted"><span>Subtotal</span><span>{formatMoney(lineTotal, profile?.currency || "GHS")}</span></div>
+            <div className="flex justify-between text-sm text-muted"><span>Subtotal</span><span>{formatMoney(subtotal, profile?.currency || "GHS")}</span></div>
             <div className="flex items-center justify-between gap-4">
               <span className="text-sm text-muted">Discount</span>
               <input type="number" className="bg-transparent border-b border-border text-right text-sm font-bold text-green w-20 focus:border-gold outline-none" placeholder="0.00" value={discountAmount} onChange={e => setDiscountAmount(e.target.value)} />

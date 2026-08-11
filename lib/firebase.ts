@@ -11,13 +11,18 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-const app =
-  getApps().length === 0 && firebaseConfig.apiKey
-    ? initializeApp(firebaseConfig)
-    : getApps().length > 0
-    ? getApps()[0]
-    : null;
+export const isFirebaseConfigured = Object.values(firebaseConfig).every(
+  (value) => typeof value === "string" && value.trim().length > 0,
+);
 
-export const auth = app ? getAuth(app) : ({} as any);
-export const db = app ? getFirestore(app) : ({} as any);
+const app = isFirebaseConfigured
+  ? getApps().length === 0
+    ? initializeApp(firebaseConfig)
+    : getApps()[0]
+  : null;
+
+// Keep the exports null-safe. AuthProvider guards configuration before calling Firebase APIs,
+// and login displays a clear setup message instead of throwing a generic client exception.
+export const auth = app ? getAuth(app) : null;
+export const db = app ? getFirestore(app) : null;
 export default app;
