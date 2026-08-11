@@ -33,6 +33,7 @@ export default function SettingsPage() {
     accentColor: DEFAULT_ACCENT_COLOR, footerNote: "", currency: DEFAULT_CURRENCY,
     taxRate: DEFAULT_TAX_RATE, taxInclusive: false, taxLabel: DEFAULT_TAX_LABEL,
     paystackPublicKey: "", businessType: "general" as "general" | "pharmacy",
+    allowStaffDiscounts: false,
   });
   const [logoDataUrl, setLogoDataUrl] = useState<string | undefined>(undefined);
   const [brandLoading, setBrandLoading] = useState(true);
@@ -56,6 +57,7 @@ export default function SettingsPage() {
           taxLabel: profile.taxLabel ?? DEFAULT_TAX_LABEL,
           paystackPublicKey: profile.paystackPublicKey ?? "",
           businessType: (profile as any).businessType ?? "general",
+          allowStaffDiscounts: profile.allowStaffDiscounts === true,
         });
         setLogoDataUrl(profile.logoDataUrl);
       }
@@ -337,6 +339,17 @@ export default function SettingsPage() {
                     <p className="text-[11px] text-muted">Product prices already include tax</p>
                   </div>
                   <Toggle on={brand.taxInclusive} onToggle={() => setBrand(b => ({ ...b, taxInclusive: !b.taxInclusive }))} />
+                </div>
+              </div>
+
+              <div className="border-t border-border pt-4 mt-4">
+                <h3 className="font-grotesk font-semibold text-white text-sm mb-3">Checkout Controls</h3>
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm text-surface">Allow salesperson discounts</p>
+                    <p className="text-[11px] text-muted mt-1">When enabled, salesperson accounts can apply discounts at POS checkout. Owners can always discount.</p>
+                  </div>
+                  <Toggle on={brand.allowStaffDiscounts === true} onToggle={() => setBrand(b => ({ ...b, allowStaffDiscounts: !b.allowStaffDiscounts }))} />
                 </div>
               </div>
 

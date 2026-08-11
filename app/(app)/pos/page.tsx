@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/auth-context";
 import {
   getProducts, getClients, getBusinessProfile, Product, Client,
   InvoiceLineItem, PaymentMethod, BusinessProfile, Shift, getActiveShift, openShift, closeShift,
-  getCategories, Category
+  getCategories, Category, calculateTax
 } from "@/lib/db";
 import { createPosSale } from "@/lib/pos-api";
 import { formatMoney, cn } from "@/lib/utils";
@@ -26,7 +26,7 @@ interface CartLine {
 }
 
 export default function PosPage() {
-  const { user, businessId } = useAuth();
+  const { user, businessId, role } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [profile, setProfile] = useState<BusinessProfile | null>(null);
@@ -73,6 +73,11 @@ export default function PosPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [discountAmount, setDiscountAmount] = useState<string>("");
+  const canApplyDiscount = role === "owner" || role === "super_admin" || profile?.allowStaffDiscounts === true;
+
+  useEffect(() => {
+    if (!canApplyDiscount) setDiscountAmount("");
+  }, [canApplyDiscount]);
 
   const load = async () => {
     if (!businessId) return;
@@ -208,10 +213,14 @@ export default function PosPage() {
 
   const subtotal = cart.reduce((sum, l) => sum + l.quantity * l.unitPrice, 0);
   const discountVal = parseFloat(discountAmount) || 0;
-  const taxable = Math.max(0, subtotal - discountVal);
   const taxRate = profile?.taxRate ?? 0;
-  const tax = taxable * (taxRate / 100);
-  const total = taxable + tax;
+  const taxBreakdown = calculateTax(subtotal, {
+    taxRate,
+    taxInclusive: profile?.taxInclusive === true,
+    discountAmount: discountVal,
+  });
+  const tax = taxBreakdown.taxAmount;
+  const total = taxBreakdown.total;
 
   const filteredProducts = useMemo(() => {
     let list = products;
@@ -283,6 +292,12 @@ export default function PosPage() {
       return;
     }
 
+    if (discountVal > 0 && !canApplyDiscount) {
+      toast.error("Discounts are disabled for salesperson accounts. Ask the business owner to enable them in Settings.");
+      setDiscountAmount("");
+      return;
+    }
+
     const items: InvoiceLineItem[] = cart.map(l => ({
       productId: l.productId, productName: l.productName, quantity: l.quantity, unitPrice: l.unitPrice,
     }));
@@ -315,7 +330,7 @@ export default function PosPage() {
                 amount: result.amount,
                 subtotal,
                 discountAmount: discountVal,
-                taxAmount: tax,
+                taxAmount: result.taxAmount,
                 items: cart,
                 customerName: customerName || "Walk-in Customer",
                 method: payMethod,
@@ -386,7 +401,7 @@ export default function PosPage() {
           amount: result.amount,
           subtotal,
           discountAmount: discountVal,
-          taxAmount: tax,
+          taxAmount: result.taxAmount,
           items: cart,
           customerName: customerName || "Walk-in Customer",
           method: payMethod,
@@ -512,7 +527,18 @@ export default function PosPage() {
             <div className="flex justify-between text-sm text-muted"><span>Subtotal</span><span>{formatMoney(subtotal, profile?.currency || "GHS")}</span></div>
             <div className="flex items-center justify-between gap-4">
               <span className="text-sm text-muted">Discount</span>
-              <input type="number" className="bg-transparent border-b border-border text-right text-sm font-bold text-green w-20 focus:border-gold outline-none" placeholder="0.00" value={discountAmount} onChange={e => setDiscountAmount(e.target.value)} />
+              <input
+                type="number"
+                min="0"
+                max={subtotal}
+                step="0.01"
+                className="bg-transparent border-b border-border text-right text-sm font-bold text-green w-20 focus:border-gold outline-none disabled:opacity-40 disabled:cursor-not-allowed"
+                placeholder={canApplyDiscount ? "0.00" : "Owner only"}
+                value={discountAmount}
+                onChange={e => setDiscountAmount(e.target.value)}
+                disabled={!canApplyDiscount}
+                title={canApplyDiscount ? "Apply a checkout discount" : "Ask the business owner to enable salesperson discounts in Settings"}
+              />
             </div>
             <div className="flex justify-between text-xl font-grotesk font-bold text-white pt-2 border-t border-border/50"><span>Total</span><span className="text-gold">{formatMoney(total, profile?.currency || "GHS")}</span></div>
           </div>
@@ -580,7 +606,7 @@ export default function PosPage() {
           <div className="flex justify-center overflow-hidden rounded-lg border border-border bg-white">
             <div id="receipt-content" className="p-4" style={{ width: receiptWidth === 58 ? "220px" : "300px" }}>
               {receipt && (
-                <BrandedDocument profile={profile} docType="INVOICE" docNumber={receipt.invoiceId.slice(-6).toUpperCase()} date={receipt.timestamp} clientName={receipt.customerName} items={receipt.items} amount={receipt.amount} subtotal={receipt.subtotal} discountAmount={receipt.discountAmount} taxAmount={receipt.taxAmount} taxRate={profile?.taxRate || 0} taxLabel="VAT" paymentMethod={receipt.method} currencyCode={profile?.currency || "GHS"} width={receiptWidth} />
+                <BrandedDocument profile={profile} docType="INVOICE" docNumber={receipt.invoiceId.slice(-6).toUpperCase()} date={receipt.timestamp} clientName={receipt.customerName} items={receipt.items} amount={receipt.amount} subtotal={receipt.subtotal} discountAmount={receipt.discountAmount} taxAmount={receipt.taxAmount} taxRate={profile?.taxRate || 0} taxLabel={profile?.taxLabel || "VAT"} paymentMethod={receipt.method} amountPaid={receipt.amountPaid} currencyCode={profile?.currency || "GHS"} width={receiptWidth} paper />
               )}
             </div>
           </div>
@@ -593,13 +619,18 @@ export default function PosPage() {
                     businessName: profile.businessName,
                     businessAddress: profile.address,
                     businessPhone: profile.phone,
+                    businessEmail: profile.email,
+                    logoDataUrl: profile.logoDataUrl,
+                    accentColor: profile.accentColor,
+                    footerNote: profile.footerNote,
                     invoiceNumber: receipt.invoiceId,
+                    issuedAt: receipt.timestamp,
                     items: receipt.items,
                     subtotal: receipt.subtotal,
                     discountAmount: receipt.discountAmount,
                     taxAmount: receipt.taxAmount,
                     taxRate: profile?.taxRate || 0,
-                    taxLabel: "VAT",
+                    taxLabel: profile?.taxLabel || "VAT",
                     total: receipt.amount,
                     paymentMethod: receipt.method,
                     amountPaid: receipt.amountPaid,

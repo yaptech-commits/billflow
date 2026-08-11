@@ -183,6 +183,10 @@ export async function POST(request: NextRequest) {
       }
 
       const profile = profileSnap.exists ? profileSnap.data() : {};
+      if (input.discountAmount > 0 && actor.role === "salesperson" && profile?.allowStaffDiscounts !== true) {
+        throw new HttpError(403, "Discounts are disabled for salesperson accounts. Ask the business owner to enable them in Settings.");
+      }
+
       const taxRate = typeof profile?.taxRate === "number" && profile.taxRate >= 0 && profile.taxRate <= 100
         ? profile.taxRate
         : 0;

@@ -29,6 +29,8 @@ interface BrandedDocumentProps {
   currencyCode?: string;
   /** Receipt width in mm, e.g. 58 or 80. Defaults to 80. */
   width?: 58 | 80;
+  /** Use paper-safe dark text for the white POS receipt preview. */
+  paper?: boolean;
 }
 
 /**
@@ -38,7 +40,7 @@ interface BrandedDocumentProps {
  * than BillFlow's.
  */
 export default function BrandedDocument({
-  profile, docType, docNumber, date, clientName, items, amount, subtotal, taxAmount, taxRate, taxLabel, discountAmount, amountPaid, paymentMethod, meta, currencyCode, width = 80,
+  profile, docType, docNumber, date, clientName, items, amount, subtotal, taxAmount, taxRate, taxLabel, discountAmount, amountPaid, paymentMethod, meta, currencyCode, width = 80, paper = false,
 }: BrandedDocumentProps) {
   const accent = profile?.accentColor || DEFAULT_ACCENT_COLOR;
   const businessName = profile?.businessName || "Your Business";
@@ -59,7 +61,7 @@ export default function BrandedDocument({
             </div>
           )}
           <div className="min-w-0">
-            <p className="font-grotesk font-semibold text-white truncate">{businessName}</p>
+            <p className={`font-grotesk font-semibold truncate ${paper ? "text-gray-900" : "text-white"}`}>{businessName}</p>
             {profile?.address && <p className="text-xs text-muted truncate">{profile.address}</p>}
             {profile?.phone && <p className="text-xs text-muted">{profile.phone}</p>}
             {profile?.email && <p className="text-xs text-muted">{profile.email}</p>}
@@ -74,14 +76,14 @@ export default function BrandedDocument({
 
       <div className="border-b border-dashed border-border pb-3">
         <p className="text-xs text-muted">Billed to</p>
-        <p className="text-surface">{clientName}</p>
+        <p className={paper ? "text-gray-900" : "text-surface"}>{clientName}</p>
         {meta && <p className="text-xs text-muted mt-1">{meta}</p>}
         {paymentMethod && <p className="text-xs text-muted">Payment: {paymentMethod === "momo" ? "Mobile Money" : paymentMethod === "card" ? "Card" : "Cash"}</p>}
       </div>
 
       <div className="space-y-2 border-b border-dashed border-border pb-3">
         {items.map((li, i) => (
-          <div key={i} className="text-surface">
+          <div className={paper ? "text-gray-900" : "text-surface"}>
             <div className="flex justify-between font-medium">
               <span className="flex-1">{li.productName}</span>
               <span className="ml-2">{formatMoney(li.unitPrice * li.quantity, currencyCode)}</span>

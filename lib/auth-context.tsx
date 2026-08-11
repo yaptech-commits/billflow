@@ -1,7 +1,7 @@
 "use client";
 import { createContext, useContext, useEffect, useState } from "react";
 import { User, onAuthStateChanged, signOut } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { auth, isFirebaseConfigured } from "@/lib/firebase";
 import { resolveBusinessContext, StaffRole } from "@/lib/db";
 import { useRouter } from "next/navigation";
 
@@ -43,6 +43,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     : realBusinessId;
 
   useEffect(() => {
+    if (!isFirebaseConfigured || !auth) {
+      setLoading(false);
+      return;
+    }
+
     const unsub = onAuthStateChanged(auth, async (u) => {
       setUser(u);
       if (u && u.email) {

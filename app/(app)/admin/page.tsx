@@ -6,7 +6,7 @@ import {
 } from "firebase/firestore";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { db, auth } from "@/lib/firebase";
-import { BusinessProfile, Staff, Product, Invoice } from "@/lib/db";
+import { BusinessProfile, Staff, Product, Invoice, deleteBusinessData } from "@/lib/db";
 import { formatMoney, cn } from "@/lib/utils";
 import { 
   Users, Package, FileText, Search, ShieldAlert, 
