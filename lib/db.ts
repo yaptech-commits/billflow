@@ -1958,9 +1958,11 @@ export interface GroupBlockBooking {
 
 // Hotel Firestore Helpers
 export async function getHotelRooms(businessId: string, propertyId = "default_property"): Promise<HotelRoom[]> {
-  const q = query(col("hotelRooms"), where("businessId", "==", businessId), where("propertyId", "==", propertyId));
+  const q = query(col("hotelRooms"), where("businessId", "==", businessId));
   const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+  return snap.docs
+    .map(d => ({ id: d.id, ...(d.data() as any) } as HotelRoom))
+    .filter(r => !propertyId || r.propertyId === propertyId || !r.propertyId);
 }
 
 export async function saveHotelRoom(room: Omit<HotelRoom, "id" | "createdAt">, id?: string) {
@@ -1977,9 +1979,11 @@ export async function deleteHotelRoom(id: string) {
 }
 
 export async function getReservations(businessId: string, propertyId = "default_property"): Promise<Reservation[]> {
-  const q = query(col("hotelReservations"), where("businessId", "==", businessId), where("propertyId", "==", propertyId));
+  const q = query(col("hotelReservations"), where("businessId", "==", businessId));
   const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+  return snap.docs
+    .map(d => ({ id: d.id, ...(d.data() as any) } as Reservation))
+    .filter(res => !propertyId || res.propertyId === propertyId || !res.propertyId);
 }
 
 export async function saveReservation(reservation: Omit<Reservation, "id" | "createdAt">, id?: string) {
@@ -1992,9 +1996,11 @@ export async function saveReservation(reservation: Omit<Reservation, "id" | "cre
 }
 
 export async function getHotelGuests(businessId: string, propertyId = "default_property"): Promise<HotelGuest[]> {
-  const q = query(col("hotelGuests"), where("businessId", "==", businessId), where("propertyId", "==", propertyId));
+  const q = query(col("hotelGuests"), where("businessId", "==", businessId));
   const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+  return snap.docs
+    .map(d => ({ id: d.id, ...(d.data() as any) } as HotelGuest))
+    .filter(g => !propertyId || g.propertyId === propertyId || !g.propertyId);
 }
 
 export async function saveHotelGuest(guest: Omit<HotelGuest, "id" | "createdAt">, id?: string) {
@@ -2008,9 +2014,11 @@ export async function saveHotelGuest(guest: Omit<HotelGuest, "id" | "createdAt">
 
 
 export async function getSeasonalRatePlans(businessId: string, propertyId = "default_property"): Promise<SeasonalRatePlan[]> {
-  const q = query(col("hotelRatePlans"), where("businessId", "==", businessId), where("propertyId", "==", propertyId));
+  const q = query(col("hotelRatePlans"), where("businessId", "==", businessId));
   const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+  return snap.docs
+    .map(d => ({ id: d.id, ...(d.data() as any) } as SeasonalRatePlan))
+    .filter(p => !propertyId || p.propertyId === propertyId || !p.propertyId);
 }
 
 export async function saveSeasonalRatePlan(ratePlan: Omit<SeasonalRatePlan, "id" | "createdAt">, id?: string) {
@@ -2023,9 +2031,11 @@ export async function saveSeasonalRatePlan(ratePlan: Omit<SeasonalRatePlan, "id"
 }
 
 export async function getHotelTaxRules(businessId: string, propertyId = "default_property"): Promise<TaxRule[]> {
-  const q = query(col("hotelTaxRules"), where("businessId", "==", businessId), where("propertyId", "==", propertyId));
+  const q = query(col("hotelTaxRules"), where("businessId", "==", businessId));
   const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+  return snap.docs
+    .map(d => ({ id: d.id, ...(d.data() as any) } as TaxRule))
+    .filter(t => !propertyId || t.propertyId === propertyId || !t.propertyId);
 }
 
 export async function saveHotelTaxRule(rule: Omit<TaxRule, "id" | "createdAt">, id?: string) {
@@ -2038,9 +2048,11 @@ export async function saveHotelTaxRule(rule: Omit<TaxRule, "id" | "createdAt">, 
 }
 
 export async function getGroupBlockBookings(businessId: string, propertyId = "default_property"): Promise<GroupBlockBooking[]> {
-  const q = query(col("hotelGroupBookings"), where("businessId", "==", businessId), where("propertyId", "==", propertyId));
+  const q = query(col("hotelGroupBookings"), where("businessId", "==", businessId));
   const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+  return snap.docs
+    .map(d => ({ id: d.id, ...(d.data() as any) } as GroupBlockBooking))
+    .filter(g => !propertyId || g.propertyId === propertyId || !g.propertyId);
 }
 
 export async function saveGroupBlockBooking(group: Omit<GroupBlockBooking, "id" | "createdAt">, id?: string) {
