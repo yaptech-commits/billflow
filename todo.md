@@ -1,7 +1,6 @@
-# 58MM/80MM Receipt Width Selector Restoration
+# POS Receipt Preview Overflow Fix
 
-- [ ] Restore the `receiptWidth` state (`58` | `80`) in `app/(app)/pos/page.tsx`.
-- [ ] Add back the 58MM and 80MM selection buttons in the POS "Sale Successful" modal.
-- [ ] Pass `width={receiptWidth}` into `BrandedDocument` so the modal preview and thermal print function respect the user's selected width.
-- [ ] Ensure the reference invoice design adapts cleanly to both thermal (58mm/80mm) and A4 widths, and verify with a clean production build.
-- [ ] Commit and push changes using `ayindenabawisdom@gmail.com`.
+- [ ] Update `components/BrandedDocument.tsx` and `lib/print-receipt.ts` so the preview container scales to fit mobile modal viewports (`max-w-full`, `box-sizing: border-box`, `overflow-x: hidden`).
+- [ ] Ensure `width={58}` and `width={80}` render compact thermal layouts that fit narrow screens without horizontal clipping.
+- [ ] Verify production build across all routes.
+- [ ] Commit and push the fix using `ayindenabawisdom@gmail.com`.

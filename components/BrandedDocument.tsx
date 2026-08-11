@@ -40,9 +40,9 @@ const GOLD = "#E6A21A";
 const INK = "#111827";
 const RULE = "#D1D5DB";
 
-function BillFlowMark() {
+function BillFlowMark({ size }: { size?: number }) {
   return (
-    <svg viewBox="0 0 190 190" role="img" aria-label="BillFlow" className="h-[clamp(92px,18vw,190px)] w-[clamp(92px,18vw,190px)] shrink-0" xmlns="http://www.w3.org/2000/svg">
+    <svg viewBox="0 0 190 190" role="img" aria-label="BillFlow" className="h-[clamp(64px,18vw,190px)] w-[clamp(64px,18vw,190px)] max-w-[32vw] shrink-0" style={size ? { width: size, height: size } : undefined} xmlns="http://www.w3.org/2000/svg">
       <defs>
         <linearGradient id="preview-paper" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0" stopColor="#FFFFFF" />
@@ -82,76 +82,78 @@ function ReferenceInvoice({
   const customerName = clientName || "Valued Customer";
   const issuedDate = date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
   const invoiceNumber = docNumber || "INV-000000";
+  const isThermal = width === 58 || width === 80;
+  const isNarrow = width === 58;
 
   return (
-    <div className="w-full bg-white px-[clamp(20px,5vw,68px)] pb-[clamp(24px,4vw,48px)] pt-[clamp(20px,4vw,54px)] font-sans text-[#111827]" style={{ fontFamily: "Arial, Helvetica, sans-serif" }}>
-      <div className="flex items-start justify-between gap-4">
-        <div className="pt-[clamp(10px,3vw,34px)]">
-          <h1 className="m-0 font-sans text-[clamp(48px,10vw,94px)] font-extrabold leading-[.82] tracking-[.02em] text-[#1556B8]">INVOICE</h1>
-          <div className="mt-[clamp(18px,3vw,34px)] h-[3px] w-[clamp(150px,45vw,360px)] bg-[#E6A21A]" />
+    <div className="w-full min-w-0 max-w-full overflow-hidden bg-white px-[clamp(12px,5vw,68px)] pb-[clamp(20px,4vw,48px)] pt-[clamp(16px,4vw,54px)] font-sans text-[#111827]" style={{ fontFamily: "Arial, Helvetica, sans-serif", boxSizing: "border-box" }}>
+      <div className="flex min-w-0 items-start justify-between gap-2 overflow-hidden">
+        <div className="min-w-0 flex-1 pt-[clamp(6px,3vw,34px)]">
+          <h1 className="m-0 max-w-full overflow-hidden whitespace-nowrap font-sans font-extrabold leading-[.82] tracking-[.02em] text-[#1556B8]" style={{ fontSize: isNarrow ? 38 : isThermal ? 52 : undefined }}>INVOICE</h1>
+          <div className="mt-[clamp(12px,3vw,34px)] h-[3px] max-w-full bg-[#E6A21A]" style={{ width: isNarrow ? "74%" : isThermal ? "82%" : "clamp(150px,45vw,360px)" }} />
         </div>
-        <BillFlowMark />
+        <BillFlowMark size={isNarrow ? 70 : isThermal ? 96 : undefined} />
       </div>
 
-      <div className="mt-[clamp(28px,5vw,64px)] grid grid-cols-2 gap-5 pb-[clamp(22px,4vw,46px)]">
-        <div className="pt-1">
-          <div className="mb-4 text-[clamp(14px,2vw,22px)] font-extrabold tracking-[.08em] text-[#1556B8]">BILL TO</div>
-          <div className="mb-3 text-[clamp(17px,2.5vw,28px)] font-bold text-[#111827]">{customerName}</div>
-          {profile?.address && <div className="whitespace-pre-line text-[clamp(13px,1.8vw,21px)] leading-[1.55] text-[#111827]">{profile.address}</div>}
+      <div className="mt-[clamp(18px,5vw,64px)] grid min-w-0 grid-cols-2 gap-3 overflow-hidden pb-[clamp(18px,4vw,46px)]">
+        <div className="min-w-0 overflow-hidden pt-1">
+          <div className="mb-2 break-words text-[clamp(12px,2vw,22px)] font-extrabold tracking-[.08em] text-[#1556B8]">BILL TO</div>
+          <div className="mb-2 break-words text-[clamp(14px,2.5vw,28px)] font-bold text-[#111827]">{customerName}</div>
+          {profile?.address && <div className="break-words whitespace-pre-line text-[clamp(11px,1.8vw,21px)] leading-[1.45] text-[#111827]">{profile.address}</div>}
         </div>
-        <div className="grid content-start gap-4 border-l border-[#D1D5DB] pl-[clamp(18px,4vw,64px)] pt-4">
-          <div className="grid grid-cols-[minmax(86px,1fr)_minmax(100px,1.25fr)] items-baseline gap-3">
-            <span className="text-[clamp(12px,1.8vw,20px)] font-extrabold tracking-[.06em] text-[#1556B8]">INVOICE #</span>
-            <span className="text-[clamp(13px,1.9vw,21px)] text-[#111827]">{invoiceNumber}</span>
+        <div className="grid min-w-0 content-start gap-2 overflow-hidden border-l border-[#D1D5DB] pl-[clamp(8px,4vw,64px)] pt-2">
+          <div className="grid min-w-0 grid-cols-[minmax(0,.9fr)_minmax(0,1.1fr)] items-baseline gap-1">
+            <span className="min-w-0 break-words text-[clamp(10px,1.8vw,20px)] font-extrabold tracking-[.04em] text-[#1556B8]">INVOICE #</span>
+            <span className="min-w-0 break-words text-[clamp(10px,1.9vw,21px)] text-[#111827]">{invoiceNumber}</span>
           </div>
-          <div className="grid grid-cols-[minmax(86px,1fr)_minmax(100px,1.25fr)] items-baseline gap-3">
-            <span className="text-[clamp(12px,1.8vw,20px)] font-extrabold tracking-[.06em] text-[#1556B8]">DATE</span>
-            <span className="text-[clamp(13px,1.9vw,21px)] text-[#111827]">{issuedDate}</span>
+          <div className="grid min-w-0 grid-cols-[minmax(0,.9fr)_minmax(0,1.1fr)] items-baseline gap-1">
+            <span className="min-w-0 break-words text-[clamp(10px,1.8vw,20px)] font-extrabold tracking-[.04em] text-[#1556B8]">DATE</span>
+            <span className="min-w-0 break-words text-[clamp(10px,1.9vw,21px)] text-[#111827]">{issuedDate}</span>
           </div>
-          <div className="grid grid-cols-[minmax(86px,1fr)_minmax(100px,1.25fr)] items-baseline gap-3">
-            <span className="text-[clamp(12px,1.8vw,20px)] font-extrabold tracking-[.06em] text-[#1556B8]">DUE DATE</span>
-            <span className="text-[clamp(13px,1.9vw,21px)] text-[#111827]">{issuedDate}</span>
+          <div className="grid min-w-0 grid-cols-[minmax(0,.9fr)_minmax(0,1.1fr)] items-baseline gap-1">
+            <span className="min-w-0 break-words text-[clamp(10px,1.8vw,20px)] font-extrabold tracking-[.04em] text-[#1556B8]">DUE DATE</span>
+            <span className="min-w-0 break-words text-[clamp(10px,1.9vw,21px)] text-[#111827]">{issuedDate}</span>
           </div>
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-[8px] border border-[#D1D5DB]">
-        <table className="w-full table-fixed border-collapse">
+      <div className="w-full min-w-0 max-w-full overflow-hidden rounded-[8px] border border-[#D1D5DB]">
+        <table className="w-full min-w-0 table-fixed border-collapse">
           <thead>
             <tr className="bg-[#1556B8] text-white">
-              <th className="w-[48%] px-3 py-4 text-left text-[clamp(12px,1.9vw,21px)] font-bold sm:px-6">Item</th>
-              <th className="w-[15%] px-1 py-4 text-center text-[clamp(12px,1.9vw,21px)] font-bold">Qty</th>
-              <th className="w-[18.5%] px-1 py-4 text-right text-[clamp(12px,1.9vw,21px)] font-bold">Price</th>
-              <th className="w-[18.5%] px-3 py-4 text-right text-[clamp(12px,1.9vw,21px)] font-bold sm:px-6">Amount</th>
+              <th className="w-[48%] min-w-0 break-words px-1 py-3 text-left text-[clamp(9px,1.9vw,21px)] font-bold sm:px-6" style={{ fontSize: isNarrow ? 8 : isThermal ? 10 : undefined }}>Item</th>
+              <th className="w-[15%] min-w-0 break-words px-1 py-3 text-center text-[clamp(9px,1.9vw,21px)] font-bold" style={{ fontSize: isNarrow ? 8 : isThermal ? 10 : undefined }}>Qty</th>
+              <th className="w-[18.5%] min-w-0 break-words px-1 py-3 text-right text-[clamp(9px,1.9vw,21px)] font-bold" style={{ fontSize: isNarrow ? 8 : isThermal ? 10 : undefined }}>Price</th>
+              <th className="w-[18.5%] min-w-0 break-words px-1 py-3 text-right text-[clamp(9px,1.9vw,21px)] font-bold sm:px-6" style={{ fontSize: isNarrow ? 8 : isThermal ? 10 : undefined }}>Amount</th>
             </tr>
           </thead>
           <tbody>
             {items.map((item, index) => (
               <tr key={`${item.productName}-${index}`} className="border-b border-[#D1D5DB] last:border-b-0">
-                <td className="px-3 py-5 text-[clamp(12px,1.9vw,21px)] font-bold sm:px-6">{item.productName}</td>
-                <td className="px-1 py-5 text-center text-[clamp(12px,1.9vw,21px)]">{item.quantity}</td>
-                <td className="px-1 py-5 text-right text-[clamp(12px,1.9vw,21px)] whitespace-nowrap">{formatMoney(item.unitPrice, currency)}</td>
-                <td className="px-3 py-5 text-right text-[clamp(12px,1.9vw,21px)] whitespace-nowrap sm:px-6">{formatMoney(item.unitPrice * item.quantity, currency)}</td>
+                <td className="min-w-0 break-words px-2 py-4 text-[clamp(10px,1.9vw,21px)] font-bold sm:px-6">{item.productName}</td>
+                <td className="min-w-0 break-words px-1 py-4 text-center text-[clamp(10px,1.9vw,21px)]">{item.quantity}</td>
+                <td className="min-w-0 break-all px-1 py-4 text-right text-[clamp(9px,1.9vw,21px)]" style={{ fontSize: isNarrow ? 8 : isThermal ? 10 : undefined }}>{formatMoney(item.unitPrice, currency)}</td>
+                <td className="min-w-0 break-all px-1 py-4 text-right text-[clamp(9px,1.9vw,21px)] sm:px-6" style={{ fontSize: isNarrow ? 8 : isThermal ? 10 : undefined }}>{formatMoney(item.unitPrice * item.quantity, currency)}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
-      <div className="mt-[clamp(26px,5vw,64px)] flex justify-end">
-        <table className="w-[min(100%,380px)] border-collapse">
+      <div className="mt-[clamp(20px,5vw,64px)] flex min-w-0 justify-end overflow-hidden">
+        <table className="w-full max-w-[380px] min-w-0 border-collapse">
           <tbody>
-            <tr><td className="h-10 text-[clamp(12px,1.8vw,20px)] font-bold uppercase tracking-[.04em]">SUBTOTAL</td><td className="h-10 text-right text-[clamp(12px,1.8vw,20px)] whitespace-nowrap">{formatMoney(calculatedSubtotal, currency)}</td></tr>
-            {discountAmount != null && discountAmount > 0 && <tr><td className="h-10 text-[clamp(12px,1.8vw,20px)] font-bold uppercase tracking-[.04em]">DISCOUNT</td><td className="h-10 text-right text-[clamp(12px,1.8vw,20px)] whitespace-nowrap">-{formatMoney(discountAmount, currency)}</td></tr>}
-            <tr><td className="h-10 text-[clamp(12px,1.8vw,20px)] font-bold uppercase tracking-[.04em]">{taxTitle}</td><td className="h-10 text-right text-[clamp(12px,1.8vw,20px)] whitespace-nowrap">{formatMoney(tax, currency)}</td></tr>
-            <tr className="border-t-[3px] border-[#E6A21A]"><td className="pt-4 text-[clamp(19px,3.3vw,34px)] font-extrabold uppercase tracking-[.04em] text-[#1556B8]">TOTAL</td><td className="pt-4 text-right text-[clamp(19px,3.3vw,34px)] font-extrabold text-[#1556B8] whitespace-nowrap">{formatMoney(amount, currency)}</td></tr>
+            <tr><td className="h-8 min-w-0 break-words text-[clamp(10px,1.8vw,20px)] font-bold uppercase tracking-[.04em]">SUBTOTAL</td><td className="h-8 min-w-0 break-all text-right text-[clamp(9px,1.8vw,20px)]">{formatMoney(calculatedSubtotal, currency)}</td></tr>
+            {discountAmount != null && discountAmount > 0 && <tr><td className="h-8 min-w-0 break-words text-[clamp(10px,1.8vw,20px)] font-bold uppercase tracking-[.04em]">DISCOUNT</td><td className="h-8 min-w-0 break-all text-right text-[clamp(9px,1.8vw,20px)]">-{formatMoney(discountAmount, currency)}</td></tr>}
+            <tr><td className="h-8 min-w-0 break-words text-[clamp(10px,1.8vw,20px)] font-bold uppercase tracking-[.04em]">{taxTitle}</td><td className="h-8 min-w-0 break-all text-right text-[clamp(9px,1.8vw,20px)]">{formatMoney(tax, currency)}</td></tr>
+            <tr className="border-t-[3px] border-[#E6A21A]"><td className="min-w-0 break-words pt-3 text-[clamp(16px,3.3vw,34px)] font-extrabold uppercase tracking-[.04em] text-[#1556B8]">TOTAL</td><td className="min-w-0 break-all pt-3 text-right text-[clamp(14px,3.3vw,34px)] font-extrabold text-[#1556B8]">{formatMoney(amount, currency)}</td></tr>
           </tbody>
         </table>
       </div>
 
-      <div className="mt-[clamp(30px,6vw,82px)] border-t-2 border-[#1556B8] pt-[clamp(18px,4vw,42px)] text-center">
-        <div className="inline-flex items-center gap-4 text-[clamp(15px,2.5vw,27px)] text-[#0B3F91]">
-          <span className="inline-flex h-12 w-12 items-center justify-center rounded-full border-2 border-[#1556B8] font-serif text-4xl leading-none text-[#E6A21A]">♡</span>
+      <div className="mt-[clamp(24px,6vw,82px)] border-t-2 border-[#1556B8] pt-[clamp(14px,4vw,42px)] text-center">
+        <div className="inline-flex max-w-full items-center gap-2 break-words text-[clamp(12px,2.5vw,27px)] text-[#0B3F91]">
+          <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-[#1556B8] font-serif text-3xl leading-none text-[#E6A21A]">♡</span>
           <span>Thank you for your business!</span>
         </div>
         {profile?.footerNote && <p className="mt-3 text-xs text-[#4B5563]">{profile.footerNote}</p>}
