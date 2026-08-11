@@ -13,6 +13,8 @@ export const metadata: Metadata = {
   description: "Invoicing, MoMo payments, WiFi vouchers & reports — built for Ghana.",
 };
 
+export const dynamic = "force-dynamic";
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${inter.variable} ${grotesk.variable}`}>
