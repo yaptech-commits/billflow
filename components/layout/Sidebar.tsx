@@ -6,7 +6,7 @@ import {
   LayoutDashboard, FileText, Users, Ticket, 
   CreditCard, BarChart3, Settings, Package, 
   ChevronLeft, ChevronRight, ShoppingCart, Truck, UserCircle, Shield,
-  LogOut, Building2, AlertCircle, Pill, BedDouble, CalendarDays, ConciergeBell, UserRound
+  LogOut, Building2, AlertCircle, Pill, BedDouble, CalendarDays, ConciergeBell, UserRound, ChevronDown
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -19,6 +19,12 @@ export default function Sidebar() {
   const [businesses, setBusinesses] = useState<BusinessProfile[]>([]);
   const [showBusinessSwitcher, setShowBusinessSwitcher] = useState(false);
   const [currentBusinessProfile, setCurrentBusinessProfile] = useState<BusinessProfile | null>(null);
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
+    general: true,
+    pharmacy: true,
+    hotel: true,
+    administration: true,
+  });
 
   useEffect(() => {
     if (role === "super_admin") {
@@ -109,6 +115,59 @@ export default function Sidebar() {
     return item.roles.includes(role || "");
   });
   const currentBusiness = businesses.find(b => b.businessId === selectedBusinessId);
+
+  const superAdminGroups = [
+    {
+      key: "general",
+      label: "General Business",
+      shortLabel: "GEN",
+      description: "Core sales, billing, inventory, and reporting",
+      paths: ["/dashboard", "/pos", "/invoices", "/products", "/clients", "/payments", "/suppliers", "/purchase-orders", "/vouchers", "/reports"],
+    },
+    {
+      key: "pharmacy",
+      label: "Pharmacy",
+      shortLabel: "PHR",
+      description: "Medicine, prescription, and stock controls",
+      paths: ["/drugs", "/expiry-alerts", "/prescriptions", "/insurance-claims", "/stock-adjustments", "/returns", "/controlled-substances", "/barcode-management"],
+    },
+    {
+      key: "hotel",
+      label: "Hotel",
+      shortLabel: "HTL",
+      description: "Rooms, reservations, front desk, and guest operations",
+      paths: ["/hotel/rooms", "/hotel/reservations", "/hotel/front-desk", "/hotel/guests", "/hotel/reports", "/hotel/booking-widget"],
+    },
+    {
+      key: "administration",
+      label: "Administration",
+      shortLabel: "ADM",
+      description: "Users, business settings, and super-admin tools",
+      paths: ["/staff", "/settings", "/admin", "/admin-utilities"],
+    },
+  ];
+
+  const renderMenuItem = (item: (typeof menuItems)[number]) => {
+    const active = pathname === item.path;
+    const isDisabled = (role === "owner" || role === "salesperson") && permissions && permissions.length > 0 && !permissions.includes(item.path);
+    return (
+      <Link
+        key={item.path}
+        href={isDisabled ? "#" : item.path}
+        onClick={(e) => isDisabled && e.preventDefault()}
+        className={cn(
+          "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group",
+          active ? "bg-gold text-black font-bold" : "text-muted hover:text-white hover:bg-white/5",
+          isDisabled && "opacity-50 cursor-not-allowed hover:bg-transparent hover:text-muted",
+          collapsed && "justify-center px-0"
+        )}
+        title={isDisabled ? "You don't have permission to access this page" : item.name}
+      >
+        <item.icon size={20} className={cn(active ? "text-black" : "text-muted group-hover:text-gold")} />
+        {!collapsed && <span>{item.name}</span>}
+      </Link>
+    );
+  };
 
   return (
     <aside className={cn(
@@ -201,27 +260,41 @@ export default function Sidebar() {
           </div>
         )}
 
-        {filteredItems.map((item) => {
-          const active = pathname === item.path;
-          const isDisabled = (role === "owner" || role === "salesperson") && permissions && permissions.length > 0 && !permissions.includes(item.path);
-          return (
-            <Link 
-              key={item.path} 
-              href={isDisabled ? "#" : item.path}
-              onClick={(e) => isDisabled && e.preventDefault()}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all group",
-                active ? "bg-gold text-black font-bold" : "text-muted hover:text-white hover:bg-white/5",
-                isDisabled && "opacity-50 cursor-not-allowed hover:bg-transparent hover:text-muted",
-                collapsed && "justify-center px-0"
-              )}
-              title={isDisabled ? "You don't have permission to access this page" : ""}
-            >
-              <item.icon size={20} className={cn(active ? "text-black" : "text-muted group-hover:text-gold")} />
-              {!collapsed && <span>{item.name}</span>}
-            </Link>
-          );
-        })}
+        {role === "super_admin" ? (
+          <div className="space-y-3">
+            {superAdminGroups.map((group) => {
+              const isExpanded = expandedGroups[group.key];
+              const groupHasActivePage = group.paths.includes(pathname);
+              return (
+                <section key={group.key} className="space-y-1">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedGroups((current) => ({ ...current, [group.key]: !current[group.key] }))}
+                    className={cn(
+                      "w-full flex items-center justify-between rounded-lg px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors",
+                      groupHasActivePage ? "text-gold bg-gold/10" : "text-muted hover:text-white hover:bg-white/5",
+                      collapsed && "justify-center px-0"
+                    )}
+                    title={group.label + ": " + group.description}
+                  >
+                    <span>{collapsed ? group.shortLabel : group.label}</span>
+                    {!collapsed && <ChevronDown size={14} className={cn("transition-transform", isExpanded && "rotate-180")} />}
+                  </button>
+                  {isExpanded && (
+                    <div className="space-y-1">
+                      {group.paths.map((path) => {
+                        const item = menuItems.find((candidate) => candidate.path === path);
+                        return item ? renderMenuItem(item) : null;
+                      })}
+                    </div>
+                  )}
+                </section>
+              );
+            })}
+          </div>
+        ) : (
+          filteredItems.map(renderMenuItem)
+        )}
       </nav>
 
       <div className="p-3 border-t border-[#1E1E2E]">
