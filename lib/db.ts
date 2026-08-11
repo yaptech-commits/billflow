@@ -691,11 +691,14 @@ export async function openShift(data: Omit<Shift, "id" | "openedAt" | "status">)
 }
 
 export async function getActiveShift(businessId: string, userId: string): Promise<Shift | null> {
+  // Query by businessId or userId alone to avoid requiring compound composite indexes
   const q = businessId === "SUPER_ADMIN"
-    ? query(col("shifts"), where("userId", "==", userId), where("status", "==", "open"), orderBy("openedAt", "desc"), limit(1))
-    : query(col("shifts"), where("businessId", "==", businessId), where("userId", "==", userId), where("status", "==", "open"), orderBy("openedAt", "desc"), limit(1));
+    ? query(col("shifts"), where("userId", "==", userId))
+    : query(col("shifts"), where("businessId", "==", businessId));
   const snap = await getDocs(q);
-  return snap.empty ? null : ({ id: snap.docs[0].id, ...snap.docs[0].data() } as Shift);
+  const shifts = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) } as Shift));
+  const openShift = shifts.find(s => s.userId === userId && s.status === "open");
+  return openShift || null;
 }
 
 export async function closeShift(
@@ -2138,9 +2141,11 @@ export interface HotelWaitlistEntry {
 }
 
 export async function getHotelWaitlist(businessId: string, propertyId = "default_property"): Promise<HotelWaitlistEntry[]> {
-  const q = query(col("hotelWaitlist"), where("businessId", "==", businessId), where("propertyId", "==", propertyId));
+  const q = query(col("hotelWaitlist"), where("businessId", "==", businessId));
   const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+  return snap.docs
+    .map(d => ({ id: d.id, ...(d.data() as any) } as HotelWaitlistEntry))
+    .filter(w => !propertyId || w.propertyId === propertyId || !w.propertyId);
 }
 
 export async function saveHotelWaitlistEntry(entry: Omit<HotelWaitlistEntry, "id" | "createdAt">, id?: string) {
@@ -2371,14 +2376,12 @@ export interface MaintenanceWorkOrder {
   resolvedAt?: any;
 }
 
-export async function getHousekeepingTasks(businessId: string, propertyId: string): Promise<HousekeepingTask[]> {
-  const q = query(
-    col("hotelHousekeeping"),
-    where("businessId", "==", businessId),
-    where("propertyId", "==", propertyId)
-  );
+export async function getHousekeepingTasks(businessId: string, propertyId = "default_property"): Promise<HousekeepingTask[]> {
+  const q = query(col("hotelHousekeeping"), where("businessId", "==", businessId));
   const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+  return snap.docs
+    .map(d => ({ id: d.id, ...(d.data() as any) } as HousekeepingTask))
+    .filter(t => !propertyId || t.propertyId === propertyId || !t.propertyId);
 }
 
 export async function createHousekeepingTask(data: Omit<HousekeepingTask, "id" | "createdAt">) {
@@ -2396,14 +2399,12 @@ export async function updateHousekeepingTask(id: string, data: Partial<Housekeep
   return updateDoc(ref, data);
 }
 
-export async function getMaintenanceWorkOrders(businessId: string, propertyId: string): Promise<MaintenanceWorkOrder[]> {
-  const q = query(
-    col("hotelMaintenance"),
-    where("businessId", "==", businessId),
-    where("propertyId", "==", propertyId)
-  );
+export async function getMaintenanceWorkOrders(businessId: string, propertyId = "default_property"): Promise<MaintenanceWorkOrder[]> {
+  const q = query(col("hotelMaintenance"), where("businessId", "==", businessId));
   const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+  return snap.docs
+    .map(d => ({ id: d.id, ...(d.data() as any) } as MaintenanceWorkOrder))
+    .filter(m => !propertyId || m.propertyId === propertyId || !m.propertyId);
 }
 
 export async function createMaintenanceWorkOrder(data: Omit<MaintenanceWorkOrder, "id" | "createdAt">) {
@@ -2440,31 +2441,26 @@ export interface HotelRevenueMetrics {
   revPar: number; // Revenue Per Available Room
 }
 
-export async function calculateHotelMetrics(businessId: string, propertyId: string): Promise<HotelRevenueMetrics> {
-  const roomsSnap = await getDocs(
-    query(col("hotelRooms"), where("businessId", "==", businessId), where("propertyId", "==", propertyId))
-  );
-  const totalRooms = roomsSnap.size || 1;
+export async function calculateHotelMetrics(businessId: string, propertyId = "default_property"): Promise<HotelRevenueMetrics> {
+  const rooms = await getHotelRooms(businessId, propertyId);
+  const totalRooms = rooms.length || 1;
 
-  const resSnap = await getDocs(
-    query(col("hotelReservations"), where("businessId", "==", businessId), where("propertyId", "==", propertyId))
-  );
-  const reservations = resSnap.docs.map(d => d.data() as any);
+  const reservations = await getReservations(businessId, propertyId);
 
   let occupiedRooms = 0;
   let totalRoomRevenue = 0;
 
-  for (const res of reservations) {
-    if (res.status === "checked-in") {
+  for (const res of reservations as any[]) {
+    if (res.status === "checked_in") {
       occupiedRooms += 1;
     }
-    if (res.status === "checked-in" || res.status === "checked-out") {
-      totalRoomRevenue += (res.nightlyRate || 0) * (res.numberOfNights || 1);
+    if (res.status === "checked_in" || res.status === "checked_out") {
+      totalRoomRevenue += Number(res.totalAmount || 0);
     }
   }
 
   const occupancyRate = Number(((occupiedRooms / totalRooms) * 100).toFixed(1));
-  const roomsSold = reservations.filter(r => r.status === "checked-in" || r.status === "checked-out").length || 1;
+  const roomsSold = reservations.filter((r: any) => r.status === "checked_in" || r.status === "checked_out").length || 1;
   const adr = Number((totalRoomRevenue / roomsSold).toFixed(2));
   const revPar = Number((totalRoomRevenue / totalRooms).toFixed(2));
 
