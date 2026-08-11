@@ -6,7 +6,7 @@ import {
   LayoutDashboard, FileText, Users, Ticket, 
   CreditCard, BarChart3, Settings, Package, 
   ChevronLeft, ChevronRight, ShoppingCart, Truck, UserCircle, Shield,
-  LogOut, Building2, AlertCircle, Pill
+  LogOut, Building2, AlertCircle, Pill, BedDouble, CalendarDays, ConciergeBell, UserRound
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -47,6 +47,10 @@ export default function Sidebar() {
     { name: "Invoices", icon: FileText, path: "/invoices", roles: ["owner", "salesperson", "super_admin"] },
     { name: "Products", icon: Package, path: "/products", roles: ["owner", "salesperson", "super_admin"] },
     { name: "Drugs", icon: Pill, path: "/drugs", roles: ["owner", "salesperson", "super_admin"], pharmacy: true },
+    { name: "Room Board", icon: BedDouble, path: "/hotel/rooms", roles: ["owner", "salesperson", "super_admin"], hotel: true },
+    { name: "Reservations", icon: CalendarDays, path: "/hotel/reservations", roles: ["owner", "salesperson", "super_admin"], hotel: true },
+    { name: "Front Desk", icon: ConciergeBell, path: "/hotel/front-desk", roles: ["owner", "salesperson", "super_admin"], hotel: true },
+    { name: "Guests", icon: UserRound, path: "/hotel/guests", roles: ["owner", "salesperson", "super_admin"], hotel: true },
     { name: "Clients", icon: Users, path: "/clients", roles: ["owner", "salesperson", "super_admin"] },
     { name: "Payments", icon: CreditCard, path: "/payments", roles: ["owner", "salesperson", "super_admin"] },
     { name: "Suppliers", icon: Truck, path: "/suppliers", roles: ["owner", "super_admin"] },
@@ -67,10 +71,21 @@ export default function Sidebar() {
   ];
 
   const filteredItems = menuItems.filter(item => {
-    // Check pharmacy requirement
-    const isPharmacy = (currentBusinessProfile as any)?.businessType === "pharmacy";
-    // Super admin can see pharmacy pages regardless of business type
+    // Super admin can see every page. Regular accounts are narrowed by business type.
+    const businessType = (currentBusinessProfile as any)?.businessType;
+    const isPharmacy = businessType === "pharmacy";
+    const isHotel = businessType === "hotel";
+    if (role !== "super_admin" && isHotel) {
+      const hotelPaths = new Set([
+        "/dashboard", "/hotel/rooms", "/hotel/reservations", "/hotel/front-desk", "/hotel/guests",
+        "/invoices", "/payments", "/reports", "/staff", "/settings",
+      ]);
+      if (!hotelPaths.has(item.path)) return false;
+    }
     if ((item as any).pharmacy && !isPharmacy && role !== "super_admin") {
+      return false;
+    }
+    if ((item as any).hotel && !isHotel && role !== "super_admin") {
       return false;
     }
     

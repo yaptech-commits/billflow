@@ -96,6 +96,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     "/payments": "Payments",
     "/reports": "Reports",
     "/settings": "Settings",
+    "/hotel/rooms": "Room Board",
+    "/hotel/reservations": "Reservations",
+    "/hotel/front-desk": "Front Desk",
+    "/hotel/guests": "Guest Profiles",
   };
 
   if (!isPageAccessible()) {

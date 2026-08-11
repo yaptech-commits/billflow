@@ -8,6 +8,7 @@ import { formatMoney } from "@/lib/utils";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Plus } from "lucide-react";
 import Link from "next/link";
+import HotelDashboard from "@/components/hotel/HotelDashboard";
 
 export default function DashboardPage() {
   const { user, businessId, role } = useAuth();
@@ -71,6 +72,10 @@ export default function DashboardPage() {
   const paidCount = invoices.filter(i => i.status === "paid").length;
   const overdue = invoices.filter(i => i.status === "overdue").reduce((s, i) => s + i.amount, 0);
   const currencyCode = profile?.currency;
+
+  if (profile?.businessType === "hotel" && businessId) {
+    return <HotelDashboard businessId={businessId} profile={profile} />;
+  }
 
   // Generate dynamic chart data for the last 7 days
   const dailyData = Array.from({ length: 7 }, (_, i) => {

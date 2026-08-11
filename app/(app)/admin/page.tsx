@@ -192,6 +192,10 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
     { id: "/purchase-orders", label: "Purchase Orders" },
     { id: "/reports", label: "Reports" },
     { id: "/settings", label: "Settings" },
+    { id: "/hotel/rooms", label: "Room Board" },
+    { id: "/hotel/reservations", label: "Reservations" },
+    { id: "/hotel/front-desk", label: "Front Desk" },
+    { id: "/hotel/guests", label: "Guests" },
   ];
 
   const fetchStats = async (force = false) => {
@@ -619,6 +623,21 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
               value={editForm.address || ""} 
               onChange={e => setEditForm({ ...editForm, address: e.target.value })} 
             />
+          </div>
+          <div>
+            <label className="label">Business Type</label>
+            <select
+              className="input"
+              value={editForm.businessType || "general"}
+              onChange={e => setEditForm({ ...editForm, businessType: e.target.value as "general" | "pharmacy" | "hotel" | "coldstore" | "school" })}
+            >
+              <option value="general">General Business</option>
+              <option value="pharmacy">Pharmacy</option>
+              <option value="hotel">Hotel</option>
+              <option value="coldstore">Coldstore</option>
+              <option value="school">School</option>
+            </select>
+            <p className="text-[11px] text-muted mt-1">Changing this controls the account’s feature set and sidebar.</p>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>

@@ -256,9 +256,16 @@ export interface Staff {
   createdAt?: Timestamp | null;
 }
 
+export type BusinessType = "general" | "pharmacy" | "hotel" | "coldstore" | "school";
+
 export interface BusinessProfile {
   businessId: string;
   businessName: string;
+  /** The business mode selected by Super Admin. */
+  businessType?: BusinessType;
+  /** Property-aware hotel metadata; hotel records use propertyId on every core table. */
+  propertyId?: string;
+  propertyName?: string;
   address?: string;
   phone?: string;
   email?: string;
@@ -1843,4 +1850,289 @@ export interface ProductBarcode {
   barcode: string;
   barcodeType?: string; // "ean13", "ean8", "upca", etc.
   createdAt?: Timestamp | null;
+}
+
+// ─── HOTEL MANAGEMENT MODULE ──────────────────────────────────────────────────
+
+export type RoomStatus = "clean" | "dirty" | "inspected" | "out_of_service";
+export type RoomOccupancyStatus = "vacant" | "occupied";
+
+export interface HotelRoom {
+  id?: string;
+  businessId: string;
+  propertyId: string;
+  roomNumber: string;
+  roomType: string; // e.g. "Deluxe Suite", "Standard Double"
+  floor: string;
+  capacity: number;
+  amenities: string[]; // e.g. ["AC", "WiFi", "Ocean View", "Mini Bar"]
+  status: RoomStatus;
+  occupancyStatus: RoomOccupancyStatus;
+  baseRate: number;
+  createdAt?: Timestamp | null;
+}
+
+export interface SeasonalRatePlan {
+  id?: string;
+  businessId: string;
+  propertyId: string;
+  name: string; // e.g. "Summer High Season", "Weekend Getaway"
+  roomTypeId: string;
+  startDate: Timestamp | null;
+  endDate: Timestamp | null;
+  weekdayRate: number;
+  weekendRate: number;
+  createdAt?: Timestamp | null;
+}
+
+export interface TaxRule {
+  id?: string;
+  businessId: string;
+  propertyId: string;
+  name: string; // e.g. "Occupancy Tax", "Tourism Levy", "VAT"
+  percentage: number;
+  isInclusive: boolean;
+  createdAt?: Timestamp | null;
+}
+
+export type ReservationStatus = "booked" | "checked_in" | "checked_out" | "cancelled" | "no_show";
+export type BookingSource = "walk_in" | "phone" | "online" | "ota" | "corporate";
+
+export interface Reservation {
+  id?: string;
+  businessId: string;
+  propertyId: string;
+  confirmationCode: string;
+  guestId: string;
+  guestName: string;
+  guestEmail?: string;
+  guestPhone?: string;
+  roomId?: string;
+  roomNumber?: string;
+  roomType: string;
+  checkInDate: Timestamp | null;
+  checkOutDate: Timestamp | null;
+  adults: number;
+  children: number;
+  status: ReservationStatus;
+  bookingSource: BookingSource;
+  ratePerNight: number;
+  totalAmount: number;
+  amountPaid: number;
+  specialRequests?: string;
+  overbooked?: boolean;
+  groupBookingId?: string; // Links group bookings
+  createdAt?: Timestamp | null;
+}
+
+export interface HotelGuest {
+  id?: string;
+  businessId: string;
+  propertyId: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  idType: string; // e.g. "Passport", "National ID", "Driver License"
+  idNumber: string;
+  address?: string;
+  stayHistoryCount?: number;
+  createdAt?: Timestamp | null;
+}
+
+export interface GroupBlockBooking {
+  id?: string;
+  businessId: string;
+  propertyId: string;
+  groupName: string;
+  contactPerson: string;
+  phone: string;
+  reservedRoomIds: string[];
+  checkInDate: Timestamp | null;
+  checkOutDate: Timestamp | null;
+  status: "active" | "checked_in" | "released" | "cancelled";
+  createdAt?: Timestamp | null;
+}
+
+// Hotel Firestore Helpers
+export async function getHotelRooms(businessId: string, propertyId = "default_property"): Promise<HotelRoom[]> {
+  const q = query(col("hotelRooms"), where("businessId", "==", businessId), where("propertyId", "==", propertyId));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+}
+
+export async function saveHotelRoom(room: Omit<HotelRoom, "id" | "createdAt">, id?: string) {
+  if (id) {
+    await updateDoc(doc(db, "hotelRooms", id), { ...room });
+    return id;
+  }
+  const ref = await addDoc(col("hotelRooms"), { ...room, createdAt: serverTimestamp() });
+  return ref.id;
+}
+
+export async function deleteHotelRoom(id: string) {
+  await deleteDoc(doc(db, "hotelRooms", id));
+}
+
+export async function getReservations(businessId: string, propertyId = "default_property"): Promise<Reservation[]> {
+  const q = query(col("hotelReservations"), where("businessId", "==", businessId), where("propertyId", "==", propertyId));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+}
+
+export async function saveReservation(reservation: Omit<Reservation, "id" | "createdAt">, id?: string) {
+  if (id) {
+    await updateDoc(doc(db, "hotelReservations", id), { ...reservation });
+    return id;
+  }
+  const ref = await addDoc(col("hotelReservations"), { ...reservation, createdAt: serverTimestamp() });
+  return ref.id;
+}
+
+export async function getHotelGuests(businessId: string, propertyId = "default_property"): Promise<HotelGuest[]> {
+  const q = query(col("hotelGuests"), where("businessId", "==", businessId), where("propertyId", "==", propertyId));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+}
+
+export async function saveHotelGuest(guest: Omit<HotelGuest, "id" | "createdAt">, id?: string) {
+  if (id) {
+    await updateDoc(doc(db, "hotelGuests", id), { ...guest });
+    return id;
+  }
+  const ref = await addDoc(col("hotelGuests"), { ...guest, stayHistoryCount: 0, createdAt: serverTimestamp() });
+  return ref.id;
+}
+
+
+export async function getSeasonalRatePlans(businessId: string, propertyId = "default_property"): Promise<SeasonalRatePlan[]> {
+  const q = query(col("hotelRatePlans"), where("businessId", "==", businessId), where("propertyId", "==", propertyId));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+}
+
+export async function saveSeasonalRatePlan(ratePlan: Omit<SeasonalRatePlan, "id" | "createdAt">, id?: string) {
+  if (id) {
+    await updateDoc(doc(db, "hotelRatePlans", id), { ...ratePlan });
+    return id;
+  }
+  const ref = await addDoc(col("hotelRatePlans"), { ...ratePlan, createdAt: serverTimestamp() });
+  return ref.id;
+}
+
+export async function getHotelTaxRules(businessId: string, propertyId = "default_property"): Promise<TaxRule[]> {
+  const q = query(col("hotelTaxRules"), where("businessId", "==", businessId), where("propertyId", "==", propertyId));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+}
+
+export async function saveHotelTaxRule(rule: Omit<TaxRule, "id" | "createdAt">, id?: string) {
+  if (id) {
+    await updateDoc(doc(db, "hotelTaxRules", id), { ...rule });
+    return id;
+  }
+  const ref = await addDoc(col("hotelTaxRules"), { ...rule, createdAt: serverTimestamp() });
+  return ref.id;
+}
+
+export async function getGroupBlockBookings(businessId: string, propertyId = "default_property"): Promise<GroupBlockBooking[]> {
+  const q = query(col("hotelGroupBookings"), where("businessId", "==", businessId), where("propertyId", "==", propertyId));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+}
+
+export async function saveGroupBlockBooking(group: Omit<GroupBlockBooking, "id" | "createdAt">, id?: string) {
+  if (id) {
+    await updateDoc(doc(db, "hotelGroupBookings", id), { ...group });
+    return id;
+  }
+  const ref = await addDoc(col("hotelGroupBookings"), { ...group, createdAt: serverTimestamp() });
+  return ref.id;
+}
+
+export async function updateHotelRoomStatus(id: string, status: RoomStatus, occupancyStatus?: RoomOccupancyStatus) {
+  await updateDoc(doc(db, "hotelRooms", id), {
+    status,
+    ...(occupancyStatus ? { occupancyStatus } : {}),
+  });
+}
+
+export async function updateReservationStatus(id: string, status: ReservationStatus, roomId?: string, roomNumber?: string) {
+  await updateDoc(doc(db, "hotelReservations", id), {
+    status,
+    ...(roomId ? { roomId } : {}),
+    ...(roomNumber ? { roomNumber } : {}),
+  });
+}
+
+/**
+ * Date-range availability engine. A reservation overlaps a stay when:
+ * existingCheckIn < requestedCheckOut && existingCheckOut > requestedCheckIn.
+ * Cancelled and no-show records do not block inventory.
+ */
+export async function getAvailableHotelRooms(
+  businessId: string,
+  propertyId: string,
+  checkIn: Date,
+  checkOut: Date,
+  roomType?: string,
+  excludeReservationId?: string,
+): Promise<HotelRoom[]> {
+  const [rooms, reservations] = await Promise.all([
+    getHotelRooms(businessId, propertyId),
+    getReservations(businessId, propertyId),
+  ]);
+  const requestedStart = checkIn.getTime();
+  const requestedEnd = checkOut.getTime();
+  const blockingStatuses: ReservationStatus[] = ["booked", "checked_in"];
+  const blockedRoomIds = new Set(
+    reservations
+      .filter(r => r.id !== excludeReservationId)
+      .filter(r => blockingStatuses.includes(r.status))
+      .filter(r => {
+        const existingStart = r.checkInDate?.toDate?.().getTime?.() ?? 0;
+        const existingEnd = r.checkOutDate?.toDate?.().getTime?.() ?? 0;
+        return existingStart < requestedEnd && existingEnd > requestedStart;
+      })
+      .map(r => r.roomId)
+      .filter(Boolean) as string[],
+  );
+
+  return rooms.filter(room =>
+    room.status !== "out_of_service" &&
+    !blockedRoomIds.has(room.id || "") &&
+    (!roomType || room.roomType === roomType),
+  );
+}
+
+
+export interface HotelWaitlistEntry {
+  id?: string;
+  businessId: string;
+  propertyId: string;
+  guestId: string;
+  guestName: string;
+  roomType: string;
+  checkInDate: Timestamp | null;
+  checkOutDate: Timestamp | null;
+  adults: number;
+  children: number;
+  bookingSource: BookingSource;
+  notes?: string;
+  status: "waiting" | "converted" | "cancelled";
+  createdAt?: Timestamp | null;
+}
+
+export async function getHotelWaitlist(businessId: string, propertyId = "default_property"): Promise<HotelWaitlistEntry[]> {
+  const q = query(col("hotelWaitlist"), where("businessId", "==", businessId), where("propertyId", "==", propertyId));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+}
+
+export async function saveHotelWaitlistEntry(entry: Omit<HotelWaitlistEntry, "id" | "createdAt">, id?: string) {
+  if (id) {
+    await updateDoc(doc(db, "hotelWaitlist", id), { ...entry });
+    return id;
+  }
+  const ref = await addDoc(col("hotelWaitlist"), { ...entry, createdAt: serverTimestamp() });
+  return ref.id;
 }

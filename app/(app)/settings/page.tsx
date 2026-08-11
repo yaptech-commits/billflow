@@ -24,6 +24,7 @@ function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
 
 export default function SettingsPage() {
   const { user, businessId, role } = useAuth();
+  const effectiveRole = role as string;
   const [name, setName] = useState(user?.displayName ?? "");
   const [saving, setSaving] = useState(false);
 
@@ -32,7 +33,8 @@ export default function SettingsPage() {
     businessName: "", address: "", phone: "", email: "",
     accentColor: DEFAULT_ACCENT_COLOR, footerNote: "", currency: DEFAULT_CURRENCY,
     taxRate: DEFAULT_TAX_RATE, taxInclusive: false, taxLabel: DEFAULT_TAX_LABEL,
-    paystackPublicKey: "", businessType: "general" as "general" | "pharmacy",
+    paystackPublicKey: "", businessType: "general" as "general" | "pharmacy" | "hotel" | "coldstore" | "school",
+    propertyId: "default_property", propertyName: "Main Property",
     allowStaffDiscounts: false,
   });
   const [logoDataUrl, setLogoDataUrl] = useState<string | undefined>(undefined);
@@ -57,6 +59,8 @@ export default function SettingsPage() {
           taxLabel: profile.taxLabel ?? DEFAULT_TAX_LABEL,
           paystackPublicKey: profile.paystackPublicKey ?? "",
           businessType: (profile as any).businessType ?? "general",
+          propertyId: profile.propertyId ?? "default_property",
+          propertyName: profile.propertyName ?? profile.businessName ?? "Main Property",
           allowStaffDiscounts: profile.allowStaffDiscounts === true,
         });
         setLogoDataUrl(profile.logoDataUrl);
@@ -89,9 +93,12 @@ export default function SettingsPage() {
     }
     setBrandSaving(true);
     try {
+      const currentProfile = await getBusinessProfile(businessId);
       await upsertBusinessProfile({
         businessId,
         ...brand,
+        // Business type is an administrative control. Owners can edit branding but cannot change the operating mode.
+        businessType: effectiveRole === "super_admin" ? brand.businessType : (currentProfile?.businessType ?? brand.businessType),
         logoDataUrl,
       });
       toast.success("Invoice branding saved");
@@ -246,37 +253,35 @@ export default function SettingsPage() {
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="label mb-0">Business Type</label>
-                  {role !== "owner" && role !== "super_admin" && (
-                    <span className="text-[11px] text-muted">Editable by Super Admin / Owner only</span>
+                  {effectiveRole !== "super_admin" && (
+                    <span className="text-[11px] text-muted">Managed by Super Admin</span>
                   )}
                 </div>
-                <div className="grid grid-cols-2 gap-3 mt-1">
-                  <button
-                    type="button"
-                    disabled={role !== "owner" && role !== "super_admin"}
-                    onClick={() => setBrand(b => ({ ...b, businessType: "general" }))}
-                    className={`py-2 px-3 rounded-lg border text-sm font-medium transition-colors ${
-                      brand.businessType === "general"
-                        ? "border-gold bg-gold/10 text-gold"
-                        : "border-border bg-surface/5 text-muted hover:border-gold/50"
-                    } ${role !== "owner" && role !== "super_admin" ? "opacity-60 cursor-not-allowed" : ""}`}
-                  >
-                    General Business
-                  </button>
-                  <button
-                    type="button"
-                    disabled={role !== "owner" && role !== "super_admin"}
-                    onClick={() => setBrand(b => ({ ...b, businessType: "pharmacy" }))}
-                    className={`py-2 px-3 rounded-lg border text-sm font-medium transition-colors ${
-                      brand.businessType === "pharmacy"
-                        ? "border-gold bg-gold/10 text-gold"
-                        : "border-border bg-surface/5 text-muted hover:border-gold/50"
-                    } ${role !== "owner" && role !== "super_admin" ? "opacity-60 cursor-not-allowed" : ""}`}
-                  >
-                    Pharmacy
-                  </button>
+                <select
+                  className={`input mt-1 ${effectiveRole !== "super_admin" ? "opacity-70 cursor-not-allowed" : ""}`}
+                  value={brand.businessType}
+                  disabled={effectiveRole !== "super_admin"}
+                  onChange={e => setBrand(b => ({ ...b, businessType: e.target.value as typeof b.businessType }))}
+                >
+                  <option value="general">General Business</option>
+                  <option value="pharmacy">Pharmacy</option>
+                  <option value="hotel">Hotel</option>
+                  <option value="coldstore">Coldstore</option>
+                  <option value="school">School</option>
+                </select>
+                <p className="text-[11px] text-muted mt-1.5">Only Super Admin can change the business operating mode. Hotel accounts receive room, reservation, front desk, guest, and billing modules only.</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="label">Property ID</label>
+                  <input className="input" value={brand.propertyId} onChange={e => setBrand(b => ({ ...b, propertyId: e.target.value.replace(/\s+/g, "_").toLowerCase() }))} placeholder="default_property" />
+                  <p className="text-[11px] text-muted mt-1">Stable identifier used on rooms, rates, guests, and reservations.</p>
                 </div>
-                <p className="text-[11px] text-muted mt-1.5">Pharmacy businesses have access to the Drugs page and prescription management features.</p>
+                <div>
+                  <label className="label">Property Name</label>
+                  <input className="input" value={brand.propertyName} onChange={e => setBrand(b => ({ ...b, propertyName: e.target.value }))} placeholder="Main Property" />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

@@ -33,6 +33,19 @@ service cloud.firestore {
       return isOwner(businessId) || isActiveSalespersonFor(businessId);
     }
 
+    function businessProfilePath(businessId) {
+      return /databases/$(database)/documents/businessProfiles/$(businessId);
+    }
+
+    function isHotelBusiness(businessId) {
+      return exists(businessProfilePath(businessId))
+        && get(businessProfilePath(businessId)).data.businessType == 'hotel';
+    }
+
+    function isHotelMember(businessId) {
+      return isHotelBusiness(businessId) && isBusinessMember(businessId);
+    }
+
     function ownsExistingBusinessDocument() {
       return isSignedIn() && isOwner(resource.data.businessId);
     }
@@ -215,13 +228,13 @@ service cloud.firestore {
     }
 
     match /invoices/{id} {
-      allow read, update, delete: if ownsExistingBusinessDocument();
-      allow create: if ownsIncomingBusinessDocument();
+      allow read, update, delete: if ownsExistingBusinessDocument() || isHotelMember(resource.data.businessId);
+      allow create: if ownsIncomingBusinessDocument() || isHotelMember(request.resource.data.businessId);
     }
 
     match /payments/{id} {
-      allow read, update, delete: if ownsExistingBusinessDocument();
-      allow create: if ownsIncomingBusinessDocument();
+      allow read, update, delete: if ownsExistingBusinessDocument() || isHotelMember(resource.data.businessId);
+      allow create: if ownsIncomingBusinessDocument() || isHotelMember(request.resource.data.businessId);
     }
 
     match /suppliers/{id} {
@@ -252,6 +265,88 @@ service cloud.firestore {
 
     match /businessProfiles/{businessId} {
       allow read, write: if isOwner(businessId);
+    }
+
+    // Hotel operations are isolated by businessId + propertyId. Owners manage
+    // setup records; active hotel staff may operate rooms, reservations, guests,
+    // groups, and waitlist workflows from the front desk.
+    match /hotelRooms/{id} {
+      allow read: if isHotelMember(resource.data.businessId);
+      allow create: if isHotelMember(request.resource.data.businessId)
+        && request.resource.data.propertyId is string
+        && request.resource.data.propertyId.size() > 0;
+      allow update: if isHotelMember(resource.data.businessId)
+        && request.resource.data.businessId == resource.data.businessId
+        && request.resource.data.propertyId == resource.data.propertyId;
+      allow delete: if isOwner(resource.data.businessId);
+    }
+
+    match /hotelReservations/{id} {
+      allow read: if isHotelMember(resource.data.businessId);
+      allow create: if isHotelMember(request.resource.data.businessId)
+        && request.resource.data.propertyId is string
+        && request.resource.data.propertyId.size() > 0;
+      allow update: if isHotelMember(resource.data.businessId)
+        && request.resource.data.businessId == resource.data.businessId
+        && request.resource.data.propertyId == resource.data.propertyId;
+      allow delete: if isOwner(resource.data.businessId);
+    }
+
+    match /hotelGuests/{id} {
+      allow read: if isHotelMember(resource.data.businessId);
+      allow create: if isHotelMember(request.resource.data.businessId)
+        && request.resource.data.propertyId is string
+        && request.resource.data.propertyId.size() > 0;
+      allow update: if isHotelMember(resource.data.businessId)
+        && request.resource.data.businessId == resource.data.businessId
+        && request.resource.data.propertyId == resource.data.propertyId;
+      allow delete: if isOwner(resource.data.businessId);
+    }
+
+    match /hotelRatePlans/{id} {
+      allow read: if isHotelMember(resource.data.businessId);
+      allow create: if isOwner(request.resource.data.businessId)
+        && isHotelBusiness(request.resource.data.businessId)
+        && request.resource.data.propertyId is string
+        && request.resource.data.propertyId.size() > 0;
+      allow update: if isOwner(resource.data.businessId)
+        && request.resource.data.businessId == resource.data.businessId
+        && request.resource.data.propertyId == resource.data.propertyId;
+      allow delete: if isOwner(resource.data.businessId);
+    }
+
+    match /hotelTaxRules/{id} {
+      allow read: if isHotelMember(resource.data.businessId);
+      allow create: if isOwner(request.resource.data.businessId)
+        && isHotelBusiness(request.resource.data.businessId)
+        && request.resource.data.propertyId is string
+        && request.resource.data.propertyId.size() > 0;
+      allow update: if isOwner(resource.data.businessId)
+        && request.resource.data.businessId == resource.data.businessId
+        && request.resource.data.propertyId == resource.data.propertyId;
+      allow delete: if isOwner(resource.data.businessId);
+    }
+
+    match /hotelGroupBookings/{id} {
+      allow read: if isHotelMember(resource.data.businessId);
+      allow create: if isHotelMember(request.resource.data.businessId)
+        && request.resource.data.propertyId is string
+        && request.resource.data.propertyId.size() > 0;
+      allow update: if isHotelMember(resource.data.businessId)
+        && request.resource.data.businessId == resource.data.businessId
+        && request.resource.data.propertyId == resource.data.propertyId;
+      allow delete: if isOwner(resource.data.businessId);
+    }
+
+    match /hotelWaitlist/{id} {
+      allow read: if isHotelMember(resource.data.businessId);
+      allow create: if isHotelMember(request.resource.data.businessId)
+        && request.resource.data.propertyId is string
+        && request.resource.data.propertyId.size() > 0;
+      allow update: if isHotelMember(resource.data.businessId)
+        && request.resource.data.businessId == resource.data.businessId
+        && request.resource.data.propertyId == resource.data.propertyId;
+      allow delete: if isOwner(resource.data.businessId);
     }
 
     match /notifications/{id} {
