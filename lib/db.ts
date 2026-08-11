@@ -257,12 +257,15 @@ export interface Staff {
 }
 
 export type BusinessType = "general" | "pharmacy" | "hotel" | "coldstore" | "school";
+export type BusinessModule = "general" | "pharmacy" | "hotel" | "coldstore";
 
 export interface BusinessProfile {
   businessId: string;
   businessName: string;
   /** The business mode selected by Super Admin. */
   businessType?: BusinessType;
+  /** Optional dashboard modules. When omitted, the selected businessType remains the active module. */
+  activeModules?: BusinessModule[];
   /** Property-aware hotel metadata; hotel records use propertyId on every core table. */
   propertyId?: string;
   propertyName?: string;

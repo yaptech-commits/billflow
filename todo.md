@@ -24,6 +24,14 @@
 - [x] Connect room selection to reservation, check-in, folio, partial-payment, and checkout flows.
 - [x] Reuse existing products for minibar, food, laundry, and service charges.
 - [x] Verify permissions, TypeScript, route behavior, and billing persistence.
-- [ ] Commit and push the Room POS implementation.
+- [x] Commit and push the Room POS implementation.
 
 **Structural decision:** Room availability remains date-range based and room status remains reservation/housekeeping based; the Room POS page is only a front-desk entry point into those existing records and the existing POS billing pipeline.
+
+
+## Modular Business Dashboard
+- [ ] Map existing dashboard cards, charts, activity panels, and business module data sources.
+- [ ] Extend the existing dashboard with conditional General, Hotel, Pharmacy, and Cold Store sections.
+- [ ] Add clickable links for module metrics and preserve pure Hotel-only dashboard behavior.
+- [ ] Verify TypeScript, dashboard routes, permissions, and module gating.
+- [ ] Commit and push the modular dashboard implementation.

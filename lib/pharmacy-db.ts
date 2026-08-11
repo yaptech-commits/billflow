@@ -202,3 +202,17 @@ export async function getBarcodesForProduct(businessId: string, productId: strin
 export async function deleteBarcode(barcodeId: string) {
   await deleteDoc(doc(db, "productBarcodes", barcodeId));
 }
+
+
+/** Loads all product batches for dashboard expiry and freshness summaries. */
+export async function getProductBatchesForBusiness(businessId: string) {
+  const snap = await getDocs(
+    query(
+      collection(db, "productBatches"),
+      where("businessId", "==", businessId)
+    )
+  );
+  return snap.docs
+    .map((d) => ({ ...d.data(), id: d.id }) as ProductBatch)
+    .sort((a, b) => String(a.expiryDate || "").localeCompare(String(b.expiryDate || "")));
+}

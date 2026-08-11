@@ -1,14 +1,25 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { getInvoices, getPayments, getClients, getBusinessProfile, Invoice, Payment, BusinessProfile, CURRENCIES } from "@/lib/db";
+import { getInvoices, getPayments, getClients, getBusinessProfile, getProducts, getHotelRooms, getReservations, getGuestFolio, getHousekeepingTasks, getPrescriptionsByBusiness, Invoice, Payment, BusinessProfile, BusinessModule, CURRENCIES } from "@/lib/db";
+import { getProductBatchesForBusiness, getInsuranceClaimsForBusiness, getStockAdjustmentsForBusiness, getControlledSubstanceLogsForBusiness } from "@/lib/pharmacy-db";
 import StatCard from "@/components/ui/StatCard";
 import Badge from "@/components/ui/Badge";
 import { formatMoney } from "@/lib/utils";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Plus } from "lucide-react";
 import Link from "next/link";
-import HotelDashboard from "@/components/hotel/HotelDashboard";
+import BusinessModuleDashboard, { DashboardModuleData } from "@/components/dashboard/BusinessModuleDashboard";
+
+function resolveActiveModules(profile: BusinessProfile | null): BusinessModule[] {
+  if (profile?.activeModules?.length) return profile.activeModules;
+  switch (profile?.businessType) {
+    case "hotel": return ["hotel"];
+    case "pharmacy": return ["pharmacy"];
+    case "coldstore": return ["coldstore"];
+    default: return ["general"];
+  }
+}
 
 export default function DashboardPage() {
   const { user, businessId, role } = useAuth();
@@ -16,21 +27,26 @@ export default function DashboardPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [clients, setClients] = useState<number>(0);
   const [profile, setProfile] = useState<BusinessProfile | null>(null);
+  const [moduleData, setModuleData] = useState<DashboardModuleData>({});
   const [loading, setLoading] = useState(true);
 
-  const loadData = () => {
+  const loadData = async () => {
     if (!user || !businessId) return;
     setLoading(true);
     const invoiceOpts = role === "salesperson" ? { onlyUserId: user.uid } : undefined;
-    Promise.all([
-      getInvoices(businessId, invoiceOpts),
-      getPayments(businessId),
-      getClients(businessId),
-      getBusinessProfile(businessId),
-    ]).then(([inv, pay, cli, prof]) => {
-      // Merge with offline records
+    const safe = async <T,>(request: Promise<T>, fallback: T) => {
+      try { return await request; } catch (error) { console.warn("Dashboard module data unavailable", error); return fallback; }
+    };
+
+    try {
+      const [inv, pay, cli, prof] = await Promise.all([
+        getInvoices(businessId, invoiceOpts),
+        getPayments(businessId),
+        getClients(businessId),
+        getBusinessProfile(businessId),
+      ]);
+
       const offlineSales = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("billflow_offline_sales") || "[]") : [];
-      
       const offlineInvoices: Invoice[] = offlineSales.map((s: any) => ({
         id: s.id,
         invoiceNumber: `OFFLINE-${s.id.slice(0, 5)}`,
@@ -42,7 +58,6 @@ export default function DashboardPage() {
         issuedAt: { toDate: () => new Date(s.timestamp) } as any,
         isOffline: true
       }));
-
       const offlinePayments: Payment[] = offlineSales.map((s: any) => ({
         id: s.id,
         clientName: s.data.customerName || "Walk-in Customer",
@@ -57,8 +72,43 @@ export default function DashboardPage() {
       setPayments([...offlinePayments, ...pay]);
       setClients(cli.length);
       setProfile(prof);
+
+      const modules = resolveActiveModules(prof);
+      const nextData: DashboardModuleData = {};
+      if (modules.includes("hotel")) {
+        const [rooms, reservations, housekeeping] = await Promise.all([
+          safe(getHotelRooms(businessId, prof?.propertyId || "default_property"), []),
+          safe(getReservations(businessId, prof?.propertyId || "default_property"), []),
+          safe(getHousekeepingTasks(businessId, prof?.propertyId || "default_property"), []),
+        ]);
+        const folios = (await Promise.all(reservations.filter(item => Boolean(item.id)).map(item => safe(getGuestFolio(businessId, item.id as string), null)))).filter(Boolean) as NonNullable<Awaited<ReturnType<typeof getGuestFolio>>>[];
+        nextData.hotel = { rooms, reservations, housekeeping, folios };
+      }
+      if (modules.includes("pharmacy")) {
+        const [products, batches, prescriptions, claims, controlledLogs, adjustments] = await Promise.all([
+          safe(getProducts(businessId), []),
+          safe(getProductBatchesForBusiness(businessId), []),
+          safe(getPrescriptionsByBusiness(businessId), []),
+          safe(getInsuranceClaimsForBusiness(businessId), []),
+          safe(getControlledSubstanceLogsForBusiness(businessId), []),
+          safe(getStockAdjustmentsForBusiness(businessId), []),
+        ]);
+        nextData.pharmacy = { products, batches, prescriptions, claims, controlledLogs, adjustments, invoices: [...offlineInvoices, ...inv] };
+      }
+      if (modules.includes("coldstore")) {
+        const [products, batches, adjustments] = await Promise.all([
+          safe(getProducts(businessId), []),
+          safe(getProductBatchesForBusiness(businessId), []),
+          safe(getStockAdjustmentsForBusiness(businessId), []),
+        ]);
+        nextData.coldstore = { products, batches, adjustments };
+      }
+      setModuleData(nextData);
+    } catch (error) {
+      console.error("Dashboard data load failed", error);
+    } finally {
       setLoading(false);
-    });
+    }
   };
 
   useEffect(() => {
@@ -72,10 +122,8 @@ export default function DashboardPage() {
   const paidCount = invoices.filter(i => i.status === "paid").length;
   const overdue = invoices.filter(i => i.status === "overdue").reduce((s, i) => s + i.amount, 0);
   const currencyCode = profile?.currency;
-
-  if (profile?.businessType === "hotel" && businessId) {
-    return <HotelDashboard businessId={businessId} profile={profile} />;
-  }
+  const activeModules = resolveActiveModules(profile);
+  const showGeneral = activeModules.includes("general");
 
   // Generate dynamic chart data for the last 7 days
   const dailyData = Array.from({ length: 7 }, (_, i) => {
@@ -137,6 +185,8 @@ export default function DashboardPage() {
 
   return (
     <div>
+      {profile && activeModules.some(module => module !== "general") ? <BusinessModuleDashboard modules={activeModules} data={moduleData} profile={profile} /> : null}
+      {showGeneral ? <>
       {/* Stats */}
       <div className="grid grid-cols-4 gap-4 mb-7">
         <StatCard label="Total Revenue" value={formatMoney(totalRevenue, currencyCode)} delta="14.2% this month" trend="up" accent="gold" />
@@ -290,6 +340,7 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+      </> : null}
     </div>
   );
 }

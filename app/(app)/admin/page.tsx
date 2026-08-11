@@ -6,7 +6,7 @@ import {
 } from "firebase/firestore";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { db, auth } from "@/lib/firebase";
-import { BusinessProfile, Staff, Product, Invoice, deleteBusinessData } from "@/lib/db";
+import { BusinessProfile, BusinessModule, Staff, Product, Invoice, deleteBusinessData } from "@/lib/db";
 import { formatMoney, cn } from "@/lib/utils";
 import { 
   Users, Package, FileText, Search, ShieldAlert, 
@@ -15,6 +15,19 @@ import {
 } from "lucide-react";
 import Modal from "@/components/ui/Modal";
 import toast from "react-hot-toast";
+
+const DASHBOARD_MODULES: { id: BusinessModule; label: string; description: string }[] = [
+  { id: "general", label: "General Business", description: "Sales, invoices, products, clients, and payments" },
+  { id: "pharmacy", label: "Pharmacy", description: "Drugs, prescriptions, claims, and controlled substances" },
+  { id: "hotel", label: "Hotel", description: "Rooms, reservations, front desk, folios, and revenue" },
+  { id: "coldstore", label: "Cold Store", description: "Freshness, batch, wastage, and storage operations" },
+];
+
+function dashboardModulesForBusiness(business: BusinessProfile): BusinessModule[] {
+  if (business.activeModules?.length) return business.activeModules;
+  if (business.businessType === "hotel" || business.businessType === "pharmacy" || business.businessType === "coldstore") return [business.businessType];
+  return ["general"];
+}
 
 export default function AdminPage() {
   const { role, user } = useAuth();
@@ -169,7 +182,7 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
 
   useEffect(() => {
     if (showEdit) {
-      setEditForm({ ...business });
+      setEditForm({ ...business, activeModules: dashboardModulesForBusiness(business) });
     }
   }, [showEdit, business]);
 
@@ -642,6 +655,36 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
             </select>
             <p className="text-[11px] text-muted mt-1">Changing this controls the account’s feature set and sidebar.</p>
           </div>
+
+          <div className="pt-4 border-t border-border">
+            <p className="text-sm font-bold text-surface mb-1">Active Dashboard Modules</p>
+            <p className="text-xs text-muted mb-3">Select one or more modules. The business type still controls the account’s main sidebar, while these selections control which dashboards are shown together.</p>
+            <div className="grid grid-cols-1 gap-2">
+              {DASHBOARD_MODULES.map(module => {
+                const checked = (editForm.activeModules || []).includes(module.id);
+                return (
+                  <button
+                    key={module.id}
+                    type="button"
+                    onClick={() => {
+                      const current = editForm.activeModules || [];
+                      if (checked && current.length === 1) {
+                        toast.error("Keep at least one dashboard module active");
+                        return;
+                      }
+                      const next = checked ? current.filter(item => item !== module.id) : [...current, module.id];
+                      setEditForm({ ...editForm, activeModules: next });
+                    }}
+                    className={cn("flex items-center justify-between gap-3 p-3 rounded-lg border text-left transition-all", checked ? "bg-gold/10 border-gold text-gold" : "bg-white/5 border-border text-muted")}
+                  >
+                    <span><span className="block text-xs font-bold">{module.label}</span><span className="block text-[10px] mt-1 opacity-80">{module.description}</span></span>
+                    {checked ? <Check size={14} /> : <div className="w-3.5 h-3.5 border border-muted rounded" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="label">Tax Rate (%)</label>
