@@ -1,21 +1,29 @@
-import { formatCedi } from "./utils";
+import { formatMoney } from "./utils";
 
 export function printReceipt(data: any) {
   const printWindow = window.open("", "_blank", "width=800,height=900");
   if (!printWindow) return;
 
-  const itemsHtml = data.items.map((item: any) => `
-    <tr style="border-bottom: 1px solid #e5e7eb;">
-      <td style="padding: 12px 16px; font-weight: 500; color: #111827;">${item.productName || item.name}</td>
-      <td style="padding: 12px 16px; text-align: center; color: #4b5563;">${item.quantity}</td>
-      <td style="padding: 12px 16px; text-align: right; color: #4b5563;">$${Number(item.price).toFixed(2)}</td>
-      <td style="padding: 12px 16px; text-align: right; font-weight: 500; color: #111827;">$${(Number(item.price) * Number(item.quantity)).toFixed(2)}</td>
-    </tr>
-  `).join("");
+  const currency = data.currencyCode || "GHS";
 
-  const subtotal = data.subtotal || data.items.reduce((acc: number, item: any) => acc + Number(item.price) * Number(item.quantity), 0);
-  const tax = data.tax || subtotal * 0.10;
-  const total = data.total || (subtotal + tax);
+  const itemsHtml = data.items.map((item: any) => {
+    const unitPrice = Number(item.unitPrice || item.price || 0);
+    const qty = Number(item.quantity || 1);
+    const lineAmt = unitPrice * qty;
+    return `
+      <tr style="border-bottom: 1px solid #e5e7eb;">
+        <td style="padding: 12px 16px; font-weight: 500; color: #111827;">${item.productName || item.name}</td>
+        <td style="padding: 12px 16px; text-align: center; color: #4b5563;">${qty}</td>
+        <td style="padding: 12px 16px; text-align: right; color: #4b5563;">${formatMoney(unitPrice, currency)}</td>
+        <td style="padding: 12px 16px; text-align: right; font-weight: 500; color: #111827;">${formatMoney(lineAmt, currency)}</td>
+      </tr>
+    `;
+  }).join("");
+
+  const subtotal = data.subtotal != null ? Number(data.subtotal) : data.items.reduce((acc: number, item: any) => acc + Number(item.unitPrice || item.price || 0) * Number(item.quantity || 1), 0);
+  const discountAmount = data.discountAmount != null ? Number(data.discountAmount) : 0;
+  const tax = data.taxAmount != null ? Number(data.taxAmount) : (subtotal - discountAmount) * 0.10;
+  const total = data.total != null ? Number(data.total) : (subtotal - discountAmount + tax);
 
   const html = `
     <html>
@@ -147,6 +155,9 @@ export function printReceipt(data: any) {
             font-weight: 600;
             color: #111827;
           }
+          .discount-row .totals-label, .discount-row .totals-value {
+            color: #16a34a;
+          }
           .total-row td {
             border-top: 2px solid #f59e0b;
             padding-top: 12px;
@@ -215,10 +226,10 @@ export function printReceipt(data: any) {
           <div class="bill-to-section">
             <div>
               <div class="bill-to-label">Bill To</div>
-              <div class="client-name">${data.customerName || data.clientName || "Valued Customer"}</div>
+              <div class="client-name">${data.customerName || "Valued Customer"}</div>
               <div class="client-details">
-                ${data.customerAddress || data.clientAddress || "Business Address"}<br/>
-                ${data.customerCity || "City, Country"}
+                ${data.businessAddress || "Business Address"}<br/>
+                ${data.businessPhone || ""}
               </div>
             </div>
             <div>
@@ -229,11 +240,11 @@ export function printReceipt(data: any) {
                 </tr>
                 <tr>
                   <td class="meta-label">Date</td>
-                  <td class="meta-value">${data.date ? new Date(data.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</td>
+                  <td class="meta-value">${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</td>
                 </tr>
                 <tr>
-                  <td class="meta-label">Due Date</td>
-                  <td class="meta-value">${data.dueDate ? new Date(data.dueDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</td>
+                  <td class="meta-label">Payment</td>
+                  <td class="meta-value" style="text-transform: uppercase;">${data.paymentMethod || "Cash"}</td>
                 </tr>
               </table>
             </div>
@@ -259,15 +270,21 @@ export function printReceipt(data: any) {
             <table class="totals-table">
               <tr>
                 <td class="totals-label">Subtotal</td>
-                <td class="totals-value">$${subtotal.toFixed(2)}</td>
+                <td class="totals-value">${formatMoney(subtotal, currency)}</td>
               </tr>
+              ${discountAmount > 0 ? `
+              <tr class="discount-row">
+                <td class="totals-label">Discount</td>
+                <td class="totals-value">-${formatMoney(discountAmount, currency)}</td>
+              </tr>
+              ` : ''}
               <tr>
-                <td class="totals-label">Tax (10%)</td>
-                <td class="totals-value">$${tax.toFixed(2)}</td>
+                <td class="totals-label">Tax / VAT</td>
+                <td class="totals-value">${formatMoney(tax, currency)}</td>
               </tr>
               <tr class="total-row">
                 <td class="totals-label">Total</td>
-                <td class="totals-value">$${total.toFixed(2)}</td>
+                <td class="totals-value">${formatMoney(total, currency)}</td>
               </tr>
             </table>
           </div>

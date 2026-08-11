@@ -285,6 +285,8 @@ export interface BusinessProfile {
   permissions?: string[];
   /** List of page paths the business owner is allowed to access. Managed by super admin during approval. */
   allowedPages?: string[];
+  /** Whether staff/salesperson accounts are allowed to offer checkout discounts. */
+  allowStaffDiscounts?: boolean;
   createdAt?: Timestamp | null;
   updatedAt?: Timestamp | null;
 }
