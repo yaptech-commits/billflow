@@ -64,8 +64,6 @@ export default function PosPage() {
     amountPaid: number;
     change: number;
   } | null>(null);
-  const [receiptWidth, setReceiptWidth] = useState<58 | 80>(80);
-
   const [isOnline, setIsOnline] = useState(true);
   const [isForcedOffline, setIsForcedOffline] = useState(false);
   const [offlineCount, setOfflineCount] = useState(0);
@@ -599,14 +597,10 @@ export default function PosPage() {
 
       <Modal open={!!receipt} onClose={() => setReceipt(null)} title="Sale Successful">
         <div className="space-y-6">
-          <div className="flex justify-center gap-3 mb-2">
-            <button onClick={() => setReceiptWidth(58)} className={cn("px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all", receiptWidth === 58 ? "bg-gold border-gold text-black" : "bg-white/5 border-border text-muted")}>58MM</button>
-            <button onClick={() => setReceiptWidth(80)} className={cn("px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all", receiptWidth === 80 ? "bg-gold border-gold text-black" : "bg-white/5 border-border text-muted")}>80MM</button>
-          </div>
-          <div className="flex justify-center overflow-hidden rounded-lg border border-border bg-white">
-            <div id="receipt-content" className="p-4" style={{ width: receiptWidth === 58 ? "220px" : "300px" }}>
+          <div className="flex max-h-[min(68vh,850px)] justify-center overflow-auto rounded-lg border border-border bg-white">
+            <div id="receipt-content" className="w-full min-w-0">
               {receipt && (
-                <BrandedDocument profile={profile} docType="INVOICE" docNumber={receipt.invoiceId.slice(-6).toUpperCase()} date={receipt.timestamp} clientName={receipt.customerName} items={receipt.items} amount={receipt.amount} subtotal={receipt.subtotal} discountAmount={receipt.discountAmount} taxAmount={receipt.taxAmount} taxRate={profile?.taxRate || 0} taxLabel={profile?.taxLabel || "VAT"} paymentMethod={receipt.method} amountPaid={receipt.amountPaid} currencyCode={profile?.currency || "GHS"} width={receiptWidth} paper />
+                <BrandedDocument profile={profile} docType="INVOICE" docNumber={receipt.invoiceId.slice(-6).toUpperCase()} date={receipt.timestamp} clientName={receipt.customerName} items={receipt.items} amount={receipt.amount} subtotal={receipt.subtotal} discountAmount={receipt.discountAmount} taxAmount={receipt.taxAmount} taxRate={profile?.taxRate || 0} taxLabel={profile?.taxLabel || "VAT"} paymentMethod={receipt.method} amountPaid={receipt.amountPaid} currencyCode={profile?.currency || "GHS"} paper />
               )}
             </div>
           </div>
