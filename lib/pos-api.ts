@@ -29,14 +29,29 @@ export async function getPosBootstrap(): Promise<{
   return authorizedRequest("/api/pos/bootstrap");
 }
 
+export type HotelRoomPosContext = {
+  propertyId: string;
+  reservationId: string;
+  guestId: string;
+  roomNumber: string;
+  roomId?: string;
+  checkout?: boolean;
+};
+
 export type PosSaleRequest = {
   idempotencyKey: string;
   shiftId: string;
   customerName: string;
-  items: Array<{ productId: string; quantity: number }>;
+  items: Array<{ productId: string; quantity: number; folioType?: "food_beverage" | "service" }>;
   paymentMethod: PaymentMethod;
   reference?: string;
   discountAmount?: number;
+  /** Actual amount being applied now; omitted means a full POS payment for legacy sales. */
+  amountPaid?: number;
+  /** Optional room charge line; product inventory is not decremented for this line. */
+  roomCharge?: { description: string; quantity: number; unitPrice: number };
+  /** Optional hotel context; when present the same invoice/payment is also posted to the guest folio. */
+  hotelContext?: HotelRoomPosContext;
 };
 
 export type PosSaleResult = {
@@ -45,6 +60,7 @@ export type PosSaleResult = {
   subtotal: number;
   taxAmount: number;
   discountAmount: number;
+  amountPaid?: number;
   items: InvoiceLineItem[];
   duplicate: boolean;
 };

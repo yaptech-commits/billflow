@@ -99,6 +99,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     "/hotel/rooms": "Room Board",
     "/hotel/reservations": "Reservations",
     "/hotel/front-desk": "Front Desk",
+    "/hotel/room-pos": "Room POS",
     "/hotel/guests": "Guest Profiles",
   };
 

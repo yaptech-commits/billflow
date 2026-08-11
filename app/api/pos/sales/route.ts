@@ -5,7 +5,7 @@ import { errorResponseDetails, HttpError, requireServerActor } from "@/lib/serve
 
 export const runtime = "nodejs";
 
-type RequestedLine = { productId: string; quantity: number };
+type RequestedLine = { productId: string; quantity: number; folioType?: "food_beverage" | "service" };
 type PaymentMethod = "momo" | "card" | "cash";
 
 interface PrescriptionValidation {
@@ -23,12 +23,16 @@ function parseBody(value: unknown) {
   }
 
   const body = value as Record<string, unknown>;
-  if (!Array.isArray(body.items) || body.items.length === 0 || body.items.length > 100) {
-    throw new HttpError(400, "A sale must contain between 1 and 100 products");
+  const hasRoomCharge = Boolean(body.roomCharge && typeof body.roomCharge === "object" && !Array.isArray(body.roomCharge));
+  if ((!Array.isArray(body.items) || body.items.length > 100) && !hasRoomCharge) {
+    throw new HttpError(400, "A sale must contain products or a room charge");
+  }
+  if (Array.isArray(body.items) && body.items.length === 0 && !hasRoomCharge) {
+    throw new HttpError(400, "A sale must contain at least one line item");
   }
 
   const combined = new Map<string, number>();
-  for (const rawLine of body.items) {
+  for (const rawLine of (Array.isArray(body.items) ? body.items : [])) {
     if (!rawLine || typeof rawLine !== "object" || Array.isArray(rawLine)) {
       throw new HttpError(400, "Invalid sale item");
     }
@@ -76,6 +80,27 @@ function parseBody(value: unknown) {
     throw new HttpError(400, "Invalid discount amount");
   }
 
+  const amountPaid = body.amountPaid === undefined ? undefined : body.amountPaid;
+  if (amountPaid !== undefined && (typeof amountPaid !== "number" || !Number.isFinite(amountPaid) || amountPaid < 0 || amountPaid > 1_000_000_000)) {
+    throw new HttpError(400, "Invalid amount paid");
+  }
+
+  const roomCharge = hasRoomCharge ? body.roomCharge as Record<string, unknown> : undefined;
+  let parsedRoomCharge: { description: string; quantity: number; unitPrice: number } | undefined;
+  if (roomCharge) {
+    if (typeof roomCharge.description !== "string" || !roomCharge.description.trim() || roomCharge.description.length > 160 || typeof roomCharge.quantity !== "number" || !Number.isSafeInteger(roomCharge.quantity) || roomCharge.quantity <= 0 || typeof roomCharge.unitPrice !== "number" || !Number.isFinite(roomCharge.unitPrice) || roomCharge.unitPrice < 0) {
+      throw new HttpError(400, "Invalid room charge");
+    }
+    parsedRoomCharge = { description: roomCharge.description.trim(), quantity: roomCharge.quantity, unitPrice: roomCharge.unitPrice };
+  }
+
+  const hotelContext = body.hotelContext && typeof body.hotelContext === "object" && !Array.isArray(body.hotelContext)
+    ? body.hotelContext as Record<string, unknown>
+    : undefined;
+  if (hotelContext && (typeof hotelContext.propertyId !== "string" || typeof hotelContext.reservationId !== "string" || typeof hotelContext.guestId !== "string" || typeof hotelContext.roomNumber !== "string" || (hotelContext.roomId !== undefined && typeof hotelContext.roomId !== "string"))) {
+    throw new HttpError(400, "Invalid hotel folio context");
+  }
+
   return {
     items: Array.from(combined, ([productId, quantity]): RequestedLine => ({ productId, quantity })),
     paymentMethod: paymentMethod as PaymentMethod,
@@ -84,6 +109,9 @@ function parseBody(value: unknown) {
     customerName: customerName || "Walk-in Customer",
     reference: reference || `POS-${body.idempotencyKey.slice(0, 8).toUpperCase()}`,
     discountAmount,
+    amountPaid: amountPaid === undefined ? undefined : Number(amountPaid),
+    roomCharge: parsedRoomCharge,
+    hotelContext: hotelContext ? { propertyId: hotelContext.propertyId as string, reservationId: hotelContext.reservationId as string, guestId: hotelContext.guestId as string, roomNumber: hotelContext.roomNumber as string, roomId: typeof hotelContext.roomId === "string" ? hotelContext.roomId : undefined, checkout: hotelContext.checkout === true } : undefined,
   };
 }
 
@@ -104,6 +132,13 @@ export async function POST(request: NextRequest) {
     const movementRefs = input.items.map((_, index) =>
       db.collection("stockMovements").doc(`${input.idempotencyKey}-${index + 1}`)
     );
+    const folioRefs = [
+      ...input.items.map((_, index) => db.collection("hotelFolioItems").doc(`${input.idempotencyKey}-folio-${index + 1}`)),
+      ...(input.roomCharge ? [db.collection("hotelFolioItems").doc(`${input.idempotencyKey}-folio-room`)] : []),
+      db.collection("hotelFolioItems").doc(`${input.idempotencyKey}-folio-tax`),
+    ];
+    const reservationRef = input.hotelContext?.reservationId ? db.collection("hotelReservations").doc(input.hotelContext.reservationId) : null;
+    const roomRef = input.hotelContext?.roomId ? db.collection("hotelRooms").doc(input.hotelContext.roomId) : null;
 
     const result = await db.runTransaction(async (transaction) => {
       const snapshots = await transaction.getAll(invoiceRef, shiftRef, profileRef, ...productRefs);
@@ -124,6 +159,7 @@ export async function POST(request: NextRequest) {
           subtotal: existing.subtotal,
           taxAmount: existing.taxAmount,
           discountAmount: existing.discountAmount ?? 0,
+          amountPaid: existing.amountPaid ?? existing.amount ?? 0,
           items: existing.items ?? [],
           duplicate: true,
         };
@@ -142,7 +178,7 @@ export async function POST(request: NextRequest) {
       }
 
       let lineTotalCents = 0;
-      const canonicalItems = productSnaps.map((productSnap, index) => {
+      const canonicalItems: Array<{ productId: string; productName: string; quantity: number; unitPrice: number; previousStockQty: number; folioType?: "room_charge" | "food_beverage" | "service"; isRoomCharge: boolean }> = productSnaps.map((productSnap, index) => {
         const requested = input.items[index];
         if (!productSnap.exists) {
           throw new HttpError(409, "A selected product no longer exists");
@@ -174,8 +210,24 @@ export async function POST(request: NextRequest) {
           quantity: requested.quantity,
           unitPrice: product.price,
           previousStockQty: product.stockQty,
+          folioType: requested.folioType,
+          isRoomCharge: false,
         };
       });
+
+      if (input.roomCharge) {
+        if (!input.hotelContext) throw new HttpError(400, "Room charges require a hotel folio context");
+        canonicalItems.push({
+          productId: `hotel-room-charge:${input.hotelContext.reservationId}`,
+          productName: input.roomCharge.description,
+          quantity: input.roomCharge.quantity,
+          unitPrice: input.roomCharge.unitPrice,
+          previousStockQty: 0,
+          folioType: "room_charge",
+          isRoomCharge: true,
+        });
+        lineTotalCents += toCents(input.roomCharge.unitPrice) * input.roomCharge.quantity;
+      }
 
       const discountCents = toCents(input.discountAmount);
       if (discountCents > lineTotalCents) {
@@ -183,6 +235,13 @@ export async function POST(request: NextRequest) {
       }
 
       const profile = profileSnap.exists ? profileSnap.data() : {};
+      const isSuperAdmin = String(actor.role) === "super_admin";
+      if (input.hotelContext && !isSuperAdmin && profile?.businessType !== "hotel") {
+        throw new HttpError(403, "Hotel folio charges are available only for Hotel businesses");
+      }
+      if (input.hotelContext && input.hotelContext.propertyId !== profile?.propertyId && !isSuperAdmin) {
+        throw new HttpError(403, "The selected room belongs to a different property");
+      }
       if (input.discountAmount > 0 && actor.role === "salesperson" && profile?.allowStaffDiscounts !== true) {
         throw new HttpError(403, "Discounts are disabled for salesperson accounts. Ask the business owner to enable them in Settings.");
       }
@@ -216,15 +275,20 @@ export async function POST(request: NextRequest) {
       const subtotal = fromCents(subtotalCents);
       const taxAmount = fromCents(taxCents);
       const discountAmount = fromCents(discountCents);
+      const requestedPaidCents = toCents(input.amountPaid === undefined ? amount : input.amountPaid);
+      if (requestedPaidCents > amountCents) throw new HttpError(400, "Amount paid cannot exceed the sale total");
+      if (input.hotelContext?.checkout && requestedPaidCents < amountCents) throw new HttpError(400, "Checkout requires the current folio charge to be settled");
+      const paidAmount = fromCents(requestedPaidCents);
+      const isPaid = requestedPaidCents >= amountCents;
       const now = FieldValue.serverTimestamp();
-      const publicItems = canonicalItems.map(({ previousStockQty: _previousStockQty, ...item }) => item);
+      const publicItems = canonicalItems.map(({ previousStockQty: _previousStockQty, isRoomCharge: _isRoomCharge, ...item }) => item);
 
       transaction.create(invoiceRef, {
         source: "pos",
         shiftId: shiftRef.id,
         userId: actor.uid,
         businessId: actor.businessId,
-        clientId: "walk-in",
+        clientId: input.hotelContext?.guestId || "walk-in",
         clientName: input.customerName,
         items: publicItems,
         subtotal,
@@ -233,40 +297,45 @@ export async function POST(request: NextRequest) {
         taxInclusive,
         discountAmount,
         amount,
-        amountPaid: amount,
-        status: "paid",
+        amountPaid: paidAmount,
+        status: isPaid ? "paid" : "pending",
         paymentMethod: input.paymentMethod,
         issuedAt: now,
-        dueAt: null,
-        paidAt: now,
+        dueAt: isPaid ? null : now,
+        ...(isPaid ? { paidAt: now } : {}),
         createdAt: now,
+        ...(input.hotelContext ? { propertyId: input.hotelContext.propertyId, reservationId: input.hotelContext.reservationId, roomNumber: input.hotelContext.roomNumber, sourceModule: "hotel_room_pos" } : {}),
       });
 
-      transaction.create(paymentRef, {
-        source: "pos",
-        shiftId: shiftRef.id,
-        userId: actor.uid,
-        businessId: actor.businessId,
-        clientId: "walk-in",
-        clientName: input.customerName,
-        invoiceId: invoiceRef.id,
-        method: input.paymentMethod,
-        reference: input.reference,
-        amount,
-        status: "success",
-        createdAt: now,
-      });
+      if (requestedPaidCents > 0) {
+        transaction.create(paymentRef, {
+          source: "pos",
+          shiftId: shiftRef.id,
+          userId: actor.uid,
+          businessId: actor.businessId,
+          clientId: input.hotelContext?.guestId || "walk-in",
+          clientName: input.customerName,
+          invoiceId: invoiceRef.id,
+          method: input.paymentMethod,
+          reference: input.reference,
+          amount: paidAmount,
+          status: "success",
+          createdAt: now,
+          ...(input.hotelContext ? { propertyId: input.hotelContext.propertyId, reservationId: input.hotelContext.reservationId } : {}),
+        });
+      }
 
       const paymentBreakdown = {
         ...(shift?.paymentBreakdown ?? {}),
-        [input.paymentMethod]: Number(shift?.paymentBreakdown?.[input.paymentMethod] ?? 0) + amount,
+        [input.paymentMethod]: Number(shift?.paymentBreakdown?.[input.paymentMethod] ?? 0) + paidAmount,
       };
       transaction.update(shiftRef, {
-        totalSales: Number(shift?.totalSales ?? 0) + amount,
+        totalSales: Number(shift?.totalSales ?? 0) + paidAmount,
         paymentBreakdown,
       });
 
       canonicalItems.forEach((item, index) => {
+        if (item.isRoomCharge) return;
         const nextStockQty = item.previousStockQty - item.quantity;
         if (nextStockQty <= 0 && profile?.autoDeleteOutOfStock) {
           transaction.delete(productRefs[index]);
@@ -287,12 +356,54 @@ export async function POST(request: NextRequest) {
         });
       });
 
+      if (input.hotelContext) {
+        const folioLineItems = canonicalItems.map((item, index) => ({
+          ref: item.isRoomCharge ? db.collection("hotelFolioItems").doc(`${input.idempotencyKey}-folio-room`) : folioRefs[index],
+          item,
+        }));
+        folioLineItems.forEach(({ ref, item }) => transaction.create(ref, {
+          businessId: actor.businessId,
+          propertyId: input.hotelContext!.propertyId,
+          reservationId: input.hotelContext!.reservationId,
+          guestId: input.hotelContext!.guestId,
+          roomNumber: input.hotelContext!.roomNumber,
+          type: item.isRoomCharge ? "room_charge" : (item.folioType || "service"),
+          payerType: "primary",
+          description: item.productName,
+          amount: fromCents(toCents(item.unitPrice) * item.quantity),
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          invoiceId: invoiceRef.id,
+          postedBy: actor.uid,
+          createdAt: now,
+        }));
+        if (taxAmount > 0) transaction.create(db.collection("hotelFolioItems").doc(`${input.idempotencyKey}-folio-tax`), {
+          businessId: actor.businessId,
+          propertyId: input.hotelContext.propertyId,
+          reservationId: input.hotelContext.reservationId,
+          guestId: input.hotelContext.guestId,
+          roomNumber: input.hotelContext.roomNumber,
+          type: "tax",
+          payerType: "primary",
+          description: `${profile?.taxLabel || "Tax"} (${taxRate}%)`,
+          amount: taxAmount,
+          invoiceId: invoiceRef.id,
+          postedBy: actor.uid,
+          createdAt: now,
+        });
+        if (input.hotelContext.checkout) {
+          if (reservationRef) transaction.update(reservationRef, { status: "checked_out", updatedAt: now });
+          if (roomRef) transaction.update(roomRef, { occupancyStatus: "vacant", status: "dirty", updatedAt: now });
+        }
+      }
+
       return {
         invoiceId: invoiceRef.id,
         amount,
         subtotal,
         taxAmount,
         discountAmount,
+        amountPaid: paidAmount,
         items: publicItems,
         duplicate: false,
       };

@@ -6,7 +6,7 @@ import {
   LayoutDashboard, FileText, Users, Ticket, 
   CreditCard, BarChart3, Settings, Package, 
   ChevronLeft, ChevronRight, ShoppingCart, Truck, UserCircle, Shield,
-  LogOut, Building2, AlertCircle, Pill, BedDouble, CalendarDays, ConciergeBell, UserRound, ChevronDown
+  LogOut, Building2, AlertCircle, Pill, BedDouble, CalendarDays, ConciergeBell, UserRound, CircleDollarSign, ChevronDown
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -56,6 +56,7 @@ export default function Sidebar() {
     { name: "Room Board", icon: BedDouble, path: "/hotel/rooms", roles: ["owner", "salesperson", "super_admin"], hotel: true },
     { name: "Reservations", icon: CalendarDays, path: "/hotel/reservations", roles: ["owner", "salesperson", "super_admin"], hotel: true },
     { name: "Front Desk", icon: ConciergeBell, path: "/hotel/front-desk", roles: ["owner", "salesperson", "super_admin"], hotel: true },
+    { name: "Room POS", icon: CircleDollarSign, path: "/hotel/room-pos", roles: ["owner", "salesperson", "super_admin"], hotel: true },
     { name: "Guests", icon: UserRound, path: "/hotel/guests", roles: ["owner", "salesperson", "super_admin"], hotel: true },
     { name: "Revenue & Audit", icon: BarChart3, path: "/hotel/reports", roles: ["owner", "salesperson", "super_admin"], hotel: true },
     { name: "Online Booking", icon: Ticket, path: "/hotel/booking-widget", roles: ["owner", "salesperson", "super_admin"], hotel: true },
@@ -86,7 +87,7 @@ export default function Sidebar() {
     if (role !== "super_admin" && isHotel) {
       const hotelPaths = new Set([
         "/dashboard", "/hotel/rooms", "/hotel/reservations", "/hotel/front-desk", "/hotel/guests",
-        "/hotel/reports", "/hotel/booking-widget", "/invoices", "/payments", "/reports", "/staff", "/settings",
+        "/hotel/reports", "/hotel/booking-widget", "/hotel/room-pos", "/invoices", "/payments", "/reports", "/staff", "/settings",
       ]);
       if (!hotelPaths.has(item.path)) return false;
     }
@@ -136,7 +137,7 @@ export default function Sidebar() {
       label: "Hotel",
       shortLabel: "HTL",
       description: "Rooms, reservations, front desk, and guest operations",
-      paths: ["/hotel/rooms", "/hotel/reservations", "/hotel/front-desk", "/hotel/guests", "/hotel/reports", "/hotel/booking-widget"],
+      paths: ["/hotel/rooms", "/hotel/reservations", "/hotel/front-desk", "/hotel/room-pos", "/hotel/guests", "/hotel/reports", "/hotel/booking-widget"],
     },
     {
       key: "administration",

@@ -195,7 +195,10 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
     { id: "/hotel/rooms", label: "Room Board" },
     { id: "/hotel/reservations", label: "Reservations" },
     { id: "/hotel/front-desk", label: "Front Desk" },
+    { id: "/hotel/room-pos", label: "Room POS" },
     { id: "/hotel/guests", label: "Guests" },
+    { id: "/hotel/reports", label: "Revenue & Audit" },
+    { id: "/hotel/booking-widget", label: "Online Booking" },
   ];
 
   const fetchStats = async (force = false) => {

@@ -16,3 +16,14 @@
 **Design decision:** In Super Admin global view, show all page groups. When a business is selected, keep all groups visible so Super Admin retains global access, while visually highlighting the selected business type where possible.
 
 **Style reminder:** BillFlow uses a dark operational sidebar with gold active states, compact spacing, and accessible icon labels. Group headers should reinforce hierarchy without introducing a second visual language.
+
+
+## Hotel Room POS
+- [x] Map existing POS cart, tax, payment, receipt, invoice, and product-charge helpers.
+- [x] Build a hotel-only Room POS page with Free, Reserved, and Occupied room sections.
+- [x] Connect room selection to reservation, check-in, folio, partial-payment, and checkout flows.
+- [x] Reuse existing products for minibar, food, laundry, and service charges.
+- [x] Verify permissions, TypeScript, route behavior, and billing persistence.
+- [ ] Commit and push the Room POS implementation.
+
+**Structural decision:** Room availability remains date-range based and room status remains reservation/housekeeping based; the Room POS page is only a front-desk entry point into those existing records and the existing POS billing pipeline.
