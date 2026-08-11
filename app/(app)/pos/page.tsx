@@ -7,13 +7,15 @@ import {
   InvoiceLineItem, PaymentMethod, BusinessProfile, Shift, getActiveShift, openShift, closeShift,
   getCategories, Category, calculateTax
 } from "@/lib/db";
+import { getProductByBarcode } from "@/lib/pharmacy-db";
 import { createPosSale } from "@/lib/pos-api";
 import { formatMoney, cn } from "@/lib/utils";
 import Modal from "@/components/ui/Modal";
 import BrandedDocument from "@/components/BrandedDocument";
 import toast from "react-hot-toast";
-import { Search, Plus, Minus, Trash2, ShoppingCart, Printer, X, Wifi, WifiOff, ArrowRight, CreditCard } from "lucide-react";
+import { Search, Plus, Minus, Trash2, ShoppingCart, Printer, X, Wifi, WifiOff, ArrowRight, CreditCard, Camera, Bluetooth } from "lucide-react";
 import { printReceipt } from "@/lib/print-receipt";
+import { isBluetoothPrintingSupported, printReceiptOverBluetooth } from "@/lib/bluetooth-printer";
 import { queueOfflineSale, syncOfflineSales, getOfflineQueue } from "@/lib/offline-sync";
 import { createSafeId } from "@/lib/safe-id";
 
@@ -24,6 +26,8 @@ interface CartLine {
   quantity: number;
   maxStock: number;
 }
+
+const CASH_DENOMINATIONS = [200, 100, 50, 20, 10, 5, 2, 1, 0.5, 0.2, 0.1];
 
 export default function PosPage() {
   const { user, businessId, role } = useAuth();
@@ -37,18 +41,23 @@ export default function PosPage() {
   const [scanValue, setScanValue] = useState("");
   const [search, setSearch] = useState("");
   const scanRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
 
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [customerName, setCustomerName] = useState("Walk-in Customer");
   const [payMethod, setPayMethod] = useState<PaymentMethod>("cash");
   const [amountReceived, setAmountReceived] = useState<string>("");
   const [charging, setCharging] = useState(false);
+  const [bluetoothPrinting, setBluetoothPrinting] = useState(false);
 
   // Shift state
   const [activeShift, setActiveShift] = useState<Shift | null>(null);
   const [shiftModalOpen, setShiftModalOpen] = useState(false);
   const [openingCash, setOpeningCash] = useState("0");
   const [actualCash, setActualCash] = useState("0");
+  const [cashCountByDenomination, setCashCountByDenomination] = useState<Record<string, string>>({});
+  const [reconciliationNote, setReconciliationNote] = useState("");
   const [closingShift, setClosingShift] = useState(false);
 
   const [receipt, setReceipt] = useState<{
@@ -73,6 +82,10 @@ export default function PosPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [discountAmount, setDiscountAmount] = useState<string>("");
   const canApplyDiscount = role === "owner" || role === "super_admin" || profile?.allowStaffDiscounts === true;
+  const countedCash = useMemo(
+    () => CASH_DENOMINATIONS.reduce((total, denomination) => total + denomination * (Number(cashCountByDenomination[String(denomination)]) || 0), 0),
+    [cashCountByDenomination]
+  );
 
   useEffect(() => {
     if (!canApplyDiscount) setDiscountAmount("");
@@ -155,6 +168,70 @@ export default function PosPage() {
     scanRef.current?.focus();
   }, [checkoutOpen, receipt]);
 
+  useEffect(() => {
+    if (!cameraOpen) return;
+    let stream: MediaStream | null = null;
+    let cancelled = false;
+    let animationFrame = 0;
+
+    const startCamera = async () => {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        toast.error("Camera scanning is not supported on this device.");
+        setCameraOpen(false);
+        return;
+      }
+      const BarcodeDetectorCtor = (window as Window & { BarcodeDetector?: new (options?: { formats?: string[] }) => { detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue?: string }>> } }).BarcodeDetector;
+      if (!BarcodeDetectorCtor) {
+        toast.error("This browser does not support camera barcode scanning. Use the search field or a USB/Bluetooth scanner.");
+        setCameraOpen(false);
+        return;
+      }
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
+        if (cancelled || !videoRef.current) return;
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+        const detector = new BarcodeDetectorCtor({ formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "qr_code"] });
+        const scanFrame = async () => {
+          if (cancelled || !videoRef.current) return;
+          try {
+            const results = await detector.detect(videoRef.current);
+            const code = results[0]?.rawValue?.trim();
+            if (code) {
+              setScanValue(code);
+              setSearch(code);
+              setCameraOpen(false);
+              const barcodeRecord = businessId ? await getProductByBarcode(businessId, code) : null;
+              const exact = products.find(p => p.sku?.toLowerCase() === code.toLowerCase())
+                ?? products.find(p => p.id === barcodeRecord?.productId);
+              if (exact) {
+                addToCart(exact);
+                toast.success(`${exact.name} added`, { duration: 1200 });
+              } else {
+                toast.error(`No product found for barcode "${code}"`);
+              }
+              return;
+            }
+          } catch {
+            // Continue scanning; camera frames can be unavailable while autofocus settles.
+          }
+          animationFrame = window.requestAnimationFrame(() => { void scanFrame(); });
+        };
+        animationFrame = window.requestAnimationFrame(() => { void scanFrame(); });
+      } catch (error: any) {
+        toast.error(error?.name === "NotAllowedError" ? "Camera permission was denied." : "Could not start the camera scanner.");
+        setCameraOpen(false);
+      }
+    };
+    void startCamera();
+    return () => {
+      cancelled = true;
+      if (animationFrame) window.cancelAnimationFrame(animationFrame);
+      stream?.getTracks().forEach(track => track.stop());
+      if (videoRef.current) videoRef.current.srcObject = null;
+    };
+  }, [cameraOpen, businessId, products]);
+
   const addToCart = (p: Product, qty = 1) => {
     if (p.stockQty <= 0) {
       toast.error(`${p.name} is out of stock`);
@@ -179,12 +256,15 @@ export default function PosPage() {
     });
   };
 
-  const handleScanSubmit = (e: React.FormEvent) => {
+  const handleScanSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const term = scanValue.trim();
     if (!term) return;
-    const bySku = products.find(p => p.sku && p.sku.toLowerCase() === term.toLowerCase());
-    const match = bySku ?? products.find(p => p.name.toLowerCase().includes(term.toLowerCase()));
+    const normalizedTerm = term.toLowerCase();
+    const barcodeRecord = businessId ? await getProductByBarcode(businessId, term) : null;
+    const bySku = products.find(p => p.sku && p.sku.toLowerCase() === normalizedTerm);
+    const byMappedBarcode = products.find(p => p.id === barcodeRecord?.productId);
+    const match = bySku ?? byMappedBarcode ?? products.find(p => p.name.toLowerCase().includes(normalizedTerm));
     if (match) {
       addToCart(match);
       toast.success(`${match.name} added`, { duration: 1200 });
@@ -268,15 +348,52 @@ export default function PosPage() {
     if (!activeShift?.id) return;
     setClosingShift(true);
     try {
-      await closeShift(activeShift.id, parseFloat(actualCash) || 0);
+      const denominationCounts = Object.fromEntries(
+        Object.entries(cashCountByDenomination)
+          .map(([denomination, count]) => [denomination, Number(count) || 0])
+          .filter(([, count]) => Number(count) > 0)
+      );
+      await closeShift(activeShift.id, parseFloat(actualCash) || 0, {
+        cashCountByDenomination: denominationCounts,
+        reconciliationNote,
+      });
       toast.success("Shift closed successfully");
       setActiveShift(null);
       setShiftModalOpen(true);
       setActualCash("0");
+      setCashCountByDenomination({});
+      setReconciliationNote("");
     } catch (err: any) {
       toast.error(err.message || "Could not close shift");
     } finally {
       setClosingShift(false);
+    }
+  };
+
+  const handleBluetoothPrint = async () => {
+    if (!receipt || !profile) return;
+    setBluetoothPrinting(true);
+    try {
+      await printReceiptOverBluetooth({
+        businessName: profile.businessName,
+        invoiceNumber: receipt.invoiceId,
+        issuedAt: receipt.timestamp,
+        customerName: receipt.customerName,
+        items: receipt.items.map(item => ({ name: item.productName, quantity: item.quantity, unitPrice: item.unitPrice })),
+        subtotal: receipt.subtotal,
+        discountAmount: receipt.discountAmount,
+        taxAmount: receipt.taxAmount,
+        total: receipt.amount,
+        paymentMethod: receipt.method,
+        amountPaid: receipt.amountPaid,
+        change: receipt.change,
+        currencyCode: profile.currency || "GHS",
+      }, receiptWidth);
+      toast.success("Receipt sent to the Bluetooth printer");
+    } catch (err: any) {
+      toast.error(err?.message || "Could not print to the Bluetooth printer");
+    } finally {
+      setBluetoothPrinting(false);
     }
   };
 
@@ -454,20 +571,27 @@ export default function PosPage() {
           {isWholesale && <span className="text-[10px] font-bold text-gold bg-gold/10 px-2 py-1 rounded border border-gold/20 animate-pulse">WHOLESALE MODE ACTIVE</span>}
         </div>
 
-        <form onSubmit={handleScanSubmit} className="relative mb-5">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" size={20} />
-          <input
-            ref={scanRef}
-            className="input pl-12 h-14 text-lg font-grotesk"
-            placeholder="Scan barcode or search products..."
-            value={scanValue}
-            onChange={e => {
-              const value = e.target.value;
-              setScanValue(value);
-              setSearch(value);
-            }}
-          />
-        </form>
+        <div className="flex items-stretch gap-2 mb-5">
+          <form onSubmit={handleScanSubmit} className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" size={20} />
+            <input
+              ref={scanRef}
+              className="input pl-12 h-14 text-lg font-grotesk w-full"
+              placeholder="Scan barcode or search products..."
+              value={scanValue}
+              onChange={e => {
+                const value = e.target.value;
+                setScanValue(value);
+                setSearch(value);
+              }}
+              aria-label="Search products or scan a barcode"
+            />
+          </form>
+          <button type="button" onClick={() => setCameraOpen(true)} className="btn-ghost h-14 w-14 shrink-0 justify-center border border-border" title="Scan with camera" aria-label="Scan barcode with camera">
+            <Camera size={20} className="text-gold" />
+          </button>
+        </div>
+        {search.trim() && <p className="text-[11px] text-muted -mt-3 mb-4" aria-live="polite">Showing products matching <span className="font-bold text-surface">{search}</span> · {filteredProducts.length} result{filteredProducts.length === 1 ? "" : "s"}</p>}
 
         <div className="flex gap-2 mb-6 overflow-x-auto pb-2 custom-scrollbar">
           <button onClick={() => setSelectedCategory("all")} className={cn("px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all border", selectedCategory === "all" ? "bg-gold border-gold text-black" : "bg-white/5 border-border text-muted hover:border-gold/50")}>All Products</button>
@@ -647,6 +771,11 @@ export default function PosPage() {
               >
                 <Printer size={18} /> Print
               </button>
+              {isBluetoothPrintingSupported() && (
+                <button className="btn-ghost flex-1 justify-center gap-2" onClick={handleBluetoothPrint} disabled={bluetoothPrinting}>
+                  <Bluetooth size={18} /> {bluetoothPrinting ? "Sending..." : "Bluetooth"}
+                </button>
+              )}
             <button className="btn-primary flex-1 justify-center" onClick={() => setReceipt(null)}>DONE</button>
           </div>
         </div>
@@ -677,10 +806,42 @@ export default function PosPage() {
                   ))}
                 </div>
               </div>
-              <div>
-                <label className="label">Actual Cash in Drawer ({profile?.currency || "GHS"})</label>
-                <input className="input text-lg font-grotesk" type="number" placeholder="0.00" value={actualCash} onChange={e => setActualCash(e.target.value)} />
-                <p className="text-[10px] text-muted mt-2">Expected cash: {formatMoney((activeShift.openingCash || 0) + (activeShift.paymentBreakdown?.cash || 0), profile?.currency || "GHS")}</p>
+              <div className="space-y-4">
+                <div>
+                  <label className="label">Counted Cash by Denomination ({profile?.currency || "GHS"})</label>
+                  <div className="grid grid-cols-2 gap-2 mt-2">
+                    {CASH_DENOMINATIONS.map(denomination => (
+                      <label key={denomination} className="flex items-center gap-2 rounded-lg border border-border bg-white/5 px-3 py-2">
+                        <span className="text-xs text-muted min-w-12">{denomination}</span>
+                        <input
+                          className="input h-9 min-w-0 text-right text-sm"
+                          type="number"
+                          min="0"
+                          step="1"
+                          inputMode="numeric"
+                          placeholder="0"
+                          value={cashCountByDenomination[String(denomination)] || ""}
+                          onChange={e => setCashCountByDenomination(previous => ({ ...previous, [String(denomination)]: e.target.value }))}
+                          aria-label={`Count of ${denomination} denomination`}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-border bg-white/5 p-4 space-y-2">
+                  <div className="flex justify-between text-xs text-muted"><span>Counted cash</span><span className="font-grotesk text-surface">{formatMoney(countedCash, profile?.currency || "GHS")}</span></div>
+                  <div className="flex justify-between text-xs text-muted"><span>Expected cash</span><span className="font-grotesk text-surface">{formatMoney((activeShift.openingCash || 0) + (activeShift.paymentBreakdown?.cash || 0), profile?.currency || "GHS")}</span></div>
+                  <div className="border-t border-border/50 pt-2 flex justify-between text-sm font-bold"><span>Difference</span><span className={cn("font-grotesk", countedCash - ((activeShift.openingCash || 0) + (activeShift.paymentBreakdown?.cash || 0)) === 0 ? "text-emerald-400" : "text-red-400")}>{formatMoney(countedCash - ((activeShift.openingCash || 0) + (activeShift.paymentBreakdown?.cash || 0)), profile?.currency || "GHS")}</span></div>
+                </div>
+                <div>
+                  <label className="label">Final Actual Cash ({profile?.currency || "GHS"})</label>
+                  <input className="input text-lg font-grotesk" type="number" inputMode="decimal" placeholder={countedCash.toFixed(2)} value={actualCash} onChange={e => setActualCash(e.target.value)} />
+                  <p className="text-[10px] text-muted mt-2">This amount is stored as the final drawer count used for the official shift difference.</p>
+                </div>
+                <div>
+                  <label className="label">Reconciliation Note <span className="text-muted font-normal">(optional)</span></label>
+                  <textarea className="input min-h-20 resize-y" placeholder="Explain any shortage, overage, or adjustment" value={reconciliationNote} onChange={e => setReconciliationNote(e.target.value)} />
+                </div>
               </div>
               <div className="flex gap-3 pt-2">
                 <button className="btn-ghost flex-1 justify-center" onClick={() => setShiftModalOpen(false)}>Cancel</button>

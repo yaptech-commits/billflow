@@ -345,6 +345,10 @@ export interface Shift {
   cashDifference?: number;
   totalSales?: number;
   paymentBreakdown?: Record<PaymentMethod, number>;
+  /** Cash drawer count captured at close, keyed by denomination string. */
+  cashCountByDenomination?: Record<string, number>;
+  /** Optional note explaining a drawer discrepancy or closeout adjustment. */
+  reconciliationNote?: string;
   status: "open" | "closed";
 }
 
@@ -684,7 +688,11 @@ export async function getActiveShift(businessId: string, userId: string): Promis
   return snap.empty ? null : ({ id: snap.docs[0].id, ...snap.docs[0].data() } as Shift);
 }
 
-export async function closeShift(shiftId: string, actualCash: number) {
+export async function closeShift(
+  shiftId: string,
+  actualCash: number,
+  reconciliation?: { cashCountByDenomination?: Record<string, number>; reconciliationNote?: string }
+) {
   const shiftRef = doc(db, "shifts", shiftId);
   const shiftSnap = await getDoc(shiftRef);
   if (!shiftSnap.exists()) throw new Error("Shift not found");
@@ -718,6 +726,8 @@ export async function closeShift(shiftId: string, actualCash: number) {
     cashDifference,
     totalSales,
     paymentBreakdown: breakdown,
+    ...(reconciliation?.cashCountByDenomination ? { cashCountByDenomination: reconciliation.cashCountByDenomination } : {}),
+    ...(reconciliation?.reconciliationNote?.trim() ? { reconciliationNote: reconciliation.reconciliationNote.trim() } : {}),
     status: "closed",
   });
 }

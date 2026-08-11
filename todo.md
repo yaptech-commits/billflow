@@ -1,6 +1,6 @@
-# Owner Logo and Live POS Search Fix
+# Suggested Upgrades Implementation
 
-- [ ] Update `components/BrandedDocument.tsx` so `BillFlowMark` (or the reference invoice header mark) displays the business owner's logo (`profile.logoDataUrl`) when present, falling back to a clean initial badge instead of hardcoded BillFlow branding.
-- [ ] Inspect POS product search state and dropdown filtering in `app/(app)/pos/page.tsx` to ensure typing any product name immediately shows matching items in real time.
-- [ ] Run production build and verify both changes.
-- [ ] Commit and push using `ayindenabawisdom@gmail.com`.
+- [ ] **Mobile Thermal Bluetooth & Web Bluetooth Printing**: Add direct Web Bluetooth API printing support for 58mm and 80mm ESC/POS thermal printers in the POS success modal.
+- [ ] **Barcode Scanner Integration**: Implement continuous keyboard/USB scanner event listeners (`keypress` / barcode prefix / Enter detection) for instant product barcode lookup at POS checkout.
+- [ ] **Shift-Drawer Reconciliation**: Build cash-drawer audit breakdowns, expected vs. actual cash counts, multi-currency cash/momo/card reconciliation, and discrepancy reporting into the shift closing modal.
+- [ ] **Production Verification & Push**: Run type checks, production build, commit with `ayindenabawisdom@gmail.com`, and push to GitHub.
