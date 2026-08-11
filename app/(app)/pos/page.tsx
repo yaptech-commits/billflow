@@ -616,15 +616,10 @@ export default function PosPage() {
                 onClick={() => {
                   if (!receipt || !profile) return;
                   printReceipt({
-                    businessName: profile.businessName,
-                    businessAddress: profile.address,
-                    businessPhone: profile.phone,
-                    businessEmail: profile.email,
-                    logoDataUrl: profile.logoDataUrl,
-                    accentColor: profile.accentColor,
                     footerNote: profile.footerNote,
                     invoiceNumber: receipt.invoiceId,
                     issuedAt: receipt.timestamp,
+                    dueDate: receipt.timestamp,
                     items: receipt.items,
                     subtotal: receipt.subtotal,
                     discountAmount: receipt.discountAmount,
@@ -632,11 +627,7 @@ export default function PosPage() {
                     taxRate: profile?.taxRate || 0,
                     taxLabel: profile?.taxLabel || "VAT",
                     total: receipt.amount,
-                    paymentMethod: receipt.method,
-                    amountPaid: receipt.amountPaid,
-                    change: receipt.change,
                     customerName: receipt.customerName,
-                    cashierName: user?.displayName || "Staff",
                     currencyCode: profile?.currency || "GHS"
                   });
                 }}
