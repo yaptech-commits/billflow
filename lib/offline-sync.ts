@@ -3,6 +3,9 @@
  * Stores pending payloads in localStorage with idempotency keys and retry counters.
  */
 
+import { collection, doc, onSnapshot, query, runTransaction, setDoc, updateDoc, where } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+
 const SYNC_QUEUE_KEY = "billflow_offline_sales";
 const OFFLINE_INVOICES_KEY = "billflow_offline_invoices";
 const OFFLINE_PAYMENTS_KEY = "billflow_offline_payments";
@@ -126,6 +129,101 @@ export function getOfflineSummary() {
   const payments = getOfflineQueue(OFFLINE_PAYMENTS_KEY).length;
   const folios = getOfflineQueue(OFFLINE_FOLIOS_KEY).length;
   return { sales, invoices, payments, folios, total: sales + invoices + payments + folios };
+}
+
+export interface SyncTelemetry {
+  businessId: string;
+  sales: number;
+  invoices: number;
+  payments: number;
+  folios: number;
+  total: number;
+  offlineMode: boolean;
+  lastSeenAt?: unknown;
+  lastSyncAt?: unknown;
+  lastSyncResult?: { synced: number; failed: number };
+}
+
+function resolveActiveBusinessId(explicitBusinessId?: string) {
+  if (explicitBusinessId) return explicitBusinessId;
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("billflow_active_business_id");
+}
+
+/** Publishes only aggregate queue telemetry; invoice, payment, and product payloads never leave the browser. */
+export async function reportOfflineSyncTelemetry(businessId?: string, syncResult?: { synced: number; failed: number }) {
+  if (typeof window === "undefined" || !navigator.onLine) return;
+  const resolvedBusinessId = resolveActiveBusinessId(businessId);
+  if (!resolvedBusinessId || resolvedBusinessId === "default") return;
+
+  const summary = getOfflineSummary();
+  const telemetryRef = doc(db, "syncTelemetry", resolvedBusinessId);
+  try {
+    await setDoc(telemetryRef, {
+      businessId: resolvedBusinessId,
+      ...summary,
+      offlineMode: localStorage.getItem("billflow_offline_mode") === "true",
+      lastSeenAt: new Date().toISOString(),
+      ...(syncResult ? { lastSyncAt: new Date().toISOString(), lastSyncResult: syncResult } : {})
+    }, { merge: true });
+  } catch (error) {
+    console.warn("Unable to publish offline sync telemetry:", error);
+  }
+}
+
+export function subscribeToManualSyncCommands(
+  businessId: string,
+  syncHandlers: {
+    sale: (data: any) => Promise<any>;
+    invoice: (data: any) => Promise<any>;
+    payment: (data: any) => Promise<any>;
+    folio?: (data: any) => Promise<any>;
+  },
+  onComplete?: (result: { synced: number; failed: number }) => void
+) {
+  if (typeof window === "undefined" || !businessId) return () => undefined;
+
+  const commandsQuery = query(collection(db, "syncCommands"), where("businessId", "==", businessId));
+  return onSnapshot(commandsQuery, (snapshot) => {
+    snapshot.docs
+      .filter(command => command.data().status === "requested")
+      .forEach(async (commandSnapshot) => {
+        const commandRef = doc(db, "syncCommands", commandSnapshot.id);
+        let claimed = false;
+        try {
+          await runTransaction(db, async (transaction) => {
+            const current = await transaction.get(commandRef);
+            if (current.exists() && current.data().status === "requested") {
+              transaction.update(commandRef, { status: "processing", startedAt: new Date().toISOString() });
+              claimed = true;
+            }
+          });
+          if (!claimed) return;
+
+          const result = await syncAllOfflineData(syncHandlers);
+          await updateDoc(commandRef, {
+            status: result.failed > 0 ? "completed_with_errors" : "completed",
+            completedAt: new Date().toISOString(),
+            result
+          });
+          await reportOfflineSyncTelemetry(businessId, result);
+          onComplete?.(result);
+        } catch (error) {
+          console.error("Manual sync command failed:", error);
+          try {
+            await updateDoc(commandRef, {
+              status: "failed",
+              completedAt: new Date().toISOString(),
+              error: error instanceof Error ? error.message : "Unknown sync error"
+            });
+          } catch (updateError) {
+            console.error("Unable to record manual sync failure:", updateError);
+          }
+        }
+      });
+  }, (error) => {
+    console.warn("Unable to listen for manual sync commands:", error);
+  });
 }
 
 export function checkAndEnforceThreeDayOnlineAutoSwitch() {

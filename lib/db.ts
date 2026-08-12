@@ -106,6 +106,8 @@ export interface Product {
   businessId: string;
   name: string;
   sku?: string;
+  barcode?: string;
+  propertyId?: string;
   categoryId?: string;
   category?: string;
   unit?: string;
@@ -822,10 +824,39 @@ export async function createProduct(data: Omit<Product, "id">) {
       });
     });
 
+    if (data.barcode) {
+      // Check if productBarcodes entry exists, otherwise create
+      const barcodeSnap = await getDocs(
+        query(
+          collection(db, "productBarcodes"),
+          where("businessId", "==", data.businessId),
+          where("barcode", "==", data.barcode)
+        )
+      );
+      if (barcodeSnap.empty) {
+        await addDoc(collection(db, "productBarcodes"), {
+          businessId: data.businessId,
+          productId: existingDoc.id,
+          barcode: data.barcode,
+          barcodeType: "EAN_13",
+          createdAt: serverTimestamp()
+        });
+      }
+    }
     return existingDoc.ref;
   }
 
-  return addDoc(col("products"), { ...data, createdAt: serverTimestamp() });
+  const docRef = await addDoc(col("products"), { ...data, createdAt: serverTimestamp() });
+  if (data.barcode) {
+    await addDoc(collection(db, "productBarcodes"), {
+      businessId: data.businessId,
+      productId: docRef.id,
+      barcode: data.barcode,
+      barcodeType: "EAN_13",
+      createdAt: serverTimestamp()
+    });
+  }
+  return docRef;
 }
 
 export async function getProducts(businessId: string): Promise<Product[]> {
@@ -834,7 +865,27 @@ export async function getProducts(businessId: string): Promise<Product[]> {
 }
 
 export async function updateProduct(id: string, data: Partial<Product>) {
-  return updateDoc(doc(db, "products", id), data);
+  await updateDoc(doc(db, "products", id), data);
+  if (data.barcode && data.businessId) {
+    const barcodeSnap = await getDocs(
+      query(
+        collection(db, "productBarcodes"),
+        where("businessId", "==", data.businessId),
+        where("productId", "==", id)
+      )
+    );
+    if (barcodeSnap.empty) {
+      await addDoc(collection(db, "productBarcodes"), {
+        businessId: data.businessId,
+        productId: id,
+        barcode: data.barcode,
+        barcodeType: "EAN_13",
+        createdAt: serverTimestamp()
+      });
+    } else {
+      await updateDoc(barcodeSnap.docs[0].ref, { barcode: data.barcode });
+    }
+  }
 }
 
 export async function deleteProduct(id: string) {

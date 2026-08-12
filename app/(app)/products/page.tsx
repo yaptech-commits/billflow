@@ -293,6 +293,24 @@ export default function ProductsPage() {
                 onChange={e => setFormData({...formData, name: e.target.value})}
               />
             </div>
+            <div>
+              <label className="block text-xs font-bold text-muted uppercase mb-1.5">Barcode / UPC</label>
+              <input 
+                className="input-field"
+                placeholder="Scan or enter barcode"
+                value={formData.barcode || ""}
+                onChange={e => setFormData({...formData, barcode: e.target.value})}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-muted uppercase mb-1.5">SKU</label>
+              <input 
+                className="input-field"
+                placeholder="Stock Keeping Unit"
+                value={formData.sku || ""}
+                onChange={e => setFormData({...formData, sku: e.target.value})}
+              />
+            </div>
             <div className="sm:col-span-2">
               <label className="block text-xs font-bold text-muted uppercase mb-1.5">Description</label>
               <textarea 

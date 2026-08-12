@@ -7,6 +7,7 @@ import {
 import { sendPasswordResetEmail } from "firebase/auth";
 import { db, auth } from "@/lib/firebase";
 import { BusinessProfile, BusinessModule, Staff, Product, Invoice, deleteBusinessData } from "@/lib/db";
+import { SyncTelemetry } from "@/lib/offline-sync";
 import { formatMoney, cn } from "@/lib/utils";
 import { 
   Users, Package, FileText, Search, ShieldAlert, 
@@ -34,12 +35,50 @@ export default function AdminPage() {
   const [businesses, setBusinesses] = useState<BusinessProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [activeAdminTab, setActiveAdminTab] = useState<"accounts" | "sync">("accounts");
+  const [telemetryByBusiness, setTelemetryByBusiness] = useState<Record<string, SyncTelemetry>>({});
+  const [syncLoading, setSyncLoading] = useState(false);
 
   useEffect(() => {
     if (role === "super_admin") {
       fetchBusinesses();
+      fetchSyncTelemetry();
     }
   }, [role]);
+
+  const fetchSyncTelemetry = async () => {
+    setSyncLoading(true);
+    try {
+      const snapshot = await getDocs(collection(db, "syncTelemetry"));
+      const nextTelemetry: Record<string, SyncTelemetry> = {};
+      snapshot.docs.forEach(snapshotDoc => {
+        const data = snapshotDoc.data() as SyncTelemetry;
+        if (data.businessId) nextTelemetry[data.businessId] = data;
+      });
+      setTelemetryByBusiness(nextTelemetry);
+    } catch (error) {
+      console.error("Failed to fetch sync telemetry:", error);
+      toast.error("Unable to load sync telemetry");
+    } finally {
+      setSyncLoading(false);
+    }
+  };
+
+  const requestBusinessSync = async (business: BusinessProfile) => {
+    const t = toast.loading(`Requesting sync for ${business.businessName}...`);
+    try {
+      await addDoc(collection(db, "syncCommands"), {
+        businessId: business.businessId,
+        requestedBy: user?.uid || "super_admin",
+        status: "requested",
+        createdAt: serverTimestamp()
+      });
+      toast.success(`Sync request queued for ${business.businessName}`, { id: t });
+    } catch (error) {
+      console.error("Failed to request business sync:", error);
+      toast.error(`Could not queue sync for ${business.businessName}`, { id: t });
+    }
+  };
 
   const fetchBusinesses = async () => {
     setLoading(true);
@@ -71,6 +110,15 @@ export default function AdminPage() {
     b.email?.toLowerCase().includes(search.toLowerCase())
   );
 
+  const formatSyncTimestamp = (value: unknown) => {
+    if (!value) return "No report yet";
+    if (typeof value === "object" && value && "toDate" in value && typeof (value as { toDate?: () => Date }).toDate === "function") {
+      return (value as { toDate: () => Date }).toDate().toLocaleString();
+    }
+    const parsed = new Date(String(value));
+    return Number.isNaN(parsed.getTime()) ? "Unknown" : parsed.toLocaleString();
+  };
+
   const handleApprove = async (id: string) => {
     const t = toast.loading("Approving account...");
     try {
@@ -94,6 +142,15 @@ export default function AdminPage() {
     }
   };
 
+  const telemetryRows = approvedBusinesses.map(business => ({
+    business,
+    telemetry: telemetryByBusiness[business.businessId]
+  }));
+  const monitoredAccounts = telemetryRows.filter(row => row.telemetry).length;
+  const offlineAccounts = telemetryRows.filter(row => row.telemetry?.offlineMode).length;
+  const queuedItems = telemetryRows.reduce((total, row) => total + (row.telemetry?.total || 0), 0);
+  const failedAccounts = telemetryRows.filter(row => (row.telemetry?.lastSyncResult?.failed || 0) > 0).length;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -104,9 +161,9 @@ export default function AdminPage() {
         <div className="flex items-center gap-3">
           <div className="relative">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-            <input 
-              className="input pl-10 w-64" 
-              placeholder="Search businesses..." 
+            <input
+              className="input pl-10 w-64"
+              placeholder="Search businesses..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -115,57 +172,150 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {pendingUsers.length > 0 && (
-        <div className="space-y-4">
-          <h2 className="text-lg font-bold text-gold flex items-center gap-2">
-            <Shield size={20} /> Pending Approvals ({pendingUsers.length})
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {pendingUsers.map(b => (
-              <div key={b.businessId} className="card border-gold/30 bg-gold/5">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h3 className="font-bold text-surface">{b.businessName}</h3>
-                    <p className="text-xs text-muted">{b.email}</p>
-                  </div>
-                  <div className="flex gap-2">
-                    <button 
-                      onClick={() => handleApprove(b.businessId)}
-                      className="p-2 bg-green/20 text-green rounded-full hover:bg-green/30 transition-colors"
-                      title="Approve Account"
-                    >
-                      <Check size={16} />
-                    </button>
-                    <button 
-                      onClick={() => handleSuspend(b.businessId, "suspended")}
-                      className="p-2 bg-red/20 text-red rounded-full hover:bg-red/30 transition-colors"
-                      title="Reject/Suspend"
-                    >
-                      <X size={16} />
-                    </button>
-                  </div>
-                </div>
-                <p className="text-[10px] text-muted">Signed up: {b.createdAt ? new Date(b.createdAt.toDate()).toLocaleDateString() : "N/A"}</p>
+      <div className="flex border-b border-border gap-6">
+        <button
+          onClick={() => setActiveAdminTab("accounts")}
+          className={`pb-3 text-sm font-medium border-b-2 ${activeAdminTab === "accounts" ? "border-gold text-gold" : "border-transparent text-muted hover:text-white"}`}
+        >
+          Business Accounts ({businesses.length})
+        </button>
+        <button
+          onClick={() => setActiveAdminTab("sync")}
+          className={`pb-3 text-sm font-medium border-b-2 ${activeAdminTab === "sync" ? "border-gold text-gold" : "border-transparent text-muted hover:text-white"}`}
+        >
+          Offline Sync Monitor
+        </button>
+      </div>
+
+      {activeAdminTab === "sync" ? (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="card">
+              <p className="text-xs text-muted uppercase font-mono">Approved Accounts</p>
+              <p className="text-2xl font-bold text-white mt-1">{approvedBusinesses.length}</p>
+            </div>
+            <div className="card">
+              <p className="text-xs text-muted uppercase font-mono">Reporting Clients</p>
+              <p className="text-2xl font-bold text-green-400 mt-1">{monitoredAccounts}</p>
+              <p className="text-xs text-muted mt-1">Aggregate queue telemetry received</p>
+            </div>
+            <div className="card">
+              <p className="text-xs text-muted uppercase font-mono">Queued Records</p>
+              <p className={`text-2xl font-bold mt-1 ${queuedItems > 0 ? "text-gold" : "text-green-400"}`}>{queuedItems}</p>
+              <p className="text-xs text-muted mt-1">Across reporting accounts</p>
+            </div>
+            <div className="card">
+              <p className="text-xs text-muted uppercase font-mono">Accounts With Failures</p>
+              <p className={`text-2xl font-bold mt-1 ${failedAccounts > 0 ? "text-red-400" : "text-green-400"}`}>{failedAccounts}</p>
+              <p className="text-xs text-muted mt-1">Last reported sync result</p>
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+              <div>
+                <h2 className="text-lg font-bold text-white">Business Account Sync Telemetry</h2>
+                <p className="text-xs text-muted mt-1">Only aggregate queue counts are shown here. Transaction and invoice payloads remain inside each business account.</p>
               </div>
-            ))}
+              <button onClick={fetchSyncTelemetry} className="btn-gold text-xs" disabled={syncLoading}>
+                {syncLoading ? "Refreshing..." : "Refresh Telemetry"}
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-border text-xs text-muted uppercase font-mono">
+                    <th className="py-3 px-4">Business</th>
+                    <th className="py-3 px-4">Vertical</th>
+                    <th className="py-3 px-4">Mode</th>
+                    <th className="py-3 px-4">Queue</th>
+                    <th className="py-3 px-4">Last Seen</th>
+                    <th className="py-3 px-4">Last Result</th>
+                    <th className="py-3 px-4 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border text-sm">
+                  {telemetryRows.map(({ business, telemetry }) => {
+                    const queueCount = telemetry?.total || 0;
+                    const failedCount = telemetry?.lastSyncResult?.failed || 0;
+                    return (
+                      <tr key={business.businessId} className="hover:bg-surface/5">
+                        <td className="py-3 px-4">
+                          <p className="font-medium text-white">{business.businessName}</p>
+                          <p className="text-xs text-muted">{business.email || business.businessId}</p>
+                        </td>
+                        <td className="py-3 px-4 text-muted capitalize">{business.businessType || "general"}</td>
+                        <td className="py-3 px-4">
+                          <span className={`px-2 py-1 rounded-full text-xs ${!telemetry ? "bg-surface/10 text-muted" : telemetry.offlineMode ? "bg-gold/10 text-gold" : "bg-green-500/10 text-green-400"}`}>
+                            {!telemetry ? "Not reporting" : telemetry.offlineMode ? "Offline · 72h rule" : "Online"}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="font-mono text-xs">
+                            <span className={queueCount > 0 ? "text-gold font-bold" : "text-green-400"}>{queueCount} total</span>
+                            {telemetry && <p className="text-muted mt-1">S {telemetry.sales} · I {telemetry.invoices} · P {telemetry.payments} · F {telemetry.folios}</p>}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-xs text-muted">{formatSyncTimestamp(telemetry?.lastSeenAt)}</td>
+                        <td className="py-3 px-4 text-xs">
+                          {!telemetry?.lastSyncResult ? <span className="text-muted">No sync result</span> : failedCount > 0 ? <span className="text-red-400">{telemetry.lastSyncResult.synced} synced · {failedCount} failed</span> : <span className="text-green-400">{telemetry.lastSyncResult.synced} synced</span>}
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <button onClick={() => requestBusinessSync(business)} className="btn-ghost text-xs border border-border px-2.5 py-1 hover:bg-gold/10 hover:text-gold">
+                            Request Sync
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {offlineAccounts > 0 && <p className="text-xs text-gold mt-4">{offlineAccounts} account{offlineAccounts === 1 ? " is" : "s are"} currently reporting offline mode. The 72-hour automatic online transition remains enforced on those clients.</p>}
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {pendingUsers.length > 0 && (
+            <div className="space-y-4">
+              <h2 className="text-lg font-bold text-gold flex items-center gap-2">
+                <Shield size={20} /> Pending Approvals ({pendingUsers.length})
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {pendingUsers.map(b => (
+                  <div key={b.businessId} className="card border-gold/30 bg-gold/5">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h3 className="font-bold text-surface">{b.businessName}</h3>
+                        <p className="text-xs text-muted">{b.email}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => handleApprove(b.businessId)} className="p-2 bg-green/20 text-green rounded-full hover:bg-green/30 transition-colors" title="Approve Account"><Check size={16} /></button>
+                        <button onClick={() => handleSuspend(b.businessId, "suspended")} className="p-2 bg-red/20 text-red rounded-full hover:bg-red/30 transition-colors" title="Reject/Suspend"><X size={16} /></button>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-muted">Signed up: {b.createdAt ? new Date(b.createdAt.toDate()).toLocaleDateString() : "N/A"}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <h2 className="text-lg font-bold text-white">Approved Businesses</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {loading ? (
+                <div className="col-span-full py-20 text-center text-muted animate-pulse">Loading businesses...</div>
+              ) : filtered.length === 0 ? (
+                <div className="col-span-full py-20 text-center text-muted">No businesses found</div>
+              ) : (
+                filtered.map(b => <BusinessCard key={b.businessId} business={b} user={user} onUpdate={fetchBusinesses} onSuspend={() => handleSuspend(b.businessId, b.status)} />)
+              )}
+            </div>
           </div>
         </div>
       )}
-
-      <div className="space-y-4">
-        <h2 className="text-lg font-bold text-white">Approved Businesses</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {loading ? (
-            <div className="col-span-full py-20 text-center text-muted animate-pulse">Loading businesses...</div>
-          ) : filtered.length === 0 ? (
-            <div className="col-span-full py-20 text-center text-muted">No businesses found</div>
-          ) : (
-              filtered.map(b => (
-                <BusinessCard key={b.businessId} business={b} user={user} onUpdate={fetchBusinesses} onSuspend={() => handleSuspend(b.businessId, b.status)} />
-              ))
-          )}
-        </div>
-      </div>
     </div>
   );
 }
