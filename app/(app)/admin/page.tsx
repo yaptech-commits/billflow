@@ -193,26 +193,58 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
   const [selectedItem, setSelectedItem] = useState<any | null>(null);
   const [itemForm, setItemForm] = useState<any>({});
 
-  const ALL_PAGES = [
-    { id: "/pos", label: "POS" },
-    { id: "/dashboard", label: "Dashboard" },
-    { id: "/invoices", label: "Invoices" },
-    { id: "/clients", label: "Clients" },
-    { id: "/products", label: "Products" },
-    { id: "/vouchers", label: "Vouchers" },
-    { id: "/payments", label: "Payments" },
-    { id: "/suppliers", label: "Suppliers" },
-    { id: "/purchase-orders", label: "Purchase Orders" },
-    { id: "/reports", label: "Reports" },
-    { id: "/settings", label: "Settings" },
-    { id: "/hotel/rooms", label: "Room Board" },
-    { id: "/hotel/reservations", label: "Reservations" },
-    { id: "/hotel/front-desk", label: "Front Desk" },
-    { id: "/hotel/room-pos", label: "Room POS" },
-    { id: "/hotel/guests", label: "Guests" },
-    { id: "/hotel/reports", label: "Revenue & Audit" },
-    { id: "/hotel/booking-widget", label: "Online Booking" },
+  const PAGE_GROUPS = [
+    {
+      group: "Core & General POS",
+      pages: [
+        { id: "/dashboard", label: "Dashboard" },
+        { id: "/pos", label: "POS (Point of Sale)" },
+        { id: "/invoices", label: "Invoices" },
+        { id: "/payments", label: "Payments" },
+        { id: "/products", label: "Products / Inventory" },
+        { id: "/clients", label: "Clients & Customers" },
+        { id: "/suppliers", label: "Suppliers" },
+        { id: "/purchase-orders", label: "Purchase Orders" },
+        { id: "/vouchers", label: "Vouchers" },
+        { id: "/reports", label: "Financial Reports" },
+        { id: "/settings", label: "Settings" }
+      ]
+    },
+    {
+      group: "Pharmacy Vertical",
+      pages: [
+        { id: "/pharmacy/drugs", label: "Drugs Directory & FEFO" },
+        { id: "/pharmacy/prescriptions", label: "Prescriptions Management" },
+        { id: "/pharmacy/dispensary", label: "Dispensary POS" },
+        { id: "/pharmacy/batches", label: "Batch & Expiry Tracker" },
+        { id: "/pharmacy/reports", label: "Pharmacy Reports" }
+      ]
+    },
+    {
+      group: "Hotel & PMS Vertical",
+      pages: [
+        { id: "/hotel/rooms", label: "Room Status Board" },
+        { id: "/hotel/reservations", label: "Reservations Calendar" },
+        { id: "/hotel/front-desk", label: "Front Desk Operations" },
+        { id: "/hotel/room-pos", label: "Room POS & Folio Billing" },
+        { id: "/hotel/guests", label: "Guest Directory & History" },
+        { id: "/hotel/housekeeping", label: "Housekeeping & Maintenance" },
+        { id: "/hotel/reports", label: "Revenue, ADR & RevPAR Audit" },
+        { id: "/hotel/booking-widget", label: "Online Booking Widget" }
+      ]
+    },
+    {
+      group: "Cold Store & Specialized Retail",
+      pages: [
+        { id: "/coldstore/inventory", label: "Cold Store Inventory & Batch" },
+        { id: "/coldstore/temperature", label: "Cold Chain Temperature Log" },
+        { id: "/coldstore/dispatch", label: "Dispatch & Logistics" },
+        { id: "/coldstore/reports", label: "Cold Store Reports" }
+      ]
+    }
   ];
+
+  const ALL_PAGES = PAGE_GROUPS.flatMap(g => g.pages);
 
   const fetchStats = async (force = false) => {
     const cacheKey = `stats_${business.businessId}`;
@@ -717,31 +749,62 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
             </label>
           </div>
 
-          <div className="pt-4 border-t border-border">
-            <p className="text-sm font-bold text-surface mb-3">Owner Page Permissions</p>
-            <p className="text-xs text-muted mb-3">Select pages this business owner can access. Leave empty for full access.</p>
-            <div className="grid grid-cols-2 gap-2">
-              {ALL_PAGES.map(page => {
-                const checked = (editForm.permissions || []).includes(page.id);
-                return (
+          <div className="pt-4 border-t border-border space-y-4">
+            <div>
+              <p className="text-sm font-bold text-surface mb-1">Owner Page Permissions (Grouped by Vertical)</p>
+              <p className="text-xs text-muted">Select specific pages this business owner can access across all verticals. Leave empty for full access.</p>
+            </div>
+            
+            {PAGE_GROUPS.map((groupObj) => (
+              <div key={groupObj.group} className="space-y-2 bg-black/20 p-3 rounded-lg border border-border/60">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-gold uppercase tracking-wider">{groupObj.group}</span>
                   <button
-                    key={page.id}
+                    type="button"
                     onClick={() => {
                       const current = editForm.permissions || [];
-                      const next = checked ? current.filter(p => p !== page.id) : [...current, page.id];
+                      const groupIds = groupObj.pages.map(p => p.id);
+                      const allSelected = groupIds.every(id => current.includes(id));
+                      let next = [...current];
+                      if (allSelected) {
+                        next = next.filter(id => !groupIds.includes(id));
+                      } else {
+                        for (const id of groupIds) {
+                          if (!next.includes(id)) next.push(id);
+                        }
+                      }
                       setEditForm({ ...editForm, permissions: next });
                     }}
-                    className={cn(
-                      "flex items-center justify-between p-2 rounded-lg border text-xs font-medium transition-all",
-                      checked ? "bg-gold/10 border-gold text-gold" : "bg-white/5 border-border text-muted"
-                    )}
+                    className="text-[10px] text-muted hover:text-gold underline"
                   >
-                    {page.label}
-                    {checked ? <Check size={12} /> : <div className="w-2.5 h-2.5 border border-muted rounded" />}
+                    {groupObj.pages.every(p => (editForm.permissions || []).includes(p.id)) ? "Deselect All" : "Select All"}
                   </button>
-                );
-              })}
-            </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {groupObj.pages.map(page => {
+                    const checked = (editForm.permissions || []).includes(page.id);
+                    return (
+                      <button
+                        key={page.id}
+                        type="button"
+                        onClick={() => {
+                          const current = editForm.permissions || [];
+                          const next = checked ? current.filter(p => p !== page.id) : [...current, page.id];
+                          setEditForm({ ...editForm, permissions: next });
+                        }}
+                        className={cn(
+                          "flex items-center justify-between p-2 rounded-lg border text-xs font-medium transition-all text-left",
+                          checked ? "bg-gold/10 border-gold text-gold" : "bg-white/5 border-border text-muted"
+                        )}
+                      >
+                        <span className="truncate pr-1">{page.label}</span>
+                        {checked ? <Check size={12} className="shrink-0" /> : <div className="w-2.5 h-2.5 border border-muted rounded shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
 
           <div className="flex gap-3 pt-4">
