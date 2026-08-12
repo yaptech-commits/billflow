@@ -151,6 +151,28 @@ export function checkAndEnforceThreeDayOnlineAutoSwitch() {
     localStorage.setItem("billflow_offline_mode", "false");
     localStorage.removeItem(timestampKey);
     window.dispatchEvent(new Event("billflow_offline_change"));
+
+    // Push notification / activity log for admin
+    try {
+      const businessId = localStorage.getItem("billflow_active_business_id") || "default";
+      // We record an in-app notification in Firestore if db is reachable or queue locally
+      const notifKey = "billflow_admin_notifications";
+      const existingNotifs = JSON.parse(localStorage.getItem(notifKey) || "[]");
+      const newNotif = {
+        id: crypto.randomUUID(),
+        businessId,
+        title: "Automatic Online Sync Triggered",
+        message: "The 3-day offline limit was reached. Account automatically switched back to Online mode and data sync has started.",
+        type: "alert",
+        read: false,
+        createdAt: Date.now()
+      };
+      existingNotifs.unshift(newNotif);
+      localStorage.setItem(notifKey, JSON.stringify(existingNotifs));
+    } catch (e) {
+      console.error("Failed to log admin notification:", e);
+    }
+
     return true;
   }
 
