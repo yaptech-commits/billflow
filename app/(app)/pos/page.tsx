@@ -16,7 +16,7 @@ import toast from "react-hot-toast";
 import { Search, Plus, Minus, Trash2, ShoppingCart, Printer, X, Wifi, WifiOff, ArrowRight, CreditCard, Camera, Bluetooth } from "lucide-react";
 import { printReceipt } from "@/lib/print-receipt";
 import { isBluetoothPrintingSupported, printReceiptOverBluetooth } from "@/lib/bluetooth-printer";
-import { queueOfflineSale, syncOfflineSales, getOfflineQueue } from "@/lib/offline-sync";
+import { queueOfflineSale, syncAllOfflineData, getOfflineQueue } from "@/lib/offline-sync";
 import { createSafeId } from "@/lib/safe-id";
 
 interface CartLine {
@@ -131,22 +131,39 @@ export default function PosPage() {
 
     const handleOnline = () => {
       setIsOnline(true);
-      if (!activeShift?.id) return;
-      
-      syncOfflineSales(async (data: any) => {
-        return createPosSale({
-          idempotencyKey: createSafeId("pos"),
-          shiftId: activeShift.id!,
-          customerName: data.customerName || "Walk-in Customer",
-          items: data.items.map((l: any) => ({ productId: l.productId, quantity: l.quantity })),
-          paymentMethod: data.paymentMethod,
-          discountAmount: data.discountAmount,
-        });
-      }).then(({ synced }) => {
+      syncAllOfflineData({
+        sale: async (data: any) => {
+          if (!activeShift?.id) throw new Error("No active shift for offline sale sync");
+          return createPosSale({
+            ...data,
+            shiftId: activeShift.id,
+            idempotencyKey: data.idempotencyKey || createSafeId("pos"),
+          });
+        },
+        invoice: async (data: any) => {
+          const res = await fetch("/api/invoices", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data),
+          });
+          if (!res.ok) throw new Error("Failed to sync offline invoice");
+          return res.json();
+        },
+        payment: async (data: any) => {
+          const res = await fetch("/api/payments", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data),
+          });
+          if (!res.ok) throw new Error("Failed to sync offline payment");
+          return res.json();
+        }
+      }).then(({ synced, failed }) => {
         if (synced > 0) {
-          toast.success(`Synced ${synced} offline sales!`);
+          toast.success(`Synced ${synced} offline transactions!`);
           load();
         }
+        if (failed > 0) console.warn(`${failed} offline transactions will be retried.`);
         setOfflineCount(getOfflineQueue().length);
       });
     };
