@@ -16,7 +16,7 @@ import toast from "react-hot-toast";
 import { Search, Plus, Minus, Trash2, ShoppingCart, Printer, X, Wifi, WifiOff, ArrowRight, CreditCard, Camera, Bluetooth } from "lucide-react";
 import { printReceipt } from "@/lib/print-receipt";
 import { isBluetoothPrintingSupported, printReceiptOverBluetooth } from "@/lib/bluetooth-printer";
-import { queueOfflineSale, syncAllOfflineData, getOfflineQueue } from "@/lib/offline-sync";
+import { queueOfflineSale, syncAllOfflineData, getOfflineQueue, checkAndEnforceThreeDayOnlineAutoSwitch } from "@/lib/offline-sync";
 import { createSafeId } from "@/lib/safe-id";
 
 interface CartLine {
@@ -125,6 +125,10 @@ export default function PosPage() {
 
   useEffect(() => {
     const checkStatus = () => {
+      const switched = checkAndEnforceThreeDayOnlineAutoSwitch();
+      if (switched) {
+        toast.success("Automatic sync: 3-day offline limit reached. Switched back to Online mode and syncing queue!");
+      }
       setIsOnline(navigator.onLine);
       setIsForcedOffline(localStorage.getItem("billflow_offline_mode") === "true");
     };

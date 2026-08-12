@@ -128,12 +128,42 @@ export function getOfflineSummary() {
   return { sales, invoices, payments, folios, total: sales + invoices + payments + folios };
 }
 
+export function checkAndEnforceThreeDayOnlineAutoSwitch() {
+  if (typeof window === "undefined") return false;
+  const isOfflineMode = localStorage.getItem("billflow_offline_mode") === "true";
+  if (!isOfflineMode) return false;
+
+  const timestampKey = "billflow_offline_start_timestamp";
+  const now = Date.now();
+  let startTimestamp = localStorage.getItem(timestampKey);
+
+  if (!startTimestamp) {
+    // If offline mode is enabled but no start time recorded, set it now
+    localStorage.setItem(timestampKey, now.toString());
+    return false;
+  }
+
+  const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+  const elapsed = now - parseInt(startTimestamp, 10);
+
+  if (elapsed >= THREE_DAYS_MS) {
+    // Exceeded 3 days! Automatically switch back to online mode
+    localStorage.setItem("billflow_offline_mode", "false");
+    localStorage.removeItem(timestampKey);
+    window.dispatchEvent(new Event("billflow_offline_change"));
+    return true;
+  }
+
+  return false;
+}
+
 export function clearAllOfflineData() {
   if (typeof window === "undefined") return;
   localStorage.removeItem(SYNC_QUEUE_KEY);
   localStorage.removeItem(OFFLINE_INVOICES_KEY);
   localStorage.removeItem(OFFLINE_PAYMENTS_KEY);
   localStorage.removeItem(OFFLINE_FOLIOS_KEY);
+  localStorage.removeItem("billflow_offline_start_timestamp");
 }
 
 // Backward-compatible wrappers for existing BillFlow pages.

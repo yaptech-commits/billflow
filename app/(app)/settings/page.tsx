@@ -8,6 +8,7 @@ import {
   DEFAULT_ACCENT_COLOR, MAX_LOGO_BYTES, CURRENCIES, DEFAULT_CURRENCY,
   DEFAULT_TAX_RATE, DEFAULT_TAX_LABEL, deleteBusinessData,
 } from "@/lib/db";
+import { checkAndEnforceThreeDayOnlineAutoSwitch } from "@/lib/offline-sync";
 import toast from "react-hot-toast";
 import { Upload, X } from "lucide-react";
 
@@ -116,6 +117,12 @@ export default function SettingsPage() {
   });
 
   useEffect(() => {
+    // Check 3-day automatic online transition rule on mount
+    const switched = checkAndEnforceThreeDayOnlineAutoSwitch();
+    if (switched) {
+      toast.success("Automatic sync: 3-day offline limit reached. Switched back to Online mode and syncing data!");
+    }
+
     const isOffline = localStorage.getItem("billflow_offline_mode") === "true";
     setToggles(t => ({ ...t, offlineMode: isOffline }));
   }, []);
@@ -125,7 +132,13 @@ export default function SettingsPage() {
     setToggles(t => ({ ...t, [key]: newValue }));
     if (key === "offlineMode") {
       localStorage.setItem("billflow_offline_mode", newValue.toString());
-      toast.success(newValue ? "Offline Mode Enabled" : "Online Mode Enabled");
+      if (newValue) {
+        localStorage.setItem("billflow_offline_start_timestamp", Date.now().toString());
+        toast.success("Offline Mode Enabled (Auto-syncs online after 3 days)");
+      } else {
+        localStorage.removeItem("billflow_offline_start_timestamp");
+        toast.success("Online Mode Enabled");
+      }
       // Dispatch custom event for real-time updates across components
       window.dispatchEvent(new Event("billflow_offline_change"));
     }
