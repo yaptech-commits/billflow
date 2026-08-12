@@ -9,6 +9,8 @@ import {
   DEFAULT_TAX_RATE, DEFAULT_TAX_LABEL, deleteBusinessData,
 } from "@/lib/db";
 import { checkAndEnforceThreeDayOnlineAutoSwitch } from "@/lib/offline-sync";
+import { getDocs, collection, query, where } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import toast from "react-hot-toast";
 import { Upload, X } from "lucide-react";
 
@@ -449,6 +451,151 @@ export default function SettingsPage() {
             <Toggle on={toggles[key as keyof typeof toggles]} onToggle={() => toggle(key as keyof typeof toggles)} />
           </div>
         ))}
+      </div>
+
+      {/* Export My Data */}
+      <div className="card">
+        <h2 className="font-grotesk font-semibold text-white mb-2">Export My Data</h2>
+        <p className="text-xs text-muted mb-4">Download a complete backup copy of your invoices, transactions (payments), and inventory for accounting and record keeping.</p>
+        <div className="flex flex-wrap gap-3">
+          <button
+            onClick={async () => {
+              if (!businessId) {
+                toast.error("No active business selected");
+                return;
+              }
+              const t = toast.loading("Exporting invoices CSV...");
+              try {
+                const snap = await getDocs(query(collection(db, "invoices"), where("businessId", "==", businessId)));
+                const rows = snap.docs.map(d => {
+                  const data = d.data();
+                  return {
+                    id: d.id,
+                    invoiceNumber: data.invoiceNumber || "",
+                    clientName: data.clientName || "",
+                    amount: data.amount || 0,
+                    status: data.status || "",
+                    amountPaid: data.amountPaid || 0,
+                    createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : ""
+                  };
+                });
+                if (rows.length === 0) {
+                  toast.error("No invoices found to export", { id: t });
+                  return;
+                }
+                const headers = Object.keys(rows[0]);
+                const csvContent = [
+                  headers.join(","),
+                  ...rows.map(r => headers.map(h => `"${String((r as any)[h] || "").replace(/"/g, '""')}"`).join(","))
+                ].join("\n");
+                const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `billflow_invoices_${businessId}_${Date.now()}.csv`;
+                a.click();
+                toast.success("Invoices CSV downloaded successfully!", { id: t });
+              } catch (e) {
+                console.error(e);
+                toast.error("Failed to export invoices", { id: t });
+              }
+            }}
+            className="btn-ghost border border-border text-xs flex items-center gap-2 hover:bg-gold/10 hover:text-gold"
+          >
+            Export Invoices (CSV)
+          </button>
+          <button
+            onClick={async () => {
+              if (!businessId) {
+                toast.error("No active business selected");
+                return;
+              }
+              const t = toast.loading("Exporting transactions CSV...");
+              try {
+                const snap = await getDocs(query(collection(db, "payments"), where("businessId", "==", businessId)));
+                const rows = snap.docs.map(d => {
+                  const data = d.data();
+                  return {
+                    id: d.id,
+                    invoiceId: data.invoiceId || "",
+                    method: data.method || "",
+                    amount: data.amount || 0,
+                    reference: data.reference || "",
+                    status: data.status || "",
+                    createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : ""
+                  };
+                });
+                if (rows.length === 0) {
+                  toast.error("No transactions found to export", { id: t });
+                  return;
+                }
+                const headers = Object.keys(rows[0]);
+                const csvContent = [
+                  headers.join(","),
+                  ...rows.map(r => headers.map(h => `"${String((r as any)[h] || "").replace(/"/g, '""')}"`).join(","))
+                ].join("\n");
+                const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `billflow_transactions_${businessId}_${Date.now()}.csv`;
+                a.click();
+                toast.success("Transactions CSV downloaded successfully!", { id: t });
+              } catch (e) {
+                console.error(e);
+                toast.error("Failed to export transactions", { id: t });
+              }
+            }}
+            className="btn-ghost border border-border text-xs flex items-center gap-2 hover:bg-gold/10 hover:text-gold"
+          >
+            Export Transactions (CSV)
+          </button>
+          <button
+            onClick={async () => {
+              if (!businessId) {
+                toast.error("No active business selected");
+                return;
+              }
+              const t = toast.loading("Exporting inventory CSV...");
+              try {
+                const snap = await getDocs(query(collection(db, "products"), where("businessId", "==", businessId)));
+                const rows = snap.docs.map(d => {
+                  const data = d.data();
+                  return {
+                    id: d.id,
+                    name: data.name || "",
+                    category: data.category || "",
+                    price: data.price || 0,
+                    stockQty: data.stockQty || 0,
+                    reorderLevel: data.reorderLevel || 0
+                  };
+                });
+                if (rows.length === 0) {
+                  toast.error("No inventory products found to export", { id: t });
+                  return;
+                }
+                const headers = Object.keys(rows[0]);
+                const csvContent = [
+                  headers.join(","),
+                  ...rows.map(r => headers.map(h => `"${String((r as any)[h] || "").replace(/"/g, '""')}"`).join(","))
+                ].join("\n");
+                const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `billflow_inventory_${businessId}_${Date.now()}.csv`;
+                a.click();
+                toast.success("Inventory CSV downloaded successfully!", { id: t });
+              } catch (e) {
+                console.error(e);
+                toast.error("Failed to export inventory", { id: t });
+              }
+            }}
+            className="btn-ghost border border-border text-xs flex items-center gap-2 hover:bg-gold/10 hover:text-gold"
+          >
+            Export Inventory (CSV)
+          </button>
+        </div>
       </div>
 
       {/* Danger zone */}
