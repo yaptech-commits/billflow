@@ -8,7 +8,7 @@ import {
   DEFAULT_ACCENT_COLOR, MAX_LOGO_BYTES, CURRENCIES, DEFAULT_CURRENCY,
   DEFAULT_TAX_RATE, DEFAULT_TAX_LABEL, deleteBusinessData,
 } from "@/lib/db";
-import { checkAndEnforceThreeDayOnlineAutoSwitch } from "@/lib/offline-sync";
+import { checkAndEnforceThreeDayOnlineAutoSwitch, getOfflineSummary, syncAllOfflineData } from "@/lib/offline-sync";
 import { getDocs, collection, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import toast from "react-hot-toast";
@@ -43,6 +43,9 @@ export default function SettingsPage() {
   const [logoDataUrl, setLogoDataUrl] = useState<string | undefined>(undefined);
   const [brandLoading, setBrandLoading] = useState(true);
   const [brandSaving, setBrandSaving] = useState(false);
+  const [exportStartDate, setExportStartDate] = useState("");
+  const [exportEndDate, setExportEndDate] = useState("");
+  const [offlineSummary, setOfflineSummary] = useState({ sales: 0, invoices: 0, payments: 0, folios: 0, total: 0 });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -127,6 +130,7 @@ export default function SettingsPage() {
 
     const isOffline = localStorage.getItem("billflow_offline_mode") === "true";
     setToggles(t => ({ ...t, offlineMode: isOffline }));
+    setOfflineSummary(getOfflineSummary());
   }, []);
 
   const toggle = (key: keyof typeof toggles) => {
@@ -416,16 +420,93 @@ export default function SettingsPage() {
         ))}
       </div>
 
-      {/* Connectivity */}
+      {/* Connectivity & Sync Status Dashboard */}
       <div className="card">
-        <h2 className="font-grotesk font-semibold text-white mb-5">Connectivity & Offline Data</h2>
-        <div className="flex items-center justify-between py-3.5 border-b border-border">
+        <h2 className="font-grotesk font-semibold text-white mb-3">Connectivity & Sync Status</h2>
+        <p className="text-xs text-muted mb-4">Monitor offline queues, retry state, and force synchronization across your connected devices.</p>
+        
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+          <div className="p-3 bg-surface/5 rounded-xl border border-border">
+            <p className="text-[10px] uppercase tracking-wider text-muted font-mono">Offline Sales</p>
+            <p className="text-lg font-bold text-white mt-0.5">{offlineSummary.sales}</p>
+          </div>
+          <div className="p-3 bg-surface/5 rounded-xl border border-border">
+            <p className="text-[10px] uppercase tracking-wider text-muted font-mono">Offline Invoices</p>
+            <p className="text-lg font-bold text-white mt-0.5">{offlineSummary.invoices}</p>
+          </div>
+          <div className="p-3 bg-surface/5 rounded-xl border border-border">
+            <p className="text-[10px] uppercase tracking-wider text-muted font-mono">Offline Payments</p>
+            <p className="text-lg font-bold text-white mt-0.5">{offlineSummary.payments}</p>
+          </div>
+          <div className="p-3 bg-surface/5 rounded-xl border border-border">
+            <p className="text-[10px] uppercase tracking-wider text-muted font-mono">Total Unsynced</p>
+            <p className={`text-lg font-bold mt-0.5 ${offlineSummary.total > 0 ? "text-gold" : "text-white"}`}>{offlineSummary.total}</p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 py-3.5 border-b border-border">
           <div>
             <p className="text-sm text-surface">Force Offline Mode</p>
-            <p className="text-xs text-muted mt-0.5">Work without internet. Data will sync when you go back online.</p>
+            <p className="text-xs text-muted mt-0.5">Work without internet (Auto-syncs online after 3 days).</p>
           </div>
           <Toggle on={toggles.offlineMode} onToggle={() => toggle("offlineMode")} />
         </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 py-3.5 border-b border-border">
+          <div>
+            <p className="text-sm text-surface">Manual Sync Queue</p>
+            <p className="text-xs text-muted mt-0.5">Attempt to synchronize all pending offline items immediately.</p>
+          </div>
+          <button
+            onClick={async () => {
+              const t = toast.loading("Syncing offline queue...");
+              try {
+                const res = await syncAllOfflineData({
+                  sale: async (data: any) => {
+                    const r = await fetch("/api/pos/sales", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify(data),
+                    });
+                    if (!r.ok) throw new Error("Sync failed");
+                    return r.json();
+                  },
+                  invoice: async (data: any) => {
+                    const r = await fetch("/api/invoices", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify(data),
+                    });
+                    if (!r.ok) throw new Error("Sync failed");
+                    return r.json();
+                  },
+                  payment: async (data: any) => {
+                    const r = await fetch("/api/payments", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify(data),
+                    });
+                    if (!r.ok) throw new Error("Sync failed");
+                    return r.json();
+                  }
+                });
+                setOfflineSummary(getOfflineSummary());
+                if (res.synced > 0) {
+                  toast.success(`Successfully synced ${res.synced} items!`, { id: t });
+                } else {
+                  toast.success("Queue checked. No items ready or already synced.", { id: t });
+                }
+              } catch (err) {
+                console.error(err);
+                toast.error("Sync encountered errors. Will retry automatically.", { id: t });
+              }
+            }}
+            className="btn-gold text-xs"
+          >
+            Sync Now
+          </button>
+        </div>
+
         <div className="flex items-center justify-between py-3.5 mt-2">
           <div>
             <p className="text-sm text-red font-bold">Clear Offline Queue</p>
@@ -455,9 +536,149 @@ export default function SettingsPage() {
 
       {/* Export My Data */}
       <div className="card">
-        <h2 className="font-grotesk font-semibold text-white mb-2">Export My Data</h2>
-        <p className="text-xs text-muted mb-4">Download a complete backup copy of your invoices, transactions (payments), and inventory for accounting and record keeping.</p>
+        <h2 className="font-grotesk font-semibold text-white mb-2">Export My Data (Excel & CSV)</h2>
+        <p className="text-xs text-muted mb-4">Download complete backup copies of your invoices, transactions (payments), and inventory with optional date filtering for accounting and record keeping.</p>
+        
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4 p-3 bg-surface/5 rounded-xl border border-border">
+          <div>
+            <label className="block text-xs text-muted mb-1">Start Date (Optional)</label>
+            <input
+              type="date"
+              value={exportStartDate}
+              onChange={(e) => setExportStartDate(e.target.value)}
+              className="input text-xs w-full"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-muted mb-1">End Date (Optional)</label>
+            <input
+              type="date"
+              value={exportEndDate}
+              onChange={(e) => setExportEndDate(e.target.value)}
+              className="input text-xs w-full"
+            />
+          </div>
+        </div>
+
         <div className="flex flex-wrap gap-3">
+          <button
+            onClick={async () => {
+              if (!businessId) {
+                toast.error("No active business selected");
+                return;
+              }
+              const t = toast.loading("Generating Excel workbook...");
+              try {
+                const invSnap = await getDocs(query(collection(db, "invoices"), where("businessId", "==", businessId)));
+                const paySnap = await getDocs(query(collection(db, "payments"), where("businessId", "==", businessId)));
+                const prodSnap = await getDocs(query(collection(db, "products"), where("businessId", "==", businessId)));
+
+                const startDate = exportStartDate ? new Date(exportStartDate).getTime() : 0;
+                const endDate = exportEndDate ? new Date(exportEndDate).getTime() + 86400000 : Infinity;
+
+                const invoices = invSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter((item: any) => {
+                  const time = item.createdAt?.toDate ? item.createdAt.toDate().getTime() : 0;
+                  return !exportStartDate && !exportEndDate || (time >= startDate && time <= endDate);
+                });
+
+                const payments = paySnap.docs.map(d => ({ id: d.id, ...d.data() })).filter((item: any) => {
+                  const time = item.createdAt?.toDate ? item.createdAt.toDate().getTime() : 0;
+                  return !exportStartDate && !exportEndDate || (time >= startDate && time <= endDate);
+                });
+
+                const products = prodSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                // Build XML Spreadsheet 2003 format (Native Excel Workbook with multiple sheets)
+                let xml = `<?xml version="1.0"?>
+                <?mso-application progid="Excel.Sheet"?>
+                <Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+                 xmlns:o="urn:schemas-microsoft-com:office:office"
+                 xmlns:x="urn:schemas-microsoft-com:office:excel"
+                 xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+                 xmlns:html="http://www.w3.org/TR/REC-html40">
+                 <Styles>
+                  <Style ss:ID="Default" ss:Name="Normal">
+                   <Alignment ss:Vertical="Bottom"/>
+                   <Borders/>
+                   <Font ss:FontName="Calibri" ss:Size="11"/>
+                   <Interior/>
+                   <NumberFormat/>
+                   <Protection/>
+                  </Style>
+                  <Style ss:ID="Header">
+                   <Font ss:FontName="Calibri" ss:Size="11" ss:Bold="1" ss:Color="#FFFFFF"/>
+                   <Interior ss:Color="#1F2937" ss:Pattern="Solid"/>
+                  </Style>
+                 </Styles>`;
+
+                // 1. Invoices Sheet
+                xml += `<Worksheet ss:Name="Invoices"><Table>`;
+                xml += `<Row ss:StyleID="Header"><Cell><Data ss:Type="String">Invoice ID</Data></Cell><Cell><Data ss:Type="String">Number</Data></Cell><Cell><Data ss:Type="String">Client</Data></Cell><Cell><Data ss:Type="String">Amount</Data></Cell><Cell><Data ss:Type="String">Status</Data></Cell><Cell><Data ss:Type="String">Paid</Data></Cell><Cell><Data ss:Type="String">Date</Data></Cell></Row>`;
+                invoices.forEach((inv: any) => {
+                  const dateStr = inv.createdAt?.toDate ? inv.createdAt.toDate().toISOString() : "";
+                  xml += `<Row>`;
+                  xml += `<Cell><Data ss:Type="String">${inv.id}</Data></Cell>`;
+                  xml += `<Cell><Data ss:Type="String">${inv.invoiceNumber || ""}</Data></Cell>`;
+                  xml += `<Cell><Data ss:Type="String">${inv.clientName || ""}</Data></Cell>`;
+                  xml += `<Cell><Data ss:Type="Number">${inv.amount || 0}</Data></Cell>`;
+                  xml += `<Cell><Data ss:Type="String">${inv.status || ""}</Data></Cell>`;
+                  xml += `<Cell><Data ss:Type="Number">${inv.amountPaid || 0}</Data></Cell>`;
+                  xml += `<Cell><Data ss:Type="String">${dateStr}</Data></Cell>`;
+                  xml += `</Row>`;
+                });
+                xml += `</Table></Worksheet>`;
+
+                // 2. Transactions Sheet
+                xml += `<Worksheet ss:Name="Transactions"><Table>`;
+                xml += `<Row ss:StyleID="Header"><Cell><Data ss:Type="String">Transaction ID</Data></Cell><Cell><Data ss:Type="String">Invoice ID</Data></Cell><Cell><Data ss:Type="String">Method</Data></Cell><Cell><Data ss:Type="String">Amount</Data></Cell><Cell><Data ss:Type="String">Reference</Data></Cell><Cell><Data ss:Type="String">Status</Data></Cell><Cell><Data ss:Type="String">Date</Data></Cell></Row>`;
+                payments.forEach((pay: any) => {
+                  const dateStr = pay.createdAt?.toDate ? pay.createdAt.toDate().toISOString() : "";
+                  xml += `<Row>`;
+                  xml += `<Cell><Data ss:Type="String">${pay.id}</Data></Cell>`;
+                  xml += `<Cell><Data ss:Type="String">${pay.invoiceId || ""}</Data></Cell>`;
+                  xml += `<Cell><Data ss:Type="String">${pay.method || ""}</Data></Cell>`;
+                  xml += `<Cell><Data ss:Type="Number">${pay.amount || 0}</Data></Cell>`;
+                  xml += `<Cell><Data ss:Type="String">${pay.reference || ""}</Data></Cell>`;
+                  xml += `<Cell><Data ss:Type="String">${pay.status || ""}</Data></Cell>`;
+                  xml += `<Cell><Data ss:Type="String">${dateStr}</Data></Cell>`;
+                  xml += `</Row>`;
+                });
+                xml += `</Table></Worksheet>`;
+
+                // 3. Inventory Sheet
+                xml += `<Worksheet ss:Name="Inventory"><Table>`;
+                xml += `<Row ss:StyleID="Header"><Cell><Data ss:Type="String">Product ID</Data></Cell><Cell><Data ss:Type="String">Name</Data></Cell><Cell><Data ss:Type="String">Category</Data></Cell><Cell><Data ss:Type="String">Price</Data></Cell><Cell><Data ss:Type="String">Stock Qty</Data></Cell><Cell><Data ss:Type="String">Reorder Level</Data></Cell></Row>`;
+                products.forEach((prod: any) => {
+                  xml += `<Row>`;
+                  xml += `<Cell><Data ss:Type="String">${prod.id}</Data></Cell>`;
+                  xml += `<Cell><Data ss:Type="String">${prod.name || ""}</Data></Cell>`;
+                  xml += `<Cell><Data ss:Type="String">${prod.category || ""}</Data></Cell>`;
+                  xml += `<Cell><Data ss:Type="Number">${prod.price || 0}</Data></Cell>`;
+                  xml += `<Cell><Data ss:Type="Number">${prod.stockQty || 0}</Data></Cell>`;
+                  xml += `<Cell><Data ss:Type="Number">${prod.reorderLevel || 0}</Data></Cell>`;
+                  xml += `</Row>`;
+                });
+                xml += `</Table></Worksheet>`;
+
+                xml += `</Workbook>`;
+
+                const blob = new Blob([xml], { type: "application/vnd.ms-excel;charset=utf-8;" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `billflow_backup_${businessId}_${Date.now()}.xls`;
+                a.click();
+                toast.success("Excel backup workbook downloaded successfully!", { id: t });
+              } catch (e) {
+                console.error(e);
+                toast.error("Failed to generate Excel export", { id: t });
+              }
+            }}
+            className="btn-gold text-xs flex items-center gap-2"
+          >
+            Export Complete Excel Workbook (.xls)
+          </button>
+
           <button
             onClick={async () => {
               if (!businessId) {
@@ -467,6 +688,9 @@ export default function SettingsPage() {
               const t = toast.loading("Exporting invoices CSV...");
               try {
                 const snap = await getDocs(query(collection(db, "invoices"), where("businessId", "==", businessId)));
+                const startDate = exportStartDate ? new Date(exportStartDate).getTime() : 0;
+                const endDate = exportEndDate ? new Date(exportEndDate).getTime() + 86400000 : Infinity;
+
                 const rows = snap.docs.map(d => {
                   const data = d.data();
                   return {
@@ -478,9 +702,13 @@ export default function SettingsPage() {
                     amountPaid: data.amountPaid || 0,
                     createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : ""
                   };
+                }).filter((r: any) => {
+                  const time = r.createdAt ? new Date(r.createdAt).getTime() : 0;
+                  return !exportStartDate && !exportEndDate || (time >= startDate && time <= endDate);
                 });
+
                 if (rows.length === 0) {
-                  toast.error("No invoices found to export", { id: t });
+                  toast.error("No invoices found in date range", { id: t });
                   return;
                 }
                 const headers = Object.keys(rows[0]);
@@ -513,6 +741,9 @@ export default function SettingsPage() {
               const t = toast.loading("Exporting transactions CSV...");
               try {
                 const snap = await getDocs(query(collection(db, "payments"), where("businessId", "==", businessId)));
+                const startDate = exportStartDate ? new Date(exportStartDate).getTime() : 0;
+                const endDate = exportEndDate ? new Date(exportEndDate).getTime() + 86400000 : Infinity;
+
                 const rows = snap.docs.map(d => {
                   const data = d.data();
                   return {
@@ -524,9 +755,13 @@ export default function SettingsPage() {
                     status: data.status || "",
                     createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : ""
                   };
+                }).filter((r: any) => {
+                  const time = r.createdAt ? new Date(r.createdAt).getTime() : 0;
+                  return !exportStartDate && !exportEndDate || (time >= startDate && time <= endDate);
                 });
+
                 if (rows.length === 0) {
-                  toast.error("No transactions found to export", { id: t });
+                  toast.error("No transactions found in date range", { id: t });
                   return;
                 }
                 const headers = Object.keys(rows[0]);
@@ -549,51 +784,6 @@ export default function SettingsPage() {
             className="btn-ghost border border-border text-xs flex items-center gap-2 hover:bg-gold/10 hover:text-gold"
           >
             Export Transactions (CSV)
-          </button>
-          <button
-            onClick={async () => {
-              if (!businessId) {
-                toast.error("No active business selected");
-                return;
-              }
-              const t = toast.loading("Exporting inventory CSV...");
-              try {
-                const snap = await getDocs(query(collection(db, "products"), where("businessId", "==", businessId)));
-                const rows = snap.docs.map(d => {
-                  const data = d.data();
-                  return {
-                    id: d.id,
-                    name: data.name || "",
-                    category: data.category || "",
-                    price: data.price || 0,
-                    stockQty: data.stockQty || 0,
-                    reorderLevel: data.reorderLevel || 0
-                  };
-                });
-                if (rows.length === 0) {
-                  toast.error("No inventory products found to export", { id: t });
-                  return;
-                }
-                const headers = Object.keys(rows[0]);
-                const csvContent = [
-                  headers.join(","),
-                  ...rows.map(r => headers.map(h => `"${String((r as any)[h] || "").replace(/"/g, '""')}"`).join(","))
-                ].join("\n");
-                const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = `billflow_inventory_${businessId}_${Date.now()}.csv`;
-                a.click();
-                toast.success("Inventory CSV downloaded successfully!", { id: t });
-              } catch (e) {
-                console.error(e);
-                toast.error("Failed to export inventory", { id: t });
-              }
-            }}
-            className="btn-ghost border border-border text-xs flex items-center gap-2 hover:bg-gold/10 hover:text-gold"
-          >
-            Export Inventory (CSV)
           </button>
         </div>
       </div>
