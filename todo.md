@@ -1,5 +1,14 @@
 # Suggested Upgrades Implementation
 
+## School dashboard quick actions
+
+- [x] Inspect the School dashboard section and existing student/attendance routes.
+- [x] Add a Register new student quick-action button linking to the existing student form.
+- [x] Add a Record attendance quick-action button linking to the existing attendance register.
+- [x] Ensure actions are visible only within the School dashboard context and respect existing permissions.
+- [x] Verify TypeScript, production build, and route behavior.
+- [ ] Commit and push the quick-action update with `ayindenabawisdom@gmail.com`.
+
 ## School dashboard statistics
 
 - [x] Inspect the existing dashboard and school collections/helpers.
