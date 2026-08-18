@@ -797,15 +797,19 @@ export async function receivePurchaseOrder(id: string) {
  * - If they were invited, look up their (possibly still-pending) staff record by email,
  *   claim it if pending, and return the owner's businessId with role "salesperson".
  */
+export function isConfiguredSuperAdminEmail(email: string): boolean {
+  const configuredSuperAdmins = (process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAILS || "admin@billflow.com,ayindenabawisdom@gmail.com")
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+  return configuredSuperAdmins.includes(email.trim().toLowerCase());
+}
+
 export async function resolveBusinessContext(
   uid: string,
   email: string
 ): Promise<{ businessId: string; role: StaffRole; staffId?: string }> {
-  const configuredSuperAdmins = (process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAILS || "admin@billflow.com")
-    .split(",")
-    .map((value) => value.trim().toLowerCase())
-    .filter(Boolean);
-  if (configuredSuperAdmins.includes(email.trim().toLowerCase())) {
+  if (isConfiguredSuperAdminEmail(email)) {
     return { businessId: "admin", role: "superadmin" };
   }
 

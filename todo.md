@@ -28,6 +28,15 @@ Do not fabricate student records, grades, attendance, reviews, or performance da
 - Use configurable notification adapters so email/SMS providers can be added without coupling school pages to one vendor.
 - Do not fabricate student records, grades, attendance, reviews, or performance data.
 
+## Super Admin visibility fix checklist
+
+- [x] Confirm the exact Super Admin role/email resolution path.
+- [x] Confirm Sidebar school grouping includes Students, Fees, Attendance, Reports, Analytics, and Parent Portal.
+- [x] Confirm AppLayout does not redirect Super Admin away from school routes.
+- [x] Confirm route guards permit Super Admin on every school page.
+- [x] Verify with TypeScript, production build, and source-level route checks.
+- [ ] Commit and push the Super Admin visibility fix with the required author email.
+
 ## Implementation checklist
 
 - [ ] Add parent-link, notification, preference, and analytics helpers to `lib/school-db.ts`.

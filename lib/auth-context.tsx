@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { User, onAuthStateChanged, signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
-import { resolveBusinessContext, StaffRole } from "@/lib/db";
+import { isConfiguredSuperAdminEmail, resolveBusinessContext, StaffRole } from "@/lib/db";
 import { claimParentLinks, getParentLinksForUser, ParentLink } from "@/lib/school-db";
 
 interface AuthContextType {
@@ -48,8 +48,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (u && u.email) {
         try {
-          // Parent access is checked before the owner fallback so a parent with
-          // no staff invitation is not incorrectly treated as a new owner.
+          // Super Admin resolution is intentionally first. This prevents an
+          // administrative account that happens to have a guardian link from
+          // being narrowed to the parent-only portal.
+          const ctx = await resolveBusinessContext(u.uid, u.email);
+          if (isConfiguredSuperAdminEmail(u.email) || ctx.role === "superadmin") {
+            setBusinessId(ctx.businessId || "admin");
+            setPropertyId(null);
+            setRole("superadmin");
+            setLoading(false);
+            return;
+          }
+
+          // Parent access is checked after staff/owner resolution so a verified
+          // Super Admin can never be redirected into the restricted portal.
           const links = await getParentLinksForUser(u.uid, u.email);
           if (links.length) {
             const currentBusinessId = links[0].businessId;
@@ -69,7 +81,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             return;
           }
 
-          const ctx = await resolveBusinessContext(u.uid, u.email);
           setBusinessId(ctx.businessId);
           setRole(ctx.role);
         } catch {

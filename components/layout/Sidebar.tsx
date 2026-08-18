@@ -34,6 +34,15 @@ function getNav(role: NavigationRole | null) {
     { href: "/settings", icon: Settings, label: "Settings" },
   ];
 
+  const schoolItems = [
+    { href: "/school/students", icon: Users, label: "Students" },
+    { href: "/school/fees", icon: CreditCard, label: "Fees & Billing" },
+    { href: "/school/attendance", icon: ClipboardList, label: "Attendance" },
+    { href: "/school/reports", icon: BarChart2, label: "Report Cards" },
+    { href: "/school/analytics", icon: BarChart2, label: "Term Analytics" },
+    ...(role === "superadmin" ? [{ href: "/school/portal", icon: GraduationCap, label: "Parent Portal Oversight" }] : []),
+  ];
+
   return [
     {
       label: "Main",
@@ -54,16 +63,7 @@ function getNav(role: NavigationRole | null) {
         { href: "/purchase-orders", icon: ClipboardList, label: "Purchase Orders" },
       ],
     },
-    {
-      label: "School Management",
-      items: [
-        { href: "/school/students", icon: Users, label: "Students" },
-        { href: "/school/fees", icon: CreditCard, label: "Fees & Billing" },
-        { href: "/school/attendance", icon: ClipboardList, label: "Attendance" },
-        { href: "/school/reports", icon: BarChart2, label: "Report Cards" },
-        { href: "/school/analytics", icon: BarChart2, label: "Term Analytics" },
-      ],
-    },
+    { label: "School Management", items: schoolItems },
     { label: "Business", items: businessItems },
   ];
 }
