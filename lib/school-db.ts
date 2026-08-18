@@ -30,6 +30,18 @@ export interface Student {
   createdAt?: any;
 }
 
+export interface SchoolClass {
+  id?: string;
+  businessId: string;
+  propertyId?: string;
+  name: string;
+  teacherId?: string;
+  teacherName?: string;
+  teacherEmail?: string;
+  createdAt?: any;
+  updatedAt?: any;
+}
+
 export interface FeeStructure {
   id?: string;
   businessId: string;
@@ -210,6 +222,43 @@ export async function getStudentsByIds(businessId: string, studentIds: string[],
 
 export async function updateStudent(id: string, data: Partial<Student>) {
   await updateDoc(doc(db, "students", id), data);
+}
+
+function schoolClassDocumentId(businessId: string, propertyId: string, name: string) {
+  const normalized = name.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "_");
+  return `${businessId}__${propertyId || DEFAULT_PROPERTY_ID}__${normalized || "unassigned"}`;
+}
+
+export async function getSchoolClasses(businessId: string, propertyId?: string) {
+  const snap = await getDocs(query(collection(db, "schoolClasses"), where("businessId", "==", businessId)));
+  const list = snap.docs.map((item) => ({ ...item.data(), id: item.id } as SchoolClass));
+  return scopedList(list, propertyId).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+}
+
+export async function saveSchoolClass(input: Omit<SchoolClass, "id" | "createdAt" | "updatedAt">) {
+  const propertyId = input.propertyId || DEFAULT_PROPERTY_ID;
+  const id = schoolClassDocumentId(input.businessId, propertyId, input.name);
+  await setDoc(doc(db, "schoolClasses", id), {
+    ...input,
+    propertyId,
+    name: input.name.trim(),
+    updatedAt: serverTimestamp(),
+  }, { merge: true });
+  return id;
+}
+
+export async function promoteClassStudents(businessId: string, propertyId: string | undefined, fromClass: string, toClass: string) {
+  const source = fromClass.trim();
+  const destination = toClass.trim();
+  if (!source || !destination || source === destination) throw new Error("Choose a different destination class");
+  const students = await getStudents(businessId, propertyId);
+  const eligible = students.filter((student) => student.status === "active" && (student.classGrade?.trim() || "Unassigned") === source && student.id);
+  await Promise.all(eligible.map((student) => updateDoc(doc(db, "students", student.id as string), {
+    classGrade: destination,
+    previousClassGrade: source,
+    classPromotedAt: serverTimestamp(),
+  })));
+  return eligible.length;
 }
 
 export async function deleteStudent(id: string) {

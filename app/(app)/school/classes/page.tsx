@@ -6,8 +6,18 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
-import { DEFAULT_PROPERTY_ID, getStudents, Student } from "@/lib/school-db";
-import { getBusinessProfile, BusinessProfile } from "@/lib/db";
+import {
+  DEFAULT_PROPERTY_ID,
+  getAttendance,
+  getSchoolClasses,
+  getStudents,
+  promoteClassStudents,
+  saveSchoolClass,
+  AttendanceRecord,
+  SchoolClass,
+  Student,
+} from "@/lib/school-db";
+import { getBusinessProfile, getStaff, BusinessProfile, Staff } from "@/lib/db";
 import {
   ArrowRight,
   ChevronDown,
@@ -15,6 +25,7 @@ import {
   GraduationCap,
   Grid3X3,
   RefreshCw,
+  Save,
   Search,
   UserRound,
   Users,
@@ -38,22 +49,41 @@ export default function SchoolClassesPage() {
   const { businessId, role, propertyId: authPropertyId } = useAuth();
   const propertyId = authPropertyId || DEFAULT_PROPERTY_ID;
   const [students, setStudents] = useState<Student[]>([]);
+  const [schoolClasses, setSchoolClasses] = useState<SchoolClass[]>([]);
+  const [staff, setStaff] = useState<Staff[]>([]);
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
   const [selectedClass, setSelectedClass] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [attendanceDate, setAttendanceDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [teacherSelections, setTeacherSelections] = useState<Record<string, string>>({});
+  const [promotionSelections, setPromotionSelections] = useState<Record<string, string>>({});
   const [expandedClasses, setExpandedClasses] = useState<Record<string, boolean>>({});
+  const [savingTeacher, setSavingTeacher] = useState<string | null>(null);
+  const [promotingClass, setPromotingClass] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = async () => {
     if (!businessId) return;
     setLoading(true);
     try {
-      const [studentList, profile] = await Promise.all([
+      const [studentList, profile, classList, attendanceList, staffList] = await Promise.all([
         getStudents(businessId, propertyId),
         getBusinessProfile(businessId),
+        getSchoolClasses(businessId, propertyId),
+        getAttendance(businessId, propertyId, attendanceDate),
+        getStaff(businessId),
       ]);
       setStudents(studentList);
+      setSchoolClasses(classList);
+      setAttendance(attendanceList);
+      setStaff(staffList);
       setBusinessProfile(profile);
+      setTeacherSelections((current) => {
+        const next = { ...current };
+        classList.forEach((schoolClass) => { next[schoolClass.name] = schoolClass.teacherId || ""; });
+        return next;
+      });
       setSelectedClass((current) => {
         if (current === "all") return current;
         return studentList.some((student) => student.classGrade === current) ? current : "all";
@@ -67,7 +97,7 @@ export default function SchoolClassesPage() {
 
   useEffect(() => {
     load();
-  }, [businessId, propertyId]);
+  }, [businessId, propertyId, attendanceDate]);
 
   const classGroups = useMemo(() => {
     const groups = new Map<string, Student[]>();
@@ -78,13 +108,32 @@ export default function SchoolClassesPage() {
       groups.set(className, existing);
     });
     return Array.from(groups.entries())
-      .map(([className, classStudents]) => ({
-        className,
-        students: [...classStudents].sort((a, b) => a.fullName.localeCompare(b.fullName)),
-        activeCount: classStudents.filter((student) => student.status === "active").length,
-      }))
+      .map(([className, classStudents]) => {
+        const schoolClass = schoolClasses.find((item) => item.name === className);
+        const attendanceByStudent = new Map<string, AttendanceRecord>();
+        attendance.filter((record) => (record.classGrade?.trim() || "Unassigned") === className).forEach((record) => {
+          attendanceByStudent.set(record.studentId, record);
+        });
+        const attendanceSummary = {
+          present: 0,
+          absent: 0,
+          late: 0,
+          excused: 0,
+          unmarked: 0,
+        };
+        attendanceByStudent.forEach((record) => { attendanceSummary[record.status] += 1; });
+        const activeCount = classStudents.filter((student) => student.status === "active").length;
+        attendanceSummary.unmarked = Math.max(activeCount - attendanceByStudent.size, 0);
+        return {
+          className,
+          students: [...classStudents].sort((a, b) => a.fullName.localeCompare(b.fullName)),
+          activeCount,
+          teacher: schoolClass,
+          attendanceSummary,
+        };
+      })
       .sort((a, b) => a.className.localeCompare(b.className, undefined, { numeric: true }));
-  }, [students]);
+  }, [students, schoolClasses, attendance]);
 
   const selectedStudents = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
@@ -98,6 +147,50 @@ export default function SchoolClassesPage() {
       })
       .sort((a, b) => a.fullName.localeCompare(b.fullName));
   }, [students, selectedClass, searchTerm]);
+
+  const saveTeacherAssignment = async (className: string) => {
+    if (!businessId) return;
+    const teacherId = teacherSelections[className] || "";
+    const teacher = staff.find((member) => member.id === teacherId);
+    setSavingTeacher(className);
+    try {
+      await saveSchoolClass({
+        businessId,
+        propertyId,
+        name: className,
+        teacherId: teacher?.id,
+        teacherName: teacher?.email,
+        teacherEmail: teacher?.email,
+      });
+      toast.success(teacher ? `${teacher.email} assigned to ${className}` : `Teacher cleared for ${className}`);
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save class teacher");
+    } finally {
+      setSavingTeacher(null);
+    }
+  };
+
+  const promoteStudents = async (className: string) => {
+    if (!businessId) return;
+    const destination = promotionSelections[className] || "";
+    if (!destination) {
+      toast.error("Choose a destination class first");
+      return;
+    }
+    if (!window.confirm(`Promote all active students in ${className} to ${destination}?`)) return;
+    setPromotingClass(className);
+    try {
+      const count = await promoteClassStudents(businessId, propertyId, className, destination);
+      toast.success(count ? `${count} student${count === 1 ? "" : "s"} promoted to ${destination}` : "No active students needed promotion");
+      setPromotionSelections((current) => ({ ...current, [className]: "" }));
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not promote class students");
+    } finally {
+      setPromotingClass(null);
+    }
+  };
 
   const exportClasses = () => {
     const rows = [
@@ -129,7 +222,10 @@ export default function SchoolClassesPage() {
           </h1>
           <p className="text-sm text-muted mt-2">{businessProfile?.businessName || "School"} · {propertyId} · All class groups and enrolled students in this property.</p>
         </div>
-        <div className="flex flex-wrap gap-2 items-center">
+          <div className="flex flex-wrap gap-2 items-center">
+          <label className="text-xs text-muted flex items-center gap-2">Attendance date
+            <input type="date" value={attendanceDate} onChange={(event) => setAttendanceDate(event.target.value)} className="input-field text-xs" />
+          </label>
           <div className="relative">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
             <input
@@ -188,6 +284,47 @@ export default function SchoolClassesPage() {
                       <span className="flex items-center gap-3"><ChevronDown size={15} className={`text-gold transition-transform ${expandedClasses[group.className] ? "rotate-180" : ""}`} /><span className="text-white font-medium">{group.className}</span></span>
                       <span className="text-xs text-muted">{group.activeCount} active · {group.students.length} total</span>
                     </button>
+                    <div className="px-4 py-3 border-t border-border bg-white/[0.02] space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs text-muted">Teacher: <span className="text-surface">{group.teacher?.teacherName || "Not assigned"}</span></p>
+                        <p className="text-[11px] text-muted">Attendance · {attendanceDate}</p>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-[11px]">
+                        <span className="text-emerald-300">Present {group.attendanceSummary.present}</span>
+                        <span className="text-red-300">Absent {group.attendanceSummary.absent}</span>
+                        <span className="text-amber-300">Late {group.attendanceSummary.late}</span>
+                        <span className="text-sky-300">Excused {group.attendanceSummary.excused}</span>
+                        <span className="text-muted">Unmarked {group.attendanceSummary.unmarked}</span>
+                      </div>
+                      <div className="flex flex-col lg:flex-row lg:items-center gap-2">
+                        <select
+                          value={teacherSelections[group.className] || ""}
+                          onChange={(event) => setTeacherSelections((current) => ({ ...current, [group.className]: event.target.value }))}
+                          className="input-field text-xs min-w-[190px]"
+                          aria-label={`Teacher for ${group.className}`}
+                        >
+                          <option value="">No teacher assigned</option>
+                          {staff.filter((member) => member.status === "active" && member.id).map((member) => <option key={member.id} value={member.id}>{member.email}</option>)}
+                        </select>
+                        <button onClick={() => saveTeacherAssignment(group.className)} disabled={savingTeacher === group.className} className="btn-ghost inline-flex items-center gap-2 text-xs">
+                          <Save size={14} /> {savingTeacher === group.className ? "Saving…" : "Save teacher"}
+                        </button>
+                        <div className="flex items-center gap-2 lg:ml-auto">
+                          <select
+                            value={promotionSelections[group.className] || ""}
+                            onChange={(event) => setPromotionSelections((current) => ({ ...current, [group.className]: event.target.value }))}
+                            className="input-field text-xs min-w-[170px]"
+                            aria-label={`Promotion destination for ${group.className}`}
+                          >
+                            <option value="">Promote to…</option>
+                            {classGroups.filter((candidate) => candidate.className !== group.className).map((candidate) => <option key={candidate.className} value={candidate.className}>{candidate.className}</option>)}
+                          </select>
+                          <button onClick={() => promoteStudents(group.className)} disabled={!promotionSelections[group.className] || promotingClass === group.className} className="btn-primary text-xs whitespace-nowrap">
+                            {promotingClass === group.className ? "Promoting…" : "Promote active"}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                     {expandedClasses[group.className] && <div className="px-4 pb-3 text-xs text-muted">Use the student table below to manage records, guardian links, and enrollment details for this class.</div>}
                   </div>
                 ))}

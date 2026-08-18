@@ -2,6 +2,16 @@
 
 ## Classes page
 
+### Classes enhancements
+
+- [x] Add property-aware class metadata with teacher assignment fields.
+- [x] Add owner/Super Admin controls to assign or change a class teacher.
+- [x] Add a guarded bulk promotion workflow with explicit source and destination classes.
+- [x] Add daily attendance summary metrics for every class.
+- [x] Verify property_id scoping, permissions, TypeScript, production build, and route behavior.
+- [ ] Commit and push the Classes enhancements with `ayindenabawisdom@gmail.com`.
+
+
 - [x] Inspect the existing property-aware student schema and query helpers.
 - [x] Add a Classes page that groups students by class and shows class/student counts.
 - [x] Add class selection and student detail rows without duplicating student records.
