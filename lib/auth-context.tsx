@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { User, onAuthStateChanged, signOut } from "firebase/auth";
 import { auth, isFirebaseConfigured } from "@/lib/firebase";
 import { resolveBusinessContext, StaffRole } from "@/lib/db";
+import { claimParentLinks, getParentLinksForUser, ParentLink } from "@/lib/school-db";
 import { useRouter } from "next/navigation";
 
 interface AuthContextType {
@@ -12,8 +13,11 @@ interface AuthContextType {
   realBusinessId: string | null; // Actual business ID of the logged-in user
   selectedBusinessId: string | null;
   setSelectedBusinessId: (id: string | null) => void;
-  role: StaffRole | null;
+  role: StaffRole | "parent" | null;
   permissions: string[];
+  propertyId: string | null;
+  parentStudentIds: string[];
+  parentLinks: ParentLink[];
   logout: () => Promise<void>;
 }
 
@@ -26,6 +30,9 @@ const AuthContext = createContext<AuthContextType>({
   setSelectedBusinessId: () => {},
   role: null,
   permissions: [],
+  propertyId: null,
+  parentStudentIds: [],
+  parentLinks: [],
   logout: async () => {},
 });
 
@@ -33,8 +40,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [realBusinessId, setRealBusinessId] = useState<string | null>(null);
   const [selectedBusinessId, setSelectedBusinessId] = useState<string | null>(null);
-  const [role, setRole] = useState<StaffRole | null>(null);
+  const [role, setRole] = useState<StaffRole | "parent" | null>(null);
   const [permissions, setPermissions] = useState<string[]>([]);
+  const [propertyId, setPropertyId] = useState<string | null>(null);
+  const [parentStudentIds, setParentStudentIds] = useState<string[]>([]);
+  const [parentLinks, setParentLinks] = useState<ParentLink[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
@@ -50,17 +60,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const unsub = onAuthStateChanged(auth, async (u) => {
       setUser(u);
+      setPropertyId(null);
+      setParentStudentIds([]);
+      setParentLinks([]);
       if (u && u.email) {
         try {
           const ctx = await resolveBusinessContext(u.uid, u.email);
-          setRealBusinessId(ctx.businessId);
-          setRole(ctx.role);
-          setPermissions(ctx.permissions || []);
-          
-          // For super admins, check if there's a saved selected business
+
+          // Resolve Super Admin first so a privileged oversight account is never
+          // narrowed into a parent-only portal by a linked student record.
           if (ctx.role === "super_admin") {
+            setRealBusinessId(ctx.businessId);
+            setRole(ctx.role);
+            setPermissions(ctx.permissions || []);
+            setPropertyId(null);
             const saved = localStorage.getItem("superadmin_selected_business");
             if (saved) setSelectedBusinessId(saved);
+          } else {
+            const links = await getParentLinksForUser(u.uid, u.email);
+            if (links.length && ctx.role === "owner" && ctx.businessId === u.uid) {
+              const scopedLinks = links.filter((link) => link.businessId === links[0].businessId);
+              await claimParentLinks(u.uid, u.email);
+              setRealBusinessId(scopedLinks[0].businessId);
+              setPropertyId(scopedLinks[0].propertyId || "default_property");
+              setParentLinks(scopedLinks);
+              setParentStudentIds(Array.from(new Set(scopedLinks.map((link) => link.studentId))));
+              setRole("parent");
+              setPermissions([]);
+              setLoading(false);
+              return;
+            }
+            setRealBusinessId(ctx.businessId);
+            setRole(ctx.role);
+            setPermissions(ctx.permissions || []);
+            setPropertyId((ctx as { propertyId?: string }).propertyId || "default_property");
           }
         } catch (err: any) {
           // If it's an approval error, log out and let the login page show the message
@@ -72,12 +105,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setRealBusinessId(u.uid);
             setRole("owner");
             setPermissions([]);
+            setPropertyId("default_property");
+            setParentStudentIds([]);
+            setParentLinks([]);
           }
         }
       } else {
         setRealBusinessId(null);
         setRole(null);
         setPermissions([]);
+        setPropertyId(null);
+        setParentStudentIds([]);
+        setParentLinks([]);
       }
       setLoading(false);
     });
@@ -108,8 +147,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       selectedBusinessId,
       setSelectedBusinessId: handleSetSelectedBusinessId,
       role, 
-      permissions, 
-      logout 
+      permissions,
+      propertyId,
+      parentStudentIds,
+      parentLinks,
+      logout
     }}>
       {children}
     </AuthContext.Provider>

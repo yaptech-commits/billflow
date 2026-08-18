@@ -6,7 +6,7 @@ import {
   LayoutDashboard, FileText, Users, Ticket, 
   CreditCard, BarChart3, Settings, Package, 
   ChevronLeft, ChevronRight, ShoppingCart, Truck, UserCircle, Shield,
-  LogOut, Building2, AlertCircle, Pill, BedDouble, CalendarDays, ConciergeBell, UserRound, CircleDollarSign, ChevronDown
+  LogOut, Building2, AlertCircle, Pill, BedDouble, CalendarDays, ConciergeBell, UserRound, CircleDollarSign, ChevronDown, GraduationCap, ClipboardList
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -23,6 +23,7 @@ export default function Sidebar() {
     general: true,
     pharmacy: true,
     hotel: true,
+    school: true,
     administration: true,
   });
 
@@ -60,6 +61,12 @@ export default function Sidebar() {
     { name: "Guests", icon: UserRound, path: "/hotel/guests", roles: ["owner", "salesperson", "super_admin"], hotel: true },
     { name: "Revenue & Audit", icon: BarChart3, path: "/hotel/reports", roles: ["owner", "salesperson", "super_admin"], hotel: true },
     { name: "Online Booking", icon: Ticket, path: "/hotel/booking-widget", roles: ["owner", "salesperson", "super_admin"], hotel: true },
+    { name: "Students", icon: Users, path: "/school/students", roles: ["owner", "super_admin"], school: true },
+    { name: "Fees & Billing", icon: CreditCard, path: "/school/fees", roles: ["owner", "super_admin"], school: true },
+    { name: "Attendance", icon: ClipboardList, path: "/school/attendance", roles: ["owner", "super_admin"], school: true },
+    { name: "Report Cards", icon: FileText, path: "/school/reports", roles: ["owner", "super_admin"], school: true },
+    { name: "Term Analytics", icon: BarChart3, path: "/school/analytics", roles: ["owner", "super_admin"], school: true },
+    { name: "Parent Portal", icon: GraduationCap, path: "/school/portal", roles: ["owner", "super_admin"], school: true },
     { name: "Clients", icon: Users, path: "/clients", roles: ["owner", "salesperson", "super_admin"] },
     { name: "Payments", icon: CreditCard, path: "/payments", roles: ["owner", "salesperson", "super_admin"] },
     { name: "Suppliers", icon: Truck, path: "/suppliers", roles: ["owner", "super_admin"] },
@@ -84,6 +91,7 @@ export default function Sidebar() {
     const businessType = (currentBusinessProfile as any)?.businessType;
     const isPharmacy = businessType === "pharmacy";
     const isHotel = businessType === "hotel";
+    const isSchool = businessType === "school";
     if (role !== "super_admin" && isHotel) {
       const hotelPaths = new Set([
         "/dashboard", "/hotel/rooms", "/hotel/reservations", "/hotel/front-desk", "/hotel/guests",
@@ -95,6 +103,9 @@ export default function Sidebar() {
       return false;
     }
     if ((item as any).hotel && !isHotel && role !== "super_admin") {
+      return false;
+    }
+    if ((item as any).school && !isSchool && role !== "super_admin") {
       return false;
     }
     
@@ -138,6 +149,13 @@ export default function Sidebar() {
       shortLabel: "HTL",
       description: "Rooms, reservations, front desk, and guest operations",
       paths: ["/hotel/rooms", "/hotel/reservations", "/hotel/front-desk", "/hotel/room-pos", "/hotel/guests", "/hotel/reports", "/hotel/booking-widget"],
+    },
+    {
+      key: "school",
+      label: "School",
+      shortLabel: "SCH",
+      description: "Students, fees, attendance, report cards, analytics, and parent access",
+      paths: ["/school/students", "/school/fees", "/school/attendance", "/school/reports", "/school/analytics", "/school/portal"],
     },
     {
       key: "administration",

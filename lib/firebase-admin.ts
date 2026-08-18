@@ -38,3 +38,7 @@ export function getAdminAuth() {
 export function getAdminDb() {
   return getFirestore(getAdminApp());
 }
+
+export async function verifyServerFirebaseToken(token: string) {
+  return getAdminAuth().verifyIdToken(token);
+}

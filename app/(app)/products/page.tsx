@@ -28,6 +28,8 @@ export default function ProductsPage() {
   
   const [formData, setFormData] = useState({
     name: "",
+    sku: "",
+    barcode: "",
     description: "",
     price: 0,
     wholesalePrice: 0,
@@ -135,6 +137,8 @@ export default function ProductsPage() {
               setEditingProduct(null);
               setFormData({
                 name: "",
+                sku: "",
+                barcode: "",
                 description: "",
                 price: 0,
                 wholesalePrice: 0,
@@ -247,6 +251,8 @@ export default function ProductsPage() {
                           setEditingProduct(product);
                           setFormData({
                             name: product.name,
+                            sku: product.sku || "",
+                            barcode: product.barcode || "",
                             description: product.description || "",
                             price: product.price,
                             wholesalePrice: product.wholesalePrice || 0,

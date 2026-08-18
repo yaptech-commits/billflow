@@ -274,6 +274,7 @@ export interface BusinessProfile {
   address?: string;
   phone?: string;
   email?: string;
+  ownerEmail?: string;
   /** Data URL (base64) of the uploaded logo. Small logos only — see MAX_LOGO_BYTES. */
   logoDataUrl?: string;
   /** Hex color, e.g. "#F5A623". Falls back to BillFlow\'s default gold if unset. */
