@@ -6,7 +6,7 @@
 - [x] Open the selected student's portal dashboard without requiring an AuthContext parent session.
 - [x] Handle duplicate ward names by requiring the parent to select the intended student before opening the dashboard.
 - [x] Verify attendance, fees, performance, report cards, and announcements are populated from the selected student.
-- [ ] Commit and push the implementation with author email `ayindenabawisdom@gmail.com`.
+- [x] Commit and push the implementation with author email `ayindenabawisdom@gmail.com`.
 
 ## Parent Portal 404 Route & Navigation Fix
 - [x] Identify why Vercel returned 404 on `/school/portal` (route grouping `(app)` vs flat URL structure).
