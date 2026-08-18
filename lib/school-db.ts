@@ -142,3 +142,101 @@ export async function recordStudentFeePayment(feeId: string, paymentAmount: numb
     status: newStatus,
   });
 }
+
+// ─── ATTENDANCE TRACKING ──────────────────────────────────────────────────────
+
+export interface AttendanceRecord {
+  id?: string;
+  businessId: string;
+  propertyId?: string;
+  studentId: string;
+  studentName: string;
+  classGrade: string;
+  date: string; // "YYYY-MM-DD"
+  status: "present" | "absent" | "late" | "excused";
+  remarks?: string;
+  createdAt?: any;
+}
+
+export async function recordAttendance(record: Omit<AttendanceRecord, "id" | "createdAt">) {
+  const docRef = await addDoc(collection(db, "attendance"), {
+    ...record,
+    createdAt: serverTimestamp(),
+  });
+  return docRef.id;
+}
+
+export async function getAttendance(businessId: string, propertyId?: string, date?: string) {
+  const snap = await getDocs(
+    query(collection(db, "attendance"), where("businessId", "==", businessId))
+  );
+  let list = snap.docs.map((d) => ({ ...d.data(), id: d.id } as AttendanceRecord));
+  if (propertyId) {
+    list = list.filter((a) => !a.propertyId || a.propertyId === propertyId);
+  }
+  if (date) {
+    list = list.filter((a) => a.date === date);
+  }
+  return list;
+}
+
+export async function deleteAttendance(id: string) {
+  await deleteDoc(doc(db, "attendance", id));
+}
+
+// ─── ASSESSMENTS & REPORT CARDS ──────────────────────────────────────────────
+
+export interface Assessment {
+  id?: string;
+  businessId: string;
+  propertyId?: string;
+  studentId: string;
+  studentName: string;
+  classGrade: string;
+  term: string; // e.g. "Term 1, 2026"
+  subject: string; // e.g. "Mathematics", "English", "Science"
+  classScore: number; // out of 40 or 30
+  examScore: number; // out of 60 or 70
+  totalScore?: number; // calculated (classScore + examScore)
+  grade?: string; // A, B, C, D, F
+  remarks?: string;
+  createdAt?: any;
+}
+
+export async function saveAssessment(assessment: Omit<Assessment, "id" | "createdAt" | "totalScore" | "grade">) {
+  const totalScore = Number(assessment.classScore || 0) + Number(assessment.examScore || 0);
+  let grade = "F";
+  if (totalScore >= 80) grade = "A";
+  else if (totalScore >= 70) grade = "B";
+  else if (totalScore >= 60) grade = "C";
+  else if (totalScore >= 50) grade = "D";
+
+  const docRef = await addDoc(collection(db, "assessments"), {
+    ...assessment,
+    totalScore,
+    grade,
+    createdAt: serverTimestamp(),
+  });
+  return docRef.id;
+}
+
+export async function getAssessments(businessId: string, propertyId?: string, studentId?: string, term?: string) {
+  const snap = await getDocs(
+    query(collection(db, "assessments"), where("businessId", "==", businessId))
+  );
+  let list = snap.docs.map((d) => ({ ...d.data(), id: d.id } as Assessment));
+  if (propertyId) {
+    list = list.filter((a) => !a.propertyId || a.propertyId === propertyId);
+  }
+  if (studentId) {
+    list = list.filter((a) => a.studentId === studentId);
+  }
+  if (term) {
+    list = list.filter((a) => a.term === term);
+  }
+  return list;
+}
+
+export async function deleteAssessment(id: string) {
+  await deleteDoc(doc(db, "assessments", id));
+}
