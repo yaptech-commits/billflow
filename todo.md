@@ -1,5 +1,12 @@
 # Suggested Upgrades Implementation
 
+## School Bulk Fee Assignment by Class
+- [x] Add a Bulk Assign Fees to Class action under School Fees & Billing.
+- [x] Select a property-scoped class and fee structure, then assign the fee to all matching students.
+- [x] Prevent duplicate fee assignments for the same student, fee structure, term, and property.
+- [x] Show assignment results with created, skipped, and failed counts while preserving individual assignment behavior.
+- [ ] Build, verify, commit, and push the bulk class fee assignment implementation with author email `ayindenabawisdom@gmail.com`.
+
 ## Parent Portal Pay Fees
 - [x] Add a Pay Fees action when the selected ward has an outstanding fee balance.
 - [x] Reuse the existing BillFlow payment provider flow and link payment metadata to the student, fee statement, business, and property.
