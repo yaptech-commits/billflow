@@ -5,7 +5,7 @@
 - [x] Reuse the existing BillFlow payment provider flow and link payment metadata to the student, fee statement, business, and property.
 - [x] Handle payment loading, success, cancellation, and failure states without marking fees paid from the client alone.
 - [x] Show confirmation/receipt details after the backend confirms payment and preserve the existing report and fee dashboard behavior.
-- [ ] Build, verify, commit, and push the Parent Portal payment implementation with author email `ayindenabawisdom@gmail.com`.
+- [x] Build, verify, commit, and push the Parent Portal payment implementation with author email `ayindenabawisdom@gmail.com`.
 
 ## Parent Portal Accent Color Customization
 - [x] Add an owner setting to customize the Parent Portal accent color using the existing business profile branding settings.
