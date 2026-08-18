@@ -232,11 +232,11 @@ export default function SchoolParentPortal() {
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-indigo-500/30 bg-indigo-600/20 text-indigo-300">
-              {dashboard?.school.logoDataUrl ? <img src={dashboard.school.logoDataUrl} alt="School logo" className="h-8 w-8 rounded-lg object-contain" /> : <GraduationCap className="h-6 w-6" />}
+              {dashboard?.school.logoDataUrl ? <img src={dashboard.school.logoDataUrl} alt={`${dashboard.school.name || "School"} logo`} className="h-8 w-8 rounded-lg object-contain" /> : <GraduationCap className="h-6 w-6" />}
             </div>
             <div>
               <h1 className="flex items-center gap-2 text-base font-bold tracking-tight text-white sm:text-lg">
-                {dashboard?.school.name || "BillFlow School"}
+                {dashboard?.school.name || "School Parent Portal"}
                 <span className="rounded-full border border-indigo-500/30 bg-indigo-500/15 px-2 py-0.5 text-[10px] font-semibold text-indigo-200">Parent Portal</span>
               </h1>
               <p className="text-[11px] text-slate-400">Student access without email or password</p>

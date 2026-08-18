@@ -1,10 +1,16 @@
 # Suggested Upgrades Implementation
 
+## Parent Portal School Branding
+- [x] Replace the fixed `BillFlow School` header label with the configured school/business name.
+- [x] Display the configured school logo in the Parent Portal header with a safe fallback when none is saved.
+- [x] Keep branding property-aware and avoid changing the main BillFlow login or unrelated pages.
+- [ ] Verify the branded Parent Portal build and live route, then commit and push with author email `ayindenabawisdom@gmail.com`.
+
 ## Deployed Parent Portal Verification
-- [ ] Inspect `https://billflow-blue.vercel.app/school/portal` directly and record whether it still serves the old login flow.
-- [ ] Compare the deployed result with the pushed `fix/super-admin-school-grouping` branch and identify the deployment branch/version mismatch if present.
-- [ ] Correct and push the exact source used by the live Vercel deployment, then recheck the URL.
-- [ ] Report the confirmed live result to the user.
+- [x] Inspect `https://billflow-blue.vercel.app/school/portal` directly and record whether it still serves the old login flow.
+- [x] Compare the deployed result with the pushed `fix/super-admin-school-grouping` branch and identify the deployment branch/version mismatch if present.
+- [x] Correct and push the exact source used by the live Vercel deployment, then recheck the URL.
+- [x] Report the confirmed live result to the user.
 
 ## Parent Portal Student ID/Name-Only Access
 - [x] Replace email/password login with a landing-page lookup accepting Student ID or Ward Name only.

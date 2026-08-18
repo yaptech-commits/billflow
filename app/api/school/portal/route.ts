@@ -53,8 +53,10 @@ async function readDashboard(db: Firestore, student: any, studentId: string) {
   const propertyId = String(student.propertyId || DEFAULT_PROPERTY_ID);
   if (!businessId) throw new Error("Student is not linked to a business");
 
-  const [businessSnap, attendanceSnap, feesSnap, assessmentsSnap, announcementsSnap] = await Promise.all([
+  const [businessSnap, profileSnap, attendanceSnap, feesSnap, assessmentsSnap, announcementsSnap] = await Promise.all([
     db.collection("businesses").doc(businessId).get(),
+    // School owners save their replaceable name and logo in businessProfiles.
+    db.collection("businessProfiles").doc(businessId).get(),
     db.collection("attendance").where("businessId", "==", businessId).get(),
     db.collection("studentFees").where("businessId", "==", businessId).get(),
     db.collection("assessments").where("businessId", "==", businessId).get(),
@@ -128,7 +130,10 @@ async function readDashboard(db: Firestore, student: any, studentId: string) {
     })
     .sort((a: any, b: any) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
 
-  const business = (businessSnap.exists ? businessSnap.data() : {}) as Record<string, any>;
+  const business = {
+    ...((businessSnap.exists ? businessSnap.data() : {}) as Record<string, any>),
+    ...((profileSnap.exists ? profileSnap.data() : {}) as Record<string, any>),
+  };
   return serialize({
     student: {
       id: studentId,
