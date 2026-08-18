@@ -233,7 +233,7 @@ export default function SettingsPage() {
       {role === "owner" && (
         <div className="card">
           <h2 className="font-grotesk font-semibold text-white mb-1">Invoice &amp; Receipt Branding</h2>
-          <p className="text-xs text-muted mb-5">This appears on every invoice and POS receipt your clients see.</p>
+          <p className="text-xs text-muted mb-5">This appears on invoices, POS receipts, and the Parent Portal after a student lookup.</p>
 
           {brandLoading ? (
             <p className="text-muted text-sm py-6 text-center">Loading...</p>
