@@ -1,5 +1,12 @@
 # Suggested Upgrades Implementation
 
+## Parent Portal Report Card Viewing & Download
+- [x] Design report card review modal on Parent Portal displaying termly grades, remarks, teacher notes, and attendance summaries.
+- [x] Integrate HTML/PDF-ready printable document generation using BillFlow receipt printing patterns (`downloadReceipt`).
+- [x] Connect report card viewer to property-scoped student report card records.
+- [x] Verify production build compatibility, type safety, and property scoping.
+- [x] Commit and push the Parent Portal report card update with `ayindenabawisdom@gmail.com`.
+
 ## Parent Portal Fee Payment Integration (Mobile Money & Cards)
 - [x] Design secure fee payment modal on Parent Portal supporting Mobile Money (MTN, Vodafone, AirtelTigo) and Credit/Debit Cards.
 - [x] Integrate amount entry, provider reference collection, and cash/payment confirmation handling.

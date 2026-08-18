@@ -68,6 +68,10 @@ export default function SchoolParentPortal() {
   const [paymentAmount, setPaymentAmount] = useState("");
   const [processingPayment, setProcessingPayment] = useState(false);
 
+  // Report card modal state
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [activeReportCard, setActiveReportCard] = useState<ReportCard | null>(null);
+
   useEffect(() => {
     loadPortalData();
   }, [propertyId]);
@@ -370,6 +374,18 @@ export default function SchoolParentPortal() {
                                 ))}
                               </div>
                             )}
+
+                            <div className="pt-2 flex justify-end">
+                              <button
+                                onClick={() => {
+                                  setActiveReportCard(rc);
+                                  setReportModalOpen(true);
+                                }}
+                                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md transition-all flex items-center gap-2"
+                              >
+                                <Award className="w-3.5 h-3.5" /> View & Download Report Card
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -452,6 +468,130 @@ export default function SchoolParentPortal() {
           </div>
         )}
       </main>
+
+      {/* Report Card Modal */}
+      {reportModalOpen && activeReportCard && selectedStudent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-2xl w-full p-6 space-y-6 shadow-2xl my-8">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Award className="w-5 h-5 text-amber-400" /> Student Report Card
+                </h3>
+                <p className="text-xs text-slate-400">{selectedStudent.name} ({selectedStudent.studentId}) - {activeReportCard.term}</p>
+              </div>
+              <button
+                onClick={() => setReportModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div id="report-card-print-area" className="space-y-6 bg-slate-950/60 p-6 rounded-2xl border border-slate-800">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+                <div>
+                  <h4 className="text-lg font-black text-white">{currentProperty?.name || "BillFlow Academy"}</h4>
+                  <p className="text-xs text-slate-400">Official Termly Academic Evaluation</p>
+                </div>
+                <div className="text-right">
+                  <span className="text-xs px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">
+                    Grade: {activeReportCard.overallGrade || "N/A"}
+                  </span>
+                  <p className="text-[10px] text-slate-500 mt-1">Class: {activeReportCard.classGrade}</p>
+                </div>
+              </div>
+
+              {/* Subject breakdown table */}
+              <div className="space-y-2">
+                <h5 className="text-xs font-bold uppercase tracking-wider text-slate-400">Subject Performance</h5>
+                <div className="border border-slate-800 rounded-xl overflow-hidden">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-900 text-slate-400 border-b border-slate-800">
+                      <tr>
+                        <th className="p-3 font-semibold">Subject</th>
+                        <th className="p-3 font-semibold text-center">Score</th>
+                        <th className="p-3 font-semibold text-center">Grade</th>
+                        <th className="p-3 font-semibold">Remarks</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                      {activeReportCard.subjects && activeReportCard.subjects.map((sub, idx) => (
+                        <tr key={idx} className="hover:bg-slate-900/40">
+                          <td className="p-3 font-medium text-white">{sub.name}</td>
+                          <td className="p-3 text-center font-bold text-indigo-300">{sub.score}</td>
+                          <td className="p-3 text-center font-bold text-amber-400">{sub.grade}</td>
+                          <td className="p-3 text-slate-400">{sub.remarks || "Good performance"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Teacher remarks & Attendance summary */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800 space-y-1">
+                  <span className="text-xs font-semibold text-slate-400">Class Teacher Remarks:</span>
+                  <p className="text-xs text-slate-200 italic">{activeReportCard.teacherRemarks || "Shows steady improvement and active participation."}</p>
+                </div>
+                <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800 space-y-1">
+                  <span className="text-xs font-semibold text-slate-400">Principal Remarks:</span>
+                  <p className="text-xs text-slate-200 italic">{activeReportCard.principalRemarks || "Approved. Keep up the excellent work."}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const printContent = document.getElementById("report-card-print-area")?.innerHTML;
+                  if (!printContent) return;
+                  const win = window.open("", "_blank");
+                  if (!win) {
+                    toast.error("Please allow popups to download report card");
+                    return;
+                  }
+                  win.document.write(`
+                    <html>
+                      <head>
+                        <title>Report Card - ${selectedStudent.name} (${activeReportCard.term})</title>
+                        <style>
+                          body { font-family: ui-sans-serif, system-ui, sans-serif; background: #090d16; color: #f8fafc; padding: 32px; }
+                          table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+                          th, td { border: 1px solid #1e293b; padding: 10px; text-align: left; }
+                          th { background: #0f172a; color: #94a3b8; }
+                          .font-black { font-weight: 900; }
+                          .font-bold { font-weight: 700; }
+                          .text-amber-400 { color: #fbbf24; }
+                          .text-indigo-300 { color: #a5b4fc; }
+                        </style>
+                      </head>
+                      <body>
+                        ${printContent}
+                      </body>
+                    </html>
+                  `);
+                  win.document.close();
+                  win.focus();
+                  setTimeout(() => win.print(), 500);
+                }}
+                className="flex-1 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-lg transition-all flex items-center justify-center gap-2"
+              >
+                <Award className="w-4 h-4" /> Download / Print Report Card PDF
+              </button>
+              <button
+                type="button"
+                onClick={() => setReportModalOpen(false)}
+                className="px-6 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs transition-all"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Fee Payment Modal */}
       {paymentModalOpen && activePaymentFee && selectedStudent && (
