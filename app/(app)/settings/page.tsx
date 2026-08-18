@@ -34,7 +34,7 @@ export default function SettingsPage() {
   // Invoice/receipt branding
   const [brand, setBrand] = useState({
     businessName: "", address: "", phone: "", email: "",
-    accentColor: DEFAULT_ACCENT_COLOR, footerNote: "", currency: DEFAULT_CURRENCY,
+    accentColor: DEFAULT_ACCENT_COLOR, portalAccentColor: "#4F46E5", footerNote: "", currency: DEFAULT_CURRENCY,
     taxRate: DEFAULT_TAX_RATE, taxInclusive: false, taxLabel: DEFAULT_TAX_LABEL,
     paystackPublicKey: "", businessType: "general" as "general" | "pharmacy" | "hotel" | "coldstore" | "school",
     propertyId: "default_property", propertyName: "Main Property",
@@ -58,6 +58,7 @@ export default function SettingsPage() {
           phone: profile.phone ?? "",
           email: profile.email ?? "",
           accentColor: profile.accentColor ?? DEFAULT_ACCENT_COLOR,
+          portalAccentColor: profile.portalAccentColor ?? "#4F46E5",
           footerNote: profile.footerNote ?? "",
           currency: profile.currency ?? DEFAULT_CURRENCY,
           taxRate: profile.taxRate ?? DEFAULT_TAX_RATE,
@@ -336,6 +337,25 @@ export default function SettingsPage() {
                   />
                 </div>
                 <p className="text-[11px] text-muted mt-1.5">Used for totals and highlights on invoices &amp; receipts</p>
+              </div>
+
+              <div>
+                <label className="label">Parent Portal Accent Color</label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="color"
+                    value={brand.portalAccentColor}
+                    onChange={e => setBrand(b => ({ ...b, portalAccentColor: e.target.value }))}
+                    className="w-10 h-10 rounded-lg border border-border bg-transparent cursor-pointer p-0"
+                  />
+                  <input
+                    className="input flex-1"
+                    value={brand.portalAccentColor}
+                    onChange={e => setBrand(b => ({ ...b, portalAccentColor: e.target.value }))}
+                    placeholder="#4F46E5"
+                  />
+                </div>
+                <p className="text-[11px] text-muted mt-1.5">Used for the Parent Portal landing page actions, highlights, and focus states.</p>
               </div>
 
               <div>

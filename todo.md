@@ -1,10 +1,16 @@
 # Suggested Upgrades Implementation
 
+## Parent Portal Accent Color Customization
+- [x] Add an owner setting to customize the Parent Portal accent color using the existing business profile branding settings.
+- [x] Apply the saved accent color to the Parent Portal landing page without changing the main BillFlow login or unrelated modules.
+- [x] Preserve readable contrast and use the existing default accent when no custom color is configured.
+- [x] Build, verify, commit, and push the Parent Portal accent-color implementation with author email `ayindenabawisdom@gmail.com`.
+
 ## Parent Portal School Branding
 - [x] Replace the fixed `BillFlow School` header label with the configured school/business name.
 - [x] Display the configured school logo in the Parent Portal header with a safe fallback when none is saved.
 - [x] Keep branding property-aware and avoid changing the main BillFlow login or unrelated pages.
-- [ ] Verify the branded Parent Portal build and live route, then commit and push with author email `ayindenabawisdom@gmail.com`.
+- [x] Verify the branded Parent Portal build and live route, then commit and push with author email `ayindenabawisdom@gmail.com`.
 
 ## Deployed Parent Portal Verification
 - [x] Inspect `https://billflow-blue.vercel.app/school/portal` directly and record whether it still serves the old login flow.

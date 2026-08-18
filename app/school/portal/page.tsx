@@ -7,7 +7,7 @@
  * before a guardian performs a lookup.
  */
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useState, type CSSProperties } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   AlertCircle,
@@ -94,6 +94,7 @@ type PortalDashboard = {
     name: string;
     propertyName?: string;
     logoDataUrl?: string;
+    portalAccentColor?: string;
     currency?: string;
   };
   attendance: PortalAttendance[];
@@ -111,6 +112,15 @@ function formatDate(value?: string | null) {
 
 function money(value: number, currency = "GHS") {
   return `${currency === "GHS" ? "GH₵" : currency} ${Number(value || 0).toFixed(2)}`;
+}
+
+function readableTextColor(hex: string) {
+  const normalized = hex.replace("#", "");
+  const red = Number.parseInt(normalized.slice(0, 2), 16);
+  const green = Number.parseInt(normalized.slice(2, 4), 16);
+  const blue = Number.parseInt(normalized.slice(4, 6), 16);
+  const luminance = (0.299 * red + 0.587 * green + 0.114 * blue) / 255;
+  return luminance > 0.62 ? "#0F172A" : "#FFFFFF";
 }
 
 function statusClasses(status: PortalAttendance["status"]) {
@@ -203,6 +213,10 @@ export default function SchoolParentPortal() {
     setLookup("");
   }
 
+  const portalAccent = dashboard?.school.portalAccentColor || "#4F46E5";
+  const portalAccentText = readableTextColor(portalAccent);
+  const portalTheme = { "--portal-accent": portalAccent } as CSSProperties;
+
   const portalStats: Array<{ icon: LucideIcon; label: string; value: string; helper: string; color: string }> = dashboard ? [
     { icon: Calendar, label: "Attendance rate", value: `${attendanceSummary.rate}%`, helper: `${attendanceSummary.present} present · ${attendanceSummary.absent} absent`, color: "text-indigo-300" },
     { icon: Award, label: "Average score", value: averageScore === "—" ? "—" : `${averageScore}%`, helper: `${dashboard.assessments.length} subject record${dashboard.assessments.length === 1 ? "" : "s"}`, color: "text-amber-300" },
@@ -227,17 +241,17 @@ export default function SchoolParentPortal() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-slate-100 font-sans">
+    <div style={portalTheme} className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-slate-100 font-sans">
       <header className="sticky top-0 z-50 border-b border-slate-800/80 bg-slate-950/85 px-4 py-4 backdrop-blur-md sm:px-6">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-indigo-500/30 bg-indigo-600/20 text-indigo-300">
+            <div style={{ borderColor: `${portalAccent}55`, backgroundColor: `${portalAccent}22`, color: portalAccent }} className="flex h-10 w-10 items-center justify-center rounded-xl border">
               {dashboard?.school.logoDataUrl ? <img src={dashboard.school.logoDataUrl} alt={`${dashboard.school.name || "School"} logo`} className="h-8 w-8 rounded-lg object-contain" /> : <GraduationCap className="h-6 w-6" />}
             </div>
             <div>
               <h1 className="flex items-center gap-2 text-base font-bold tracking-tight text-white sm:text-lg">
                 {dashboard?.school.name || "School Parent Portal"}
-                <span className="rounded-full border border-indigo-500/30 bg-indigo-500/15 px-2 py-0.5 text-[10px] font-semibold text-indigo-200">Parent Portal</span>
+                <span style={{ borderColor: `${portalAccent}55`, backgroundColor: `${portalAccent}22`, color: portalAccent }} className="rounded-full border px-2 py-0.5 text-[10px] font-semibold">Parent Portal</span>
               </h1>
               <p className="text-[11px] text-slate-400">Student access without email or password</p>
             </div>
@@ -257,17 +271,17 @@ export default function SchoolParentPortal() {
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 sm:py-12">
         {!dashboard ? (
           <section className="mx-auto max-w-4xl">
-            <div className="relative overflow-hidden rounded-[2rem] border border-indigo-400/20 bg-indigo-600/90 px-6 py-12 text-center shadow-2xl shadow-indigo-950/40 sm:px-12 sm:py-16">
+            <div style={{ backgroundColor: portalAccent }} className="relative overflow-hidden rounded-[2rem] border border-white/20 px-6 py-12 text-center shadow-2xl shadow-indigo-950/40 sm:px-12 sm:py-16">
               <div className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
               <div className="pointer-events-none absolute -bottom-28 -left-20 h-64 w-64 rounded-full bg-slate-950/20 blur-3xl" />
               <div className="relative space-y-5">
                 <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-white shadow-lg">
-                  <GraduationCap className="h-9 w-9" />
+                  <GraduationCap style={{ color: portalAccentText }} className="h-9 w-9" />
                 </div>
                 <div className="space-y-3">
-                  <p className="text-xs font-bold uppercase tracking-[0.22em] text-indigo-100">Guardian access</p>
-                  <h2 className="text-3xl font-black tracking-tight text-white sm:text-5xl">View your ward&apos;s school journey</h2>
-                  <p className="mx-auto max-w-2xl text-sm leading-6 text-indigo-100 sm:text-base">
+                  <p style={{ color: portalAccentText }} className="text-xs font-bold uppercase tracking-[0.22em] opacity-75">Guardian access</p>
+                  <h2 style={{ color: portalAccentText }} className="text-3xl font-black tracking-tight sm:text-5xl">View your ward&apos;s school journey</h2>
+                  <p style={{ color: portalAccentText }} className="mx-auto max-w-2xl text-sm leading-6 opacity-75 sm:text-base">
                     Enter the student&apos;s ID or full name below. No email, password, or separate parent account is required.
                   </p>
                 </div>
@@ -281,15 +295,15 @@ export default function SchoolParentPortal() {
                       onChange={(event) => setLookup(event.target.value)}
                       placeholder="Student ID or Ward Name"
                       autoComplete="off"
-                      className="w-full rounded-2xl border border-white/20 bg-white px-12 py-4 text-base text-slate-900 outline-none ring-indigo-300 placeholder:text-slate-400 focus:ring-4"
+                      className="w-full rounded-2xl border border-white/20 bg-white px-12 py-4 text-base text-slate-900 outline-none ring-[var(--portal-accent)] placeholder:text-slate-400 focus:ring-4"
                     />
                   </div>
-                  <button disabled={loading} type="submit" className="flex items-center justify-center gap-2 rounded-2xl bg-slate-950 px-6 py-4 text-sm font-bold text-white shadow-lg transition hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-70">
+                  <button disabled={loading} type="submit" style={{ backgroundColor: "#020617" }} className="flex items-center justify-center gap-2 rounded-2xl px-6 py-4 text-sm font-bold text-white shadow-lg transition hover:brightness-125 disabled:cursor-not-allowed disabled:opacity-70">
                     {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <ArrowRightIcon />}
                     {loading ? "Opening..." : "Open dashboard"}
                   </button>
                 </form>
-                <div className="flex items-center justify-center gap-2 pt-2 text-xs text-indigo-100">
+                <div style={{ color: portalAccentText }} className="flex items-center justify-center gap-2 pt-2 text-xs opacity-75">
                   <ShieldCheck className="h-4 w-4" /> Your results are limited to the student&apos;s school property.
                 </div>
               </div>
@@ -320,7 +334,7 @@ export default function SchoolParentPortal() {
 
             <div className="grid gap-4 pt-8 sm:grid-cols-3">
               {portalFeatures.map(({ icon: FeatureIcon, title, description }) => (
-                <div key={title} className="rounded-2xl border border-slate-800 bg-slate-900/50 p-5"><FeatureIcon className="mb-3 h-5 w-5 text-indigo-300" /><h3 className="text-sm font-bold text-white">{title}</h3><p className="mt-1 text-xs leading-5 text-slate-400">{description}</p></div>
+                <div key={title} className="rounded-2xl border border-slate-800 bg-slate-900/50 p-5"><FeatureIcon style={{ color: portalAccent }} className="mb-3 h-5 w-5" /><h3 className="text-sm font-bold text-white">{title}</h3><p className="mt-1 text-xs leading-5 text-slate-400">{description}</p></div>
               ))}
             </div>
           </section>
