@@ -11,6 +11,7 @@ import {
   Timestamp,
   serverTimestamp,
   setDoc,
+  writeBatch,
 } from "firebase/firestore";
 import { db, auth } from "./firebase";
 
@@ -62,6 +63,7 @@ export interface StudentFee {
   studentName: string;
   classGrade: string;
   feeTitle: string;
+  feeStructureId?: string;
   amount: number;
   amountPaid: number;
   status: "unpaid" | "partial" | "paid";
@@ -117,7 +119,7 @@ export interface ParentLink {
 }
 
 export type SchoolNotificationChannel = "in_app" | "email" | "sms" | "push";
-export type SchoolNotificationType = "attendance_absence" | "fee_assigned" | "fee_payment" | "report_card_published";
+export type SchoolNotificationType = "attendance_absence" | "fee_assigned" | "fee_payment" | "report_card_published" | "announcement";
 export type SchoolNotificationStatus = "queued" | "sent" | "failed" | "read";
 
 export interface SchoolNotification {
@@ -349,6 +351,66 @@ export async function assignFeeToStudent(fee: Omit<StudentFee, "id" | "createdAt
     createdAt: serverTimestamp(),
   });
   return docRef.id;
+}
+
+export async function bulkAssignFeeToClass(params: {
+  businessId: string;
+  propertyId?: string;
+  students: Student[];
+  feeStructure: FeeStructure;
+  classGrade: string;
+}) {
+  const propertyId = params.propertyId || DEFAULT_PROPERTY_ID;
+  const existingFees = await getStudentFees(params.businessId, propertyId);
+  const hasExistingAssignment = (studentId: string, feeStructure: FeeStructure) =>
+    existingFees.some(
+      (fee) =>
+        fee.studentId === studentId &&
+        (fee.term || "") === (feeStructure.term || "") &&
+        (fee.feeStructureId
+          ? fee.feeStructureId === feeStructure.id
+          : fee.feeTitle === feeStructure.title),
+    );
+  const eligibleStudents = params.students.filter(
+    (student) =>
+      student.businessId === params.businessId &&
+      (student.propertyId || DEFAULT_PROPERTY_ID) === propertyId &&
+      student.classGrade === params.classGrade,
+  );
+  const studentsToAssign = eligibleStudents.filter((student) => {
+    return Boolean(student.id) && !hasExistingAssignment(student.id || "", params.feeStructure);
+  });
+
+  for (let start = 0; start < studentsToAssign.length; start += 450) {
+    const batch = writeBatch(db);
+    const chunk = studentsToAssign.slice(start, start + 450);
+    chunk.forEach((student) => {
+      const feeRef = doc(collection(db, "studentFees"));
+      batch.set(feeRef, {
+        businessId: params.businessId,
+        propertyId,
+        studentId: student.id,
+        studentName: student.fullName,
+        classGrade: student.classGrade,
+        feeTitle: params.feeStructure.title,
+        feeStructureId: params.feeStructure.id,
+        amount: params.feeStructure.amount,
+        amountPaid: 0,
+        status: "unpaid",
+        dueDate: params.feeStructure.dueDate,
+        term: params.feeStructure.term || "Term 1",
+        createdAt: serverTimestamp(),
+      });
+    });
+    if (chunk.length > 0) await batch.commit();
+  }
+
+  return {
+    eligibleCount: eligibleStudents.length,
+    createdCount: studentsToAssign.length,
+    skippedCount: eligibleStudents.length - studentsToAssign.length,
+    createdStudentIds: studentsToAssign.map((student) => student.id || ""),
+  };
 }
 
 export async function getStudentFees(businessId: string, propertyId?: string) {
@@ -746,6 +808,7 @@ export interface SchoolAnnouncement {
     totalRecipients: number;
     sentCount: number;
     failedCount: number;
+    pendingCount?: number;
     attempts: SmsDeliveryAttempt[];
   };
   createdAt?: any;

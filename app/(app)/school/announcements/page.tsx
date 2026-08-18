@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/auth-context";
 import {
   SchoolAnnouncement,
   SchoolClass,
+  SchoolNotificationChannel,
   Student,
   getSchoolAnnouncements,
   getSchoolClasses,
@@ -19,8 +20,8 @@ import { Megaphone, Send, Trash2, Plus, Users, Calendar, Bell, X } from "lucide-
 import Modal from "@/components/ui/Modal";
 
 export default function SchoolAnnouncementsPage() {
-  const { businessId, role } = useAuth();
-  const propertyId = "default_property";
+  const { businessId, propertyId: activePropertyId } = useAuth();
+  const propertyId = activePropertyId || "default_property";
   const [announcements, setAnnouncements] = useState<SchoolAnnouncement[]>([]);
   const [classes, setClasses] = useState<SchoolClass[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
@@ -35,6 +36,9 @@ export default function SchoolAnnouncementsPage() {
     channel: "both" as "email" | "sms" | "both",
   });
 
+  const channelsFor = (channel: "email" | "sms" | "both"): SchoolNotificationChannel[] =>
+    channel === "both" ? ["in_app", "email", "sms"] : ["in_app", channel];
+
   useEffect(() => {
     if (businessId) {
       loadData();
@@ -42,12 +46,14 @@ export default function SchoolAnnouncementsPage() {
   }, [businessId]);
 
   const loadData = async () => {
+    if (!businessId) return;
+    const currentBusinessId = businessId;
     try {
       setLoading(true);
       const [annList, classList, studentList] = await Promise.all([
-        getSchoolAnnouncements(businessId, propertyId),
-        getSchoolClasses(businessId, propertyId),
-        getStudents(businessId, propertyId),
+        getSchoolAnnouncements(currentBusinessId, propertyId),
+        getSchoolClasses(currentBusinessId, propertyId),
+        getStudents(currentBusinessId, propertyId),
       ]);
       setAnnouncements(annList);
       setClasses(classList);
@@ -69,75 +75,68 @@ export default function SchoolAnnouncementsPage() {
 
     try {
       setSendingId("new");
-      await createSchoolAnnouncement({
-        businessId,
-        propertyId,
-        title: form.title,
-        message: form.message,
-        targetClass: form.targetClass,
-        channel: form.channel,
-      });
-
+      const currentBusinessId = businessId;
       const targetStudents =
         form.targetClass === "all"
           ? students
           : students.filter((s) => s.classGrade === form.targetClass);
+      const recipients = targetStudents.filter((student) => student.guardianEmail || student.guardianPhone);
+      const announcementMessage = `Dear Parent/Guardian of {studentName} ({classGrade}):\n\n${form.message.trim()}\n\n- School Administration`;
+      const channels = channelsFor(form.channel);
 
-      let dispatchedCount = 0;
-      let sentSmsCount = 0;
-      let failedSmsCount = 0;
-      const smsAttempts: any[] = [];
-
-      for (const student of targetStudents) {
-        if (student.guardianEmail || student.guardianPhone) {
-          await enqueueSchoolNotification({
-            businessId,
-            propertyId,
-            recipientType: "parent",
-            recipientEmail: student.guardianEmail || undefined,
-            recipientPhone: student.guardianPhone || undefined,
-            subject: `School Announcement: ${form.title}`,
-            message: `Dear Parent/Guardian of ${student.fullName} (${student.classGrade}):\n\n${form.message}\n\n- School Administration`,
-            channel: form.channel,
-          });
-          dispatchedCount++;
-
-          if (form.channel === "sms" || form.channel === "both") {
-            if (student.guardianPhone) {
-              const success = Math.random() > 0.08; // 92% simulated gateway success rate
-              const attempt = {
-                studentId: student.id || student.fullName,
-                studentName: student.fullName,
-                guardianPhone: student.guardianPhone,
-                status: success ? ("sent" as const) : ("failed" as const),
-                providerRef: success ? `SMS-${Math.random().toString(36).substring(2, 10).toUpperCase()}` : undefined,
-                reason: success ? undefined : "Carrier gateway timeout or invalid number",
-                timestamp: new Date().toISOString(),
-              };
-              smsAttempts.push(attempt);
-              if (success) sentSmsCount++;
-              else failedSmsCount++;
-            }
-          }
-        }
-      }
-
-      await createSchoolAnnouncement({
-        businessId,
+      const announcementId = await createSchoolAnnouncement({
+        businessId: currentBusinessId,
         propertyId,
-        title: form.title,
-        message: form.message,
+        title: form.title.trim(),
+        message: form.message.trim(),
         targetClass: form.targetClass,
+        channels,
         channel: form.channel,
         smsTracking: {
-          totalRecipients: dispatchedCount,
-          sentCount: sentSmsCount,
-          failedCount: failedSmsCount,
-          attempts: smsAttempts,
+          totalRecipients: recipients.length,
+          sentCount: 0,
+          failedCount: 0,
+          pendingCount:
+            form.channel === "sms" || form.channel === "both"
+              ? recipients.filter((student) => Boolean(student.guardianPhone)).length
+              : 0,
+          attempts:
+            form.channel === "sms" || form.channel === "both"
+              ? recipients
+                  .filter((student) => Boolean(student.guardianPhone))
+                  .map((student) => ({
+                    studentId: student.id || student.admissionNumber,
+                    studentName: student.fullName,
+                    guardianPhone: student.guardianPhone,
+                    status: "pending" as const,
+                    timestamp: new Date().toISOString(),
+                  }))
+              : [],
         },
       });
 
-      toast.success(`Announcement posted and dispatched to ${dispatchedCount} parent(s)! (SMS Delivered: ${sentSmsCount}, Failed: ${failedSmsCount})`);
+      let queuedCount = 0;
+      for (const student of recipients) {
+        await enqueueSchoolNotification({
+          businessId: currentBusinessId,
+          propertyId,
+          studentId: student.id || student.admissionNumber,
+          studentName: student.fullName,
+          recipientEmail: student.guardianEmail || undefined,
+          recipientPhone: student.guardianPhone || undefined,
+          title: `School Announcement: ${form.title.trim()}`,
+          message: announcementMessage
+            .replaceAll("{studentName}", student.fullName)
+            .replaceAll("{classGrade}", student.classGrade),
+          type: "announcement",
+          channels,
+        });
+        queuedCount++;
+      }
+
+      toast.success(
+        `Announcement ${announcementId ? "published" : "saved"} and queued for ${queuedCount} parent(s). Delivery status will update as providers respond.`,
+      );
       setIsModalOpen(false);
       setForm({
         title: "",
@@ -145,7 +144,7 @@ export default function SchoolAnnouncementsPage() {
         targetClass: "all",
         channel: "both",
       });
-      loadData();
+      await loadData();
     } catch (err: any) {
       toast.error(err.message || "Failed to post announcement.");
     } finally {
@@ -166,30 +165,37 @@ export default function SchoolAnnouncementsPage() {
 
   const handleResend = async (announcement: SchoolAnnouncement) => {
     if (!confirm(`Resend "${announcement.title}" bulk notification to parents?`)) return;
+    if (!businessId) return;
+    const currentBusinessId = businessId;
     try {
       setSendingId(announcement.id!);
       const targetStudents =
         announcement.targetClass === "all"
           ? students
           : students.filter((s) => s.classGrade === announcement.targetClass);
+      const channels = announcement.channels?.length
+        ? announcement.channels
+        : channelsFor(announcement.channel || "both");
 
       let count = 0;
       for (const student of targetStudents) {
         if (student.guardianEmail || student.guardianPhone) {
           await enqueueSchoolNotification({
-            businessId,
+            businessId: currentBusinessId,
             propertyId,
-            recipientType: "parent",
+            studentId: student.id || student.admissionNumber,
+            studentName: student.fullName,
             recipientEmail: student.guardianEmail || undefined,
             recipientPhone: student.guardianPhone || undefined,
-            subject: `School Announcement: ${announcement.title}`,
+            title: `School Announcement: ${announcement.title}`,
             message: `Dear Parent/Guardian of ${student.fullName} (${student.classGrade}):\n\n${announcement.message}\n\n- School Administration`,
-            channel: announcement.channel || "both",
+            type: "announcement",
+            channels,
           });
           count++;
         }
       }
-      toast.success(`Successfully redispatched to ${count} parent(s).`);
+      toast.success(`Successfully queued the announcement for ${count} parent(s).`);
     } catch (err: any) {
       toast.error(err.message || "Failed to resend announcement.");
     } finally {
@@ -294,11 +300,15 @@ export default function SchoolAnnouncementsPage() {
                       <span className="text-muted block text-[10px]">Delivered SMS</span>
                       <span className="text-green-400 font-bold text-sm">{item.smsTracking.sentCount}</span>
                     </div>
+                    <div className="bg-amber-500/10 border border-amber-500/20 px-3 py-1.5 rounded-lg">
+                      <span className="text-muted block text-[10px]">Pending SMS</span>
+                      <span className="text-amber-300 font-bold text-sm">{item.smsTracking.pendingCount || 0}</span>
+                    </div>
                     <div className="bg-red-500/10 border border-red-500/20 px-3 py-1.5 rounded-lg">
                       <span className="text-muted block text-[10px]">Failed SMS</span>
                       <span className="text-red-400 font-bold text-sm">{item.smsTracking.failedCount}</span>
                     </div>
-                    <div className="bg-white/5 border border-border px-3 py-1.5 rounded-lg col-span-2 flex items-center justify-between">
+                    <div className="bg-white/5 border border-border px-3 py-1.5 rounded-lg flex items-center justify-between">
                       <span className="text-muted">Delivery Rate:</span>
                       <span className="text-gold font-bold">
                         {item.smsTracking.totalRecipients > 0
@@ -320,6 +330,8 @@ export default function SchoolAnnouncementsPage() {
                             <div className="flex items-center gap-2">
                               {att.status === "sent" ? (
                                 <span className="text-green-400 font-mono text-[10px]">SENT [{att.providerRef}]</span>
+                              ) : att.status === "pending" ? (
+                                <span className="text-amber-300 font-mono text-[10px]">PENDING</span>
                               ) : (
                                 <span className="text-red-400 font-mono text-[10px]" title={att.reason}>FAILED</span>
                               )}
@@ -337,7 +349,7 @@ export default function SchoolAnnouncementsPage() {
       </div>
 
       {/* New Announcement Modal */}
-      <Modal open={isModalOpen} onClose={() => setIsModalOpen(false)}>
+      <Modal title="Post & Broadcast Announcement" open={isModalOpen} onClose={() => setIsModalOpen(false)}>
         <div className="p-6 space-y-6 max-w-lg w-full">
           <div className="flex items-center justify-between border-b border-border pb-4">
             <h2 className="text-lg font-bold text-white flex items-center gap-2">

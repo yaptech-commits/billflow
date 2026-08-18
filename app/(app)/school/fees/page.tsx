@@ -14,6 +14,7 @@ import {
   createFeeStructure,
   deleteFeeStructure,
   assignFeeToStudent,
+  bulkAssignFeeToClass,
   getStudentFees,
   getStudentFeePayments,
   recordStudentFeePaymentDetailed,
@@ -23,7 +24,7 @@ import {
 import { BusinessProfile, getBusinessProfile } from "@/lib/db";
 import { printReceipt, downloadReceipt } from "@/lib/print-receipt";
 import { toast } from "react-hot-toast";
-import { DollarSign, Plus, FileText, CheckCircle2, Clock, AlertCircle, CreditCard, X } from "lucide-react";
+import { DollarSign, Plus, FileText, CheckCircle2, Clock, AlertCircle, CreditCard, X, Users } from "lucide-react";
 import Modal from "@/components/ui/Modal";
 
 export default function FeesPage() {
@@ -49,6 +50,8 @@ export default function FeesPage() {
 
   const [isStructOpen, setIsStructOpen] = useState(false);
   const [isAssignOpen, setIsAssignOpen] = useState(false);
+  const [isBulkAssignOpen, setIsBulkAssignOpen] = useState(false);
+  const [isBulkAssigning, setIsBulkAssigning] = useState(false);
   const [isPayOpen, setIsPayOpen] = useState(false);
   const [selectedFee, setSelectedFee] = useState<StudentFee | null>(null);
   const [payAmount, setPayAmount] = useState(0);
@@ -75,6 +78,10 @@ export default function FeesPage() {
   const [assignForm, setAssignForm] = useState({
     classGrade: "",
     studentId: "",
+    feeStructureId: "",
+  });
+  const [bulkAssignForm, setBulkAssignForm] = useState({
+    classGrade: "",
     feeStructureId: "",
   });
 
@@ -137,6 +144,7 @@ export default function FeesPage() {
         studentName: student.fullName,
         classGrade: student.classGrade,
         feeTitle: struct.title,
+        feeStructureId: struct.id,
         amount: struct.amount,
         dueDate: struct.dueDate,
         term: struct.term || "Term 1",
@@ -160,6 +168,56 @@ export default function FeesPage() {
       loadData();
     } catch (err) {
       toast.error("Failed to assign fee.");
+    }
+  };
+
+  const handleBulkAssignFees = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!businessId || !bulkAssignForm.classGrade || !bulkAssignForm.feeStructureId) return;
+    const struct = feeStructures.find((feeStructure) => feeStructure.id === bulkAssignForm.feeStructureId);
+    if (!struct) return;
+
+    setIsBulkAssigning(true);
+    try {
+      const result = await bulkAssignFeeToClass({
+        businessId,
+        propertyId,
+        students,
+        feeStructure: struct,
+        classGrade: bulkAssignForm.classGrade,
+      });
+      const createdStudentIds = new Set(result.createdStudentIds);
+      const createdStudents = students.filter((student) => createdStudentIds.has(student.id || ""));
+      await Promise.allSettled(
+        createdStudents
+          .filter((student) => student.guardianEmail || student.guardianPhone)
+          .map((student) =>
+            enqueueSchoolNotification({
+              businessId,
+              propertyId,
+              studentId: student.id || "",
+              studentName: student.fullName,
+              recipientEmail: student.guardianEmail,
+              recipientPhone: student.guardianPhone,
+              title: "New school fee assigned",
+              message: `${struct.title} of ${struct.amount.toFixed(2)} has been assigned to ${student.fullName}. Due ${struct.dueDate}.`,
+              type: "fee_assigned",
+              channels: ["in_app", "email", "sms"],
+            }),
+          ),
+      );
+      toast.success(
+        result.createdCount > 0
+          ? `Assigned ${struct.title} to ${result.createdCount} student${result.createdCount === 1 ? "" : "s"}. ${result.skippedCount} duplicate${result.skippedCount === 1 ? "" : "s"} skipped.`
+          : `No new assignments created. ${result.skippedCount} existing fee${result.skippedCount === 1 ? "" : "s"} skipped.`,
+      );
+      setIsBulkAssignOpen(false);
+      setBulkAssignForm({ classGrade: "", feeStructureId: "" });
+      await loadData();
+    } catch (err) {
+      toast.error("Failed to assign fees to the selected class.");
+    } finally {
+      setIsBulkAssigning(false);
     }
   };
 
@@ -212,6 +270,13 @@ export default function FeesPage() {
   const assignableStudents = assignForm.classGrade
     ? students.filter((student) => student.classGrade === assignForm.classGrade)
     : students;
+  const bulkAssignableStudents = bulkAssignForm.classGrade
+    ? students.filter((student) => student.classGrade === bulkAssignForm.classGrade)
+    : [];
+  const bulkFeeStructures = bulkAssignForm.classGrade
+    ? feeStructures.filter((feeStructure) => feeStructure.classGrade === "All" || feeStructure.classGrade === bulkAssignForm.classGrade)
+    : [];
+  const selectedBulkStructure = bulkFeeStructures.find((feeStructure) => feeStructure.id === bulkAssignForm.feeStructureId);
   const totalBilled = studentFees.reduce((acc, f) => acc + f.amount, 0);
   const totalCollected = studentFees.reduce((acc, f) => acc + (f.amountPaid || 0), 0);
   const totalOutstanding = totalBilled - totalCollected;
@@ -287,6 +352,9 @@ export default function FeesPage() {
           </button>
           <button onClick={() => setIsAssignOpen(true)} className="btn-primary flex items-center gap-2">
             <CreditCard size={16} /> Assign Fee to Student
+          </button>
+          <button onClick={() => setIsBulkAssignOpen(true)} className="btn-ghost border border-gold/50 text-gold flex items-center gap-2">
+            <Users size={16} /> Bulk Assign to Class
           </button>
         </div>
       </div>
@@ -520,6 +588,85 @@ export default function FeesPage() {
             </button>
             <button type="submit" className="btn-primary">
               Create Fee Structure
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Bulk Assign Fees Modal */}
+      <Modal
+        open={isBulkAssignOpen}
+        onClose={() => {
+          if (!isBulkAssigning) {
+            setIsBulkAssignOpen(false);
+            setBulkAssignForm({ classGrade: "", feeStructureId: "" });
+          }
+        }}
+        title="Bulk Assign Fees to Class"
+      >
+        <form onSubmit={handleBulkAssignFees} className="space-y-4">
+          <div className="rounded-lg border border-gold/20 bg-gold/5 p-3 text-xs text-muted">
+            Select a class and fee structure to create one fee account for every student in that class. Existing assignments for the same fee structure and term are skipped automatically.
+          </div>
+          <div>
+            <label className="text-xs text-muted mb-1 block">Select Class *</label>
+            <select
+              required
+              value={bulkAssignForm.classGrade}
+              onChange={(e) => setBulkAssignForm({ classGrade: e.target.value, feeStructureId: "" })}
+              className="input-field w-full bg-surface"
+              disabled={isBulkAssigning}
+            >
+              <option value="">-- Choose Class --</option>
+              {classOptions.map((classGrade) => (
+                <option key={classGrade} value={classGrade}>
+                  {classGrade} ({students.filter((student) => student.classGrade === classGrade).length} students)
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-muted mb-1 block">Select Fee Structure *</label>
+            <select
+              required
+              value={bulkAssignForm.feeStructureId}
+              onChange={(e) => setBulkAssignForm({ ...bulkAssignForm, feeStructureId: e.target.value })}
+              className="input-field w-full bg-surface"
+              disabled={!bulkAssignForm.classGrade || isBulkAssigning}
+            >
+              <option value="">{bulkAssignForm.classGrade ? "-- Choose Fee Structure --" : "-- Choose a class first --"}</option>
+              {bulkFeeStructures.map((feeStructure) => (
+                <option key={feeStructure.id} value={feeStructure.id}>
+                  {feeStructure.title} ({businessProfile?.currency || "$"}{feeStructure.amount.toLocaleString()} - {feeStructure.classGrade})
+                </option>
+              ))}
+            </select>
+            {bulkAssignForm.classGrade && bulkFeeStructures.length === 0 && (
+              <p className="text-xs text-amber-400 mt-1">No fee structures match this class or are marked school-wide.</p>
+            )}
+          </div>
+          {bulkAssignForm.classGrade && selectedBulkStructure && (
+            <div className="rounded-lg border border-border bg-surface-hover/30 p-4 space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted">Students in class</span>
+                <span className="font-semibold text-white">{bulkAssignableStudents.length}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted">Fee per student</span>
+                <span className="font-mono text-gold">{businessProfile?.currency || "$"}{selectedBulkStructure.amount.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between border-t border-border pt-2 text-sm">
+                <span className="text-muted">Total class billing</span>
+                <span className="font-mono font-semibold text-white">{businessProfile?.currency || "$"}{(selectedBulkStructure.amount * bulkAssignableStudents.length).toLocaleString()}</span>
+              </div>
+            </div>
+          )}
+          <div className="flex justify-end gap-3 pt-4 border-t border-border">
+            <button type="button" onClick={() => setIsBulkAssignOpen(false)} className="btn-ghost" disabled={isBulkAssigning}>
+              Cancel
+            </button>
+            <button type="submit" className="btn-primary" disabled={isBulkAssigning || bulkAssignableStudents.length === 0 || !selectedBulkStructure}>
+              {isBulkAssigning ? "Assigning..." : `Assign to ${bulkAssignableStudents.length || "Class"}`}
             </button>
           </div>
         </form>

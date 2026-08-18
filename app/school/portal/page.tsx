@@ -16,6 +16,7 @@ import {
   BookOpen,
   Calendar,
   CheckCircle,
+  CreditCard,
   ChevronRight,
   DollarSign,
   FileText,
@@ -96,6 +97,7 @@ type PortalDashboard = {
     logoDataUrl?: string;
     portalAccentColor?: string;
     currency?: string;
+    paystackPublicKey?: string;
   };
   attendance: PortalAttendance[];
   fees: PortalFee[];
@@ -151,6 +153,11 @@ export default function SchoolParentPortal() {
   const [dashboard, setDashboard] = useState<PortalDashboard | null>(null);
   const [loading, setLoading] = useState(false);
   const [reportCard, setReportCard] = useState<PortalReportCard | null>(null);
+  const [paymentFee, setPaymentFee] = useState<PortalFee | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState(0);
+  const [paymentMethod, setPaymentMethod] = useState<"card" | "momo">("momo");
+  const [paymentEmail, setPaymentEmail] = useState("");
+  const [paymentLoading, setPaymentLoading] = useState(false);
 
   const attendanceSummary = useMemo(() => {
     const total = dashboard?.attendance.length || 0;
@@ -204,6 +211,91 @@ export default function SchoolParentPortal() {
     } finally {
       setLoading(false);
     }
+  }
+
+  function openFeePayment(fee: PortalFee) {
+    if (!dashboard || fee.balance <= 0) return;
+    setPaymentFee(fee);
+    setPaymentAmount(Math.max(0, Number(fee.balance || 0)));
+    setPaymentMethod("momo");
+    setPaymentEmail("");
+  }
+
+  function closeFeePayment() {
+    if (paymentLoading) return;
+    setPaymentFee(null);
+    setPaymentAmount(0);
+    setPaymentEmail("");
+  }
+
+  async function startFeePayment(event: FormEvent) {
+    event.preventDefault();
+    if (!dashboard || !paymentFee) return;
+    const currentDashboard = dashboard;
+    const feeToPay = paymentFee;
+
+    const amount = Number(paymentAmount);
+    if (!Number.isFinite(amount) || amount <= 0 || amount > feeToPay.balance + 0.01) {
+      toast.error("Enter an amount up to the outstanding fee balance.");
+      return;
+    }
+    if (!currentDashboard.school.paystackPublicKey) {
+      toast.error("Online fee payments are not configured for this school yet.");
+      return;
+    }
+    if (typeof window === "undefined" || !(window as any).PaystackPop) {
+      toast.error("Payment gateway is still loading. Please wait a moment and try again.");
+      return;
+    }
+
+    setPaymentLoading(true);
+    const handler = (window as any).PaystackPop.setup({
+      key: currentDashboard.school.paystackPublicKey,
+      email: paymentEmail.trim() || "parent@billflow.app",
+      amount: Math.round(amount * 100),
+      currency: currentDashboard.school.currency || "GHS",
+      metadata: {
+        custom_fields: [
+          { display_name: "Student ID", variable_name: "student_id", value: currentDashboard.student.id },
+          { display_name: "Fee", variable_name: "fee_id", value: feeToPay.id },
+        ],
+      },
+      callback: async (response: { reference?: string }) => {
+        try {
+          if (!response.reference) throw new Error("The payment provider did not return a reference.");
+          const confirmation = await fetch("/api/school/portal/payment", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              feeId: feeToPay.id,
+              studentId: currentDashboard.student.id,
+              businessId: currentDashboard.student.businessId,
+              propertyId: currentDashboard.student.propertyId,
+              amount,
+              paymentMethod,
+              reference: response.reference,
+            }),
+          });
+          const payload = await confirmation.json().catch(() => ({}));
+          if (!confirmation.ok) throw new Error(payload.error || "Payment could not be confirmed.");
+
+          toast.success(payload.alreadyProcessed ? "This payment was already recorded." : "Fee payment confirmed successfully.");
+          setPaymentFee(null);
+          setPaymentAmount(0);
+          setPaymentEmail("");
+          await lookupStudent(undefined, currentDashboard.student.id);
+        } catch (error: any) {
+          toast.error(error.message || "Payment was received but could not be confirmed yet.");
+        } finally {
+          setPaymentLoading(false);
+        }
+      },
+      onClose: () => {
+        setPaymentLoading(false);
+        toast("Payment window closed.");
+      },
+    });
+    handler.openIframe();
   }
 
   function resetPortal() {
@@ -371,13 +463,51 @@ export default function SchoolParentPortal() {
               </div>
 
               <div className="space-y-8">
-                <div className="rounded-3xl border border-slate-800 bg-slate-900/80 p-6"><h3 className="mb-5 flex items-center gap-2 font-bold text-white"><DollarSign className="h-5 w-5 text-emerald-300" /> Fee statements</h3>{dashboard.fees.length === 0 ? <EmptyState message="No fee statements are available yet." /> : <div className="space-y-3">{dashboard.fees.map((fee) => <div key={fee.id} className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4"><div className="flex items-start justify-between gap-3"><div><h4 className="text-sm font-bold text-white">{fee.feeTitle}</h4><p className="mt-1 text-xs text-slate-500">{fee.term || "Term not specified"}{fee.dueDate ? ` · Due ${formatDate(fee.dueDate)}` : ""}</p></div><span className={`rounded-full border px-2 py-1 text-[10px] font-bold uppercase ${fee.status === "paid" ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-300" : fee.status === "partial" ? "border-amber-500/20 bg-amber-500/10 text-amber-300" : "border-rose-500/20 bg-rose-500/10 text-rose-300"}`}>{fee.status}</span></div><div className="mt-4 grid grid-cols-2 gap-3 text-xs"><div><p className="text-slate-500">Total</p><p className="mt-1 font-semibold text-white">{money(fee.amount, dashboard.school.currency)}</p></div><div><p className="text-slate-500">Balance</p><p className="mt-1 font-semibold text-rose-300">{money(fee.balance, dashboard.school.currency)}</p></div></div></div>)}</div>}</div>
+                <div className="rounded-3xl border border-slate-800 bg-slate-900/80 p-6">
+                  <div className="mb-5 flex items-center justify-between gap-3"><h3 className="flex items-center gap-2 font-bold text-white"><DollarSign className="h-5 w-5 text-emerald-300" /> Fee statements</h3>{outstandingFees > 0 && <span style={{ color: portalAccent }} className="rounded-full bg-white/5 px-2.5 py-1 text-[10px] font-bold">{money(outstandingFees, dashboard.school.currency)} due</span>}</div>
+                  {dashboard.fees.length === 0 ? <EmptyState message="No fee statements are available yet." /> : <div className="space-y-3">{dashboard.fees.map((fee) => <div key={fee.id} className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4"><div className="flex items-start justify-between gap-3"><div><h4 className="text-sm font-bold text-white">{fee.feeTitle}</h4><p className="mt-1 text-xs text-slate-500">{fee.term || "Term not specified"}{fee.dueDate ? ` · Due ${formatDate(fee.dueDate)}` : ""}</p></div><span className={`rounded-full border px-2 py-1 text-[10px] font-bold uppercase ${fee.status === "paid" ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-300" : fee.status === "partial" ? "border-amber-500/20 bg-amber-500/10 text-amber-300" : "border-rose-500/20 bg-rose-500/10 text-rose-300"}`}>{fee.status}</span></div><div className="mt-4 flex flex-wrap items-end justify-between gap-4 text-xs"><div className="grid grid-cols-2 gap-5"><div><p className="text-slate-500">Total</p><p className="mt-1 font-semibold text-white">{money(fee.amount, dashboard.school.currency)}</p></div><div><p className="text-slate-500">Balance</p><p className="mt-1 font-semibold text-rose-300">{money(fee.balance, dashboard.school.currency)}</p></div></div>{fee.balance > 0.01 && <button type="button" onClick={() => openFeePayment(fee)} style={{ backgroundColor: portalAccent, color: portalAccentText }} className="flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-xs font-bold shadow-lg transition hover:brightness-110"><CreditCard className="h-4 w-4" /> Pay Fees</button>}</div></div>)}</div>}
+                </div>
                 <div className="rounded-3xl border border-slate-800 bg-slate-900/80 p-6"><h3 className="mb-5 flex items-center gap-2 font-bold text-white"><Bell className="h-5 w-5 text-sky-300" /> School announcements</h3>{dashboard.announcements.length === 0 ? <EmptyState message="No announcements for this student right now." /> : <div className="space-y-3">{dashboard.announcements.map((announcement) => <div key={announcement.id} className="rounded-2xl border border-slate-800 bg-slate-950/50 p-4"><div className="flex items-start justify-between gap-3"><h4 className="text-sm font-bold text-white">{announcement.title}</h4><span className="shrink-0 text-[10px] text-slate-500">{formatDate(announcement.createdAt)}</span></div><p className="mt-2 text-xs leading-5 text-slate-400">{announcement.message}</p></div>)}</div>}</div>
               </div>
             </div>
           </section>
         )}
       </main>
+
+      {paymentFee && dashboard && (
+        <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-2xl sm:p-8">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p style={{ color: portalAccent }} className="text-xs font-bold uppercase tracking-wider">Secure fee payment</p>
+                <h3 className="mt-1 text-xl font-black text-white">Pay Fees</h3>
+                <p className="mt-1 text-xs leading-5 text-slate-400">{paymentFee.feeTitle} · {dashboard.student.fullName}</p>
+              </div>
+              <button type="button" onClick={closeFeePayment} disabled={paymentLoading} aria-label="Close payment dialog" className="rounded-xl bg-slate-800 px-3 py-2 text-slate-400 hover:text-white disabled:opacity-50">✕</button>
+            </div>
+            <form onSubmit={startFeePayment} className="mt-6 space-y-5">
+              <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+                <div className="flex items-center justify-between text-xs"><span className="text-slate-500">Outstanding balance</span><span className="font-bold text-rose-300">{money(paymentFee.balance, dashboard.school.currency)}</span></div>
+                <label className="mt-4 block text-xs font-semibold text-slate-300" htmlFor="portal-payment-amount">Amount to pay</label>
+                <input id="portal-payment-amount" type="number" min="0.01" max={paymentFee.balance} step="0.01" value={paymentAmount} onChange={(event) => setPaymentAmount(Number(event.target.value))} disabled={paymentLoading} className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-sm text-white outline-none focus:ring-2" style={{ outlineColor: portalAccent }} />
+              </div>
+              <div>
+                <p className="mb-2 text-xs font-semibold text-slate-300">Payment method</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {(["momo", "card"] as const).map((method) => <button key={method} type="button" onClick={() => setPaymentMethod(method)} disabled={paymentLoading} style={paymentMethod === method ? { borderColor: portalAccent, backgroundColor: `${portalAccent}22`, color: portalAccent } : undefined} className="flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-3 text-xs font-bold text-slate-300 transition hover:border-slate-500 disabled:opacity-50"><CreditCard className="h-4 w-4" />{method === "momo" ? "Mobile Money" : "Card"}</button>)}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-300" htmlFor="portal-payment-email">Receipt email <span className="font-normal text-slate-500">(optional)</span></label>
+                <input id="portal-payment-email" type="email" value={paymentEmail} onChange={(event) => setPaymentEmail(event.target.value)} disabled={paymentLoading} placeholder="parent@example.com" className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-3 text-sm text-white outline-none placeholder:text-slate-600 focus:ring-2" style={{ outlineColor: portalAccent }} />
+              </div>
+              {!dashboard.school.paystackPublicKey && <p className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-200">The school has not configured online fee payments yet. Please contact the school administrator.</p>}
+              <button type="submit" disabled={paymentLoading || !dashboard.school.paystackPublicKey} style={{ backgroundColor: portalAccent, color: portalAccentText }} className="flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3.5 text-sm font-bold shadow-lg transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60">{paymentLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <CreditCard className="h-5 w-5" />}{paymentLoading ? "Confirming payment..." : `Pay ${money(paymentAmount, dashboard.school.currency)}`}</button>
+              <p className="text-center text-[10px] leading-4 text-slate-500">Your fee balance updates only after the payment provider confirms the transaction.</p>
+            </form>
+          </div>
+        </div>
+      )}
 
       {reportCard && dashboard && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-black/75 p-4 backdrop-blur-sm">

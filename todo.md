@@ -1,5 +1,26 @@
 # Suggested Upgrades Implementation
 
+## School Announcements Page
+- [x] Add a dedicated administrator page for composing announcements to parents.
+- [x] Support school-wide or class-targeted audiences with property-aware student and guardian selection.
+- [x] Add preview, publish, and delivery-state handling using the existing announcement and notification helpers.
+- [x] Preserve delivery tracking and parent-visible announcements in the existing portal.
+- [x] Build, verify, commit, and push the announcements page with author email `ayindenabawisdom@gmail.com`.
+
+## School Bulk Fee Assignment by Class
+- [x] Add a Bulk Assign Fees to Class action under School Fees & Billing.
+- [x] Select a property-scoped class and fee structure, then assign the fee to all matching students.
+- [x] Prevent duplicate fee assignments for the same student, fee structure, term, and property.
+- [x] Show assignment results with created, skipped, and failed counts while preserving individual assignment behavior.
+- [x] Build, verify, commit, and push the bulk class fee assignment implementation with author email `ayindenabawisdom@gmail.com`.
+
+## Parent Portal Pay Fees
+- [x] Add a Pay Fees action when the selected ward has an outstanding fee balance.
+- [x] Reuse the existing BillFlow payment provider flow and link payment metadata to the student, fee statement, business, and property.
+- [x] Handle payment loading, success, cancellation, and failure states without marking fees paid from the client alone.
+- [x] Show confirmation/receipt details after the backend confirms payment and preserve the existing report and fee dashboard behavior.
+- [x] Build, verify, commit, and push the Parent Portal payment implementation with author email `ayindenabawisdom@gmail.com`.
+
 ## Parent Portal Accent Color Customization
 - [x] Add an owner setting to customize the Parent Portal accent color using the existing business profile branding settings.
 - [x] Apply the saved accent color to the Parent Portal landing page without changing the main BillFlow login or unrelated modules.
