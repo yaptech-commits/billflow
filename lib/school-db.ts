@@ -247,6 +247,56 @@ export async function saveSchoolClass(input: Omit<SchoolClass, "id" | "createdAt
   return id;
 }
 
+export async function createSchoolClass(input: Omit<SchoolClass, "id" | "createdAt" | "updatedAt">) {
+  const name = input.name.trim();
+  const propertyId = input.propertyId || DEFAULT_PROPERTY_ID;
+  if (!name) throw new Error("Class name is required");
+  const existing = await getSchoolClasses(input.businessId, propertyId);
+  if (existing.some((item) => item.name.trim().toLowerCase() === name.toLowerCase())) {
+    throw new Error("A class with this name already exists in the selected property");
+  }
+  return saveSchoolClass({ ...input, name, propertyId });
+}
+
+export async function updateSchoolClass(
+  id: string,
+  businessId: string,
+  propertyId: string | undefined,
+  previousName: string,
+  updates: Pick<SchoolClass, "name" | "teacherId" | "teacherName" | "teacherEmail">,
+) {
+  const scopedClasses = await getSchoolClasses(businessId, propertyId);
+  const existing = scopedClasses.find((item) => item.id === id);
+  if (!existing) throw new Error("Class not found in the selected property");
+  const property = propertyId || DEFAULT_PROPERTY_ID;
+  const name = updates.name.trim();
+  if (!name) throw new Error("Class name is required");
+  if (scopedClasses.some((item) => item.id !== id && item.name.trim().toLowerCase() === name.toLowerCase())) {
+    throw new Error("A class with this name already exists in the selected property");
+  }
+
+  const nextId = schoolClassDocumentId(businessId, property, name);
+  await setDoc(doc(db, "schoolClasses", nextId), {
+    businessId,
+    propertyId: property,
+    name,
+    teacherId: updates.teacherId || undefined,
+    teacherName: updates.teacherName || undefined,
+    teacherEmail: updates.teacherEmail || undefined,
+    createdAt: existing.createdAt || serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  }, { merge: true });
+  if (nextId !== id) await deleteDoc(doc(db, "schoolClasses", id));
+
+  const oldName = previousName.trim();
+  if (oldName !== name) {
+    const students = await getStudents(businessId, property);
+    const toRegroup = students.filter((student) => (student.classGrade?.trim() || "Unassigned") === oldName && student.id);
+    await Promise.all(toRegroup.map((student) => updateDoc(doc(db, "students", student.id as string), { classGrade: name })));
+  }
+  return nextId;
+}
+
 export async function promoteClassStudents(businessId: string, propertyId: string | undefined, fromClass: string, toClass: string) {
   const source = fromClass.trim();
   const destination = toClass.trim();

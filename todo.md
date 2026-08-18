@@ -4,6 +4,16 @@
 
 ### Classes enhancements
 
+#### Class management
+
+- [x] Add create-class form with property-aware class metadata and optional teacher assignment.
+- [x] Add edit-class workflow for class name and teacher changes.
+- [x] Keep empty classes visible and preserve student grouping after edits.
+- [x] Prevent duplicate class names within the same business and property.
+- [x] Verify TypeScript, production build, permissions, and route behavior.
+- [ ] Commit and push class create/edit changes with `ayindenabawisdom@gmail.com`.
+
+
 - [x] Add property-aware class metadata with teacher assignment fields.
 - [x] Add owner/Super Admin controls to assign or change a class teacher.
 - [x] Add a guarded bulk promotion workflow with explicit source and destination classes.

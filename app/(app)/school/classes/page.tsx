@@ -7,12 +7,14 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import {
+  createSchoolClass,
   DEFAULT_PROPERTY_ID,
   getAttendance,
   getSchoolClasses,
   getStudents,
   promoteClassStudents,
   saveSchoolClass,
+  updateSchoolClass,
   AttendanceRecord,
   SchoolClass,
   Student,
@@ -24,6 +26,8 @@ import {
   Download,
   GraduationCap,
   Grid3X3,
+  Pencil,
+  Plus,
   RefreshCw,
   Save,
   Search,
@@ -61,6 +65,11 @@ export default function SchoolClassesPage() {
   const [expandedClasses, setExpandedClasses] = useState<Record<string, boolean>>({});
   const [savingTeacher, setSavingTeacher] = useState<string | null>(null);
   const [promotingClass, setPromotingClass] = useState<string | null>(null);
+  const [classModalOpen, setClassModalOpen] = useState(false);
+  const [editingClass, setEditingClass] = useState<SchoolClass | null>(null);
+  const [classNameDraft, setClassNameDraft] = useState("");
+  const [classTeacherDraft, setClassTeacherDraft] = useState("");
+  const [savingClass, setSavingClass] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const load = async () => {
@@ -107,8 +116,10 @@ export default function SchoolClassesPage() {
       existing.push(student);
       groups.set(className, existing);
     });
-    return Array.from(groups.entries())
-      .map(([className, classStudents]) => {
+    const classNames = new Set([...Array.from(groups.keys()), ...schoolClasses.map((schoolClass) => schoolClass.name)]);
+    return Array.from(classNames)
+      .map((className) => {
+        const classStudents = groups.get(className) || [];
         const schoolClass = schoolClasses.find((item) => item.name === className);
         const attendanceByStudent = new Map<string, AttendanceRecord>();
         attendance.filter((record) => (record.classGrade?.trim() || "Unassigned") === className).forEach((record) => {
@@ -171,6 +182,63 @@ export default function SchoolClassesPage() {
     }
   };
 
+  const openCreateClass = () => {
+    setEditingClass(null);
+    setClassNameDraft("");
+    setClassTeacherDraft("");
+    setClassModalOpen(true);
+  };
+
+  const openEditClass = (schoolClass: SchoolClass | undefined, fallbackName: string) => {
+    setEditingClass(schoolClass || { businessId: businessId || "", propertyId, name: fallbackName });
+    setClassNameDraft(schoolClass?.name || fallbackName);
+    setClassTeacherDraft(schoolClass?.teacherId || "");
+    setClassModalOpen(true);
+  };
+
+  const closeClassModal = () => {
+    if (savingClass) return;
+    setClassModalOpen(false);
+    setEditingClass(null);
+    setClassNameDraft("");
+    setClassTeacherDraft("");
+  };
+
+  const saveClassRecord = async () => {
+    if (!businessId) return;
+    const name = classNameDraft.trim();
+    if (!name) {
+      toast.error("Enter a class name");
+      return;
+    }
+    const teacher = staff.find((member) => member.id === classTeacherDraft);
+    setSavingClass(true);
+    try {
+      const classInput = {
+        businessId,
+        propertyId,
+        name,
+        teacherId: teacher?.id,
+        teacherName: teacher?.email,
+        teacherEmail: teacher?.email,
+      };
+      if (editingClass?.id) {
+        await updateSchoolClass(editingClass.id, businessId, propertyId, editingClass.name, classInput);
+        if (selectedClass === editingClass.name) setSelectedClass(name);
+        toast.success(`Class updated to ${name}`);
+      } else {
+        await createSchoolClass(classInput);
+        toast.success(`${name} created`);
+      }
+      closeClassModal();
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save class");
+    } finally {
+      setSavingClass(false);
+    }
+  };
+
   const promoteStudents = async (className: string) => {
     if (!businessId) return;
     const destination = promotionSelections[className] || "";
@@ -213,7 +281,8 @@ export default function SchoolClassesPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-7xl">
+    <>
+      <div className="space-y-6 max-w-7xl">
       <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
         <div>
           <p className="text-xs uppercase tracking-widest text-gold mb-2">School Management</p>
@@ -236,6 +305,9 @@ export default function SchoolClassesPage() {
               aria-label="Search students or classes"
             />
           </div>
+          <button onClick={openCreateClass} className="btn-primary flex items-center gap-2">
+            <Plus size={15} /> New class
+          </button>
           <button onClick={exportClasses} disabled={!selectedStudents.length} className="btn-ghost flex items-center gap-2">
             <Download size={15} /> Export CSV
           </button>
@@ -287,7 +359,10 @@ export default function SchoolClassesPage() {
                     <div className="px-4 py-3 border-t border-border bg-white/[0.02] space-y-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <p className="text-xs text-muted">Teacher: <span className="text-surface">{group.teacher?.teacherName || "Not assigned"}</span></p>
-                        <p className="text-[11px] text-muted">Attendance · {attendanceDate}</p>
+                        <div className="flex items-center gap-3">
+                          <p className="text-[11px] text-muted">Attendance · {attendanceDate}</p>
+                          <button onClick={() => openEditClass(group.teacher, group.className)} className="btn-ghost inline-flex items-center gap-1.5 text-xs"><Pencil size={13} /> Edit class</button>
+                        </div>
                       </div>
                       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-[11px]">
                         <span className="text-emerald-300">Present {group.attendanceSummary.present}</span>
@@ -342,6 +417,38 @@ export default function SchoolClassesPage() {
           </div>
         </>
       )}
-    </div>
+      </div>
+      {classModalOpen && (
+      <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="class-dialog-title" onMouseDown={(event) => { if (event.target === event.currentTarget) closeClassModal(); }}>
+        <div className="card w-full max-w-lg space-y-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-widest text-gold mb-2">School Management</p>
+              <h2 id="class-dialog-title" className="text-xl font-grotesk font-semibold text-white">{editingClass?.id ? "Edit class" : "Create class"}</h2>
+              <p className="text-sm text-muted mt-1">Class records are scoped to property <span className="text-surface">{propertyId}</span>.</p>
+            </div>
+            <button type="button" onClick={closeClassModal} className="text-muted hover:text-white" aria-label="Close class dialog">×</button>
+          </div>
+          <div className="space-y-4">
+            <label className="block text-sm text-surface">Class name
+              <input autoFocus value={classNameDraft} onChange={(event) => setClassNameDraft(event.target.value)} className="input-field mt-2 w-full" placeholder="e.g. Primary 4" />
+            </label>
+            <label className="block text-sm text-surface">Class teacher <span className="text-muted">(optional)</span>
+              <select value={classTeacherDraft} onChange={(event) => setClassTeacherDraft(event.target.value)} className="input-field mt-2 w-full">
+                <option value="">No teacher assigned</option>
+                {staff.filter((member) => member.status === "active" && member.id).map((member) => <option key={member.id} value={member.id}>{member.email}</option>)}
+              </select>
+            </label>
+          </div>
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={closeClassModal} className="btn-ghost" disabled={savingClass}>Cancel</button>
+            <button type="button" onClick={saveClassRecord} className="btn-primary inline-flex items-center gap-2" disabled={savingClass || !classNameDraft.trim()}>
+              <Save size={15} /> {savingClass ? "Saving…" : editingClass?.id ? "Save changes" : "Create class"}
+            </button>
+          </div>
+        </div>
+      </div>
+      )}
+    </>
   );
 }
