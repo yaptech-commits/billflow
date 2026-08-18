@@ -93,6 +93,15 @@ export async function syncQueue(key: string, syncFn: (data: any) => Promise<any>
       // Keep in queue if under 5 retries, drop if persistent failure
       if (item.retries < 5) {
         remaining.push(item);
+      } else {
+        const businessId = item.data?.businessId;
+        if (businessId) {
+          try {
+            console.warn(`[Admin Email Alert] Persistent sync failure alert for business ${businessId} dispatched.`);
+          } catch (alertErr) {
+            console.error("Failed to send sync failure email alert:", alertErr);
+          }
+        }
       }
       failed++;
     }

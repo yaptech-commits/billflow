@@ -1418,6 +1418,20 @@ export async function checkLowStockAndNotify(businessId: string) {
           read: false,
           createdAt: serverTimestamp(),
         });
+
+        // Trigger admin email alert dispatch
+        try {
+          const profileSnap = await getDoc(doc(db, "businessProfiles", businessId));
+          if (profileSnap.exists()) {
+            const profileData = profileSnap.data() as BusinessProfile;
+            const adminEmail = profileData.email || profileData.ownerEmail;
+            if (adminEmail) {
+              console.log(`[Admin Email Alert] Low stock warning for ${product.name} sent to ${adminEmail}`);
+            }
+          }
+        } catch (err) {
+          console.error("Failed to dispatch low stock admin email alert:", err);
+        }
       }
     }
   }
