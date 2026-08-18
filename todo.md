@@ -1,5 +1,10 @@
 # Suggested Upgrades Implementation
 
+## Parent Portal 404 Route & Navigation Fix
+- [x] Identify why Vercel returned 404 on `/school/portal` (route grouping `(app)` vs flat URL structure).
+- [x] Relocate portal page from `app/(app)/school/portal/page.tsx` to `app/school/portal/page.tsx` so the URL `/school/portal` is directly accessible without routing middleware/grouping constraints.
+- [x] Verify production build compatibility and successful push with `ayindenabawisdom@gmail.com`.
+
 ## Parent Portal Report Card Viewing & Download
 - [x] Design report card review modal on Parent Portal displaying termly grades, remarks, teacher notes, and attendance summaries.
 - [x] Integrate HTML/PDF-ready printable document generation using BillFlow receipt printing patterns (`downloadReceipt`).
