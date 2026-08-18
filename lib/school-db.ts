@@ -721,3 +721,34 @@ export async function getStudentFeePayments(businessId: string, propertyId?: str
   if (term && term !== "All") list = list.filter((item) => !item.term || item.term === term);
   return list;
 }
+
+export interface SchoolAnnouncement {
+  id?: string;
+  businessId: string;
+  propertyId?: string;
+  title: string;
+  message: string;
+  targetClass?: string; // "all" or specific class name
+  channels: SchoolNotificationChannel[];
+  authorName?: string;
+  createdAt?: any;
+}
+
+export async function createSchoolAnnouncement(announcement: Omit<SchoolAnnouncement, "id" | "createdAt">) {
+  const docRef = await addDoc(collection(db, "schoolAnnouncements"), {
+    ...announcement,
+    propertyId: announcement.propertyId || DEFAULT_PROPERTY_ID,
+    createdAt: serverTimestamp(),
+  });
+  return docRef.id;
+}
+
+export async function getSchoolAnnouncements(businessId: string, propertyId?: string) {
+  const snap = await getDocs(query(collection(db, "schoolAnnouncements"), where("businessId", "==", businessId)));
+  const list = snap.docs.map((d) => ({ ...d.data(), id: d.id } as SchoolAnnouncement));
+  return scopedList(list, propertyId).sort((a, b) => String(b.createdAt?.toMillis?.() || b.createdAt || "").localeCompare(String(a.createdAt?.toMillis?.() || a.createdAt || "")));
+}
+
+export async function deleteSchoolAnnouncement(id: string) {
+  await deleteDoc(doc(db, "schoolAnnouncements", id));
+}
