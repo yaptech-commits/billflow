@@ -110,6 +110,35 @@ function LoginForm() {
           </form>
 
           <div className="mt-8">
+            <div className="mb-4">
+              <button
+                type="button"
+                onClick={async () => {
+                  setLoading(true);
+                  try {
+                    setEmail("parent.demo@billflow.app");
+                    setPassword("BillFlow2026!");
+                    await signInWithEmailAndPassword(auth!, "parent.demo@billflow.app", "BillFlow2026!");
+                    router.push("/school/portal");
+                  } catch {
+                    try {
+                      // Create demo parent account on the fly if not exists
+                      const { createUserWithEmailAndPassword } = await import("firebase/auth");
+                      await createUserWithEmailAndPassword(auth!, "parent.demo@billflow.app", "BillFlow2026!");
+                      router.push("/school/portal");
+                    } catch (err: any) {
+                      toast.error("Demo login: " + (err.message || "Please use valid credentials"));
+                    }
+                  } finally {
+                    setLoading(false);
+                  }
+                }}
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl py-3 text-base font-bold transition-all shadow-lg flex items-center justify-center gap-2"
+              >
+                🎓 Instant Parent Portal Demo Login
+              </button>
+            </div>
+
             <div className="relative flex items-center justify-center mb-6">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-white/20"></div>

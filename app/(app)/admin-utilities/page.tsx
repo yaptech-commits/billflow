@@ -152,8 +152,8 @@ function BusinessTypeReference() {
     },
     {
       name: "School",
-      pages: 8,
-      features: ["Student Management", "Fee Collection", "Invoicing", "Reporting"],
+      pages: 10,
+      features: ["Student Management", "Parents & Directory", "Announcements", "Fee Collection", "Attendance", "Report Cards"],
     },
   ];
 

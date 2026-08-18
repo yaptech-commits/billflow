@@ -1,5 +1,74 @@
 # Suggested Upgrades Implementation
 
+## Deployed Parent Portal Verification
+- [ ] Inspect `https://billflow-blue.vercel.app/school/portal` directly and record whether it still serves the old login flow.
+- [ ] Compare the deployed result with the pushed `fix/super-admin-school-grouping` branch and identify the deployment branch/version mismatch if present.
+- [ ] Correct and push the exact source used by the live Vercel deployment, then recheck the URL.
+- [ ] Report the confirmed live result to the user.
+
+## Parent Portal Student ID/Name-Only Access
+- [x] Replace email/password login with a landing-page lookup accepting Student ID or Ward Name only.
+- [x] Match lookups against property-scoped student records and prevent cross-property results.
+- [x] Open the selected student's portal dashboard without requiring an AuthContext parent session.
+- [x] Handle duplicate ward names by requiring the parent to select the intended student before opening the dashboard.
+- [x] Verify attendance, fees, performance, report cards, and announcements are populated from the selected student.
+- [x] Commit and push the implementation with author email `ayindenabawisdom@gmail.com`.
+
+## Parent Portal Scope Correction
+- [x] Restore the main BillFlow staff/owner login and unrelated guardian-page wording to their previous behavior.
+- [x] Keep the Student ID/Name-only access change limited to `/school/portal` and its property-scoped lookup API.
+- [x] Verify the Parent Portal landing page opens the selected student dashboard without parent email/password login.
+- [x] Commit and push the scoped correction with author email `ayindenabawisdom@gmail.com`.
+
+## Parent Portal 404 Route & Navigation Fix
+- [x] Identify why Vercel returned 404 on `/school/portal` (route grouping `(app)` vs flat URL structure).
+- [x] Relocate portal page from `app/(app)/school/portal/page.tsx` to `app/school/portal/page.tsx` so the URL `/school/portal` is directly accessible without routing middleware/grouping constraints.
+- [x] Verify production build compatibility and successful push with `ayindenabawisdom@gmail.com`.
+
+## Parent Portal Report Card Viewing & Download
+- [x] Design report card review modal on Parent Portal displaying termly grades, remarks, teacher notes, and attendance summaries.
+- [x] Integrate HTML/PDF-ready printable document generation using BillFlow receipt printing patterns (`downloadReceipt`).
+- [x] Connect report card viewer to property-scoped student report card records.
+- [x] Verify production build compatibility, type safety, and property scoping.
+- [x] Commit and push the Parent Portal report card update with `ayindenabawisdom@gmail.com`.
+
+## Parent Portal Fee Payment Integration (Mobile Money & Cards)
+- [x] Design secure fee payment modal on Parent Portal supporting Mobile Money (MTN, Vodafone, AirtelTigo) and Credit/Debit Cards.
+- [x] Integrate amount entry, provider reference collection, and cash/payment confirmation handling.
+- [x] Connect parent payments to existing property-scoped student fee ledger and payment history logs.
+- [x] Verify production build compatibility, type safety, and property isolation.
+- [x] Commit and push the Parent Portal payment update with `ayindenabawisdom@gmail.com`.
+
+## Parent Portal Landing Page & Ward ID Login
+- [x] Design parent portal landing page layout with ward name and student ID lookup (`/school/portal`).
+- [x] Implement secure ward matching against property-scoped student records with attendance, fee balance, and performance overview.
+- [x] Add quick demo ward profiles for instant parent previewing.
+- [x] Verify production build compatibility, type safety, and property scoping.
+- [x] Commit and push the Parent Portal landing page update with `ayindenabawisdom@gmail.com`.
+
+## SMS Notification Delivery Tracking
+- [x] Define SMS delivery attempt schema and recipient-level tracking status (`sent`, `failed`, `pending`) with timestamp and provider message reference.
+- [x] Extend notification dispatcher and announcement data model to record SMS delivery logs per guardian.
+- [x] Add administrator-facing delivery tracking dashboard on the announcements page with success/failure breakdown.
+- [x] Verify propertyId scoping, TypeScript type safety, and production build compatibility.
+- [x] Commit and push SMS delivery tracking update with `ayindenabawisdom@gmail.com`.
+
+## Authentication & Parent Portal Preview
+- [x] Investigate deployed Firebase authentication failure (`INVALID_LOGIN_CREDENTIALS`).
+- [x] Identify that deployed Firebase project requires a registered parent account or test demo bypass for previewing.
+- [x] Implement a Parent Demo / Quick-Login option for instant parent portal previewing.
+- [x] Verify successful sign-in and parent portal preview rendering.
+- [x] Commit and push the fix with `ayindenabawisdom@gmail.com`.
+
+## Termly student payment statements
+
+- [x] Inspect the existing student fee payment history data and export utilities.
+- [x] Define term-aware statement aggregation with student, class, charges, payments, and balance.
+- [x] Add a downloadable statement document for each student without duplicating payment records.
+- [x] Add statement access to the school fee ledger with a term selector.
+- [x] Verify propertyId scoping, TypeScript, production build, and downloaded output.
+- [x] Commit and push the payment statement update with `ayindenabawisdom@gmail.com`.
+
 ## Fee payment receipt student and class details
 
 - [ ] Inspect the existing fee payment receipt print/download implementation and student-fee fields.

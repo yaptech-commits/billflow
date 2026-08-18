@@ -6,7 +6,7 @@ import {
   LayoutDashboard, FileText, Users, Ticket, 
   CreditCard, BarChart3, Settings, Package, 
   ChevronLeft, ChevronRight, ShoppingCart, Truck, UserCircle, Shield,
-  LogOut, Building2, AlertCircle, Pill, BedDouble, CalendarDays, ConciergeBell, UserRound, CircleDollarSign, ChevronDown, GraduationCap, ClipboardList
+  LogOut, Building2, AlertCircle, Pill,   BedDouble, CalendarDays, ConciergeBell, UserRound, CircleDollarSign, ChevronDown, GraduationCap, ClipboardList, Megaphone
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -63,6 +63,8 @@ export default function Sidebar() {
     { name: "Online Booking", icon: Ticket, path: "/hotel/booking-widget", roles: ["owner", "salesperson", "super_admin"], hotel: true },
     { name: "Classes", icon: GraduationCap, path: "/school/classes", roles: ["owner", "super_admin"], school: true },
     { name: "Students", icon: Users, path: "/school/students", roles: ["owner", "super_admin"], school: true },
+    { name: "Parents", icon: Users, path: "/school/parents", roles: ["owner", "super_admin"], school: true },
+    { name: "Announcements", icon: Megaphone, path: "/school/announcements", roles: ["owner", "super_admin"], school: true },
     { name: "Fees & Billing", icon: CreditCard, path: "/school/fees", roles: ["owner", "super_admin"], school: true },
     { name: "Attendance", icon: ClipboardList, path: "/school/attendance", roles: ["owner", "super_admin"], school: true },
     { name: "Report Cards", icon: FileText, path: "/school/reports", roles: ["owner", "super_admin"], school: true },

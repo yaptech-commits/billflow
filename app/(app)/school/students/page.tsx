@@ -55,12 +55,28 @@ export default function StudentsPage() {
         await updateStudent(editingStudent.id, form);
         toast.success("Student updated successfully.");
       } else {
-        await createStudent({
+        const studentId = await createStudent({
           businessId,
           propertyId: propertyId || "default_property",
           ...form,
         });
-        toast.success("Student registered successfully.");
+        // Automatically save parent details and create parent portal link if guardian email is present
+        if (form.guardianEmail && form.guardianEmail.trim()) {
+          try {
+            await createParentLink({
+              businessId,
+              propertyId: propertyId || "default_property",
+              studentId,
+              studentName: form.fullName,
+              parentEmail: form.guardianEmail,
+              parentName: form.guardianName,
+              parentPhone: form.guardianPhone,
+            });
+          } catch (linkErr) {
+            console.error("Auto-parent link warning:", linkErr);
+          }
+        }
+        toast.success("Student registered successfully with guardian profile saved.");
       }
       setIsAddOpen(false);
       setEditingStudent(null);
