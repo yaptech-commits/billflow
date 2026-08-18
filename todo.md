@@ -1,5 +1,12 @@
 # Suggested Upgrades Implementation
 
+## Parent Portal Fee Payment Integration (Mobile Money & Cards)
+- [x] Design secure fee payment modal on Parent Portal supporting Mobile Money (MTN, Vodafone, AirtelTigo) and Credit/Debit Cards.
+- [x] Integrate amount entry, provider reference collection, and cash/payment confirmation handling.
+- [x] Connect parent payments to existing property-scoped student fee ledger and payment history logs.
+- [x] Verify production build compatibility, type safety, and property isolation.
+- [x] Commit and push the Parent Portal payment update with `ayindenabawisdom@gmail.com`.
+
 ## Parent Portal Landing Page & Ward ID Login
 - [x] Design parent portal landing page layout with ward name and student ID lookup (`/school/portal`).
 - [x] Implement secure ward matching against property-scoped student records with attendance, fee balance, and performance overview.

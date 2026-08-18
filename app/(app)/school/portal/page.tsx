@@ -10,6 +10,7 @@ import {
   getFeeAssignmentsForStudent,
   getReportCardsForStudent,
   getSchoolAnnouncements,
+  recordStudentFeePaymentDetailed,
   Student,
   AttendanceRecord,
   FeeAssignment,
@@ -57,6 +58,15 @@ export default function SchoolParentPortal() {
   const [fees, setFees] = useState<FeeAssignment[]>([]);
   const [reportCards, setReportCards] = useState<ReportCard[]>([]);
   const [loadingWardData, setLoadingWardData] = useState(false);
+
+  // Payment integration state
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [activePaymentFee, setActivePaymentFee] = useState<FeeAssignment | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<"momo" | "card">("momo");
+  const [momoProvider, setMomoProvider] = useState<"mtn" | "vodafone" | "airteltigo">("mtn");
+  const [paymentPhone, setPaymentPhone] = useState("");
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [processingPayment, setProcessingPayment] = useState(false);
 
   useEffect(() => {
     loadPortalData();
@@ -369,7 +379,7 @@ export default function SchoolParentPortal() {
 
                 {/* Right Col: Fees & Announcements */}
                 <div className="space-y-8">
-                  {/* Fee Balance & History */}
+                  {/* Fee Balance & History with Payment Integration */}
                   <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 space-y-4">
                     <div className="flex items-center justify-between">
                       <h3 className="text-base font-bold text-white flex items-center gap-2">
@@ -385,7 +395,7 @@ export default function SchoolParentPortal() {
                           const isPaid = fee.status === "paid";
                           const isPartial = fee.status === "partial";
                           return (
-                            <div key={fee.id} className="p-4 rounded-2xl bg-slate-800/50 border border-slate-700/50 space-y-2">
+                            <div key={fee.id} className="p-4 rounded-2xl bg-slate-800/50 border border-slate-700/50 space-y-3">
                               <div className="flex items-center justify-between">
                                 <span className="text-xs font-semibold text-white">{fee.term || "Termly Fee"}</span>
                                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
@@ -398,6 +408,18 @@ export default function SchoolParentPortal() {
                                 <span>Total: GH₵{fee.amount.toFixed(2)}</span>
                                 <span className="text-rose-400 font-semibold">Balance: GH₵{fee.balance.toFixed(2)}</span>
                               </div>
+                              {fee.balance > 0 && (
+                                <button
+                                  onClick={() => {
+                                    setActivePaymentFee(fee);
+                                    setPaymentAmount(fee.balance.toString());
+                                    setPaymentModalOpen(true);
+                                  }}
+                                  className="w-full mt-2 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md transition-all flex items-center justify-center gap-2"
+                                >
+                                  <DollarSign className="w-4 h-4" /> Pay Fee Online (Momo / Card)
+                                </button>
+                              )}
                             </div>
                           );
                         })}
@@ -430,6 +452,192 @@ export default function SchoolParentPortal() {
           </div>
         )}
       </main>
+
+      {/* Fee Payment Modal */}
+      {paymentModalOpen && activePaymentFee && selectedStudent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 space-y-6 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <DollarSign className="w-5 h-5 text-emerald-400" /> Secure Fee Payment
+                </h3>
+                <p className="text-xs text-slate-400">Paying for {selectedStudent.name} ({activePaymentFee.term})</p>
+              </div>
+              <button
+                onClick={() => setPaymentModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="bg-slate-800/50 p-4 rounded-2xl border border-slate-700/50 space-y-1">
+                <div className="flex justify-between text-xs text-slate-400">
+                  <span>Total Fee Assignment:</span>
+                  <span className="font-semibold text-white">GH₵{activePaymentFee.amount.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-xs text-slate-400">
+                  <span>Outstanding Balance:</span>
+                  <span className="font-bold text-rose-400">GH₵{activePaymentFee.balance.toFixed(2)}</span>
+                </div>
+              </div>
+
+              {/* Payment Method Tabs */}
+              <div className="grid grid-cols-2 gap-2 p-1 bg-slate-800 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod("momo")}
+                  className={`py-2 text-xs font-semibold rounded-lg transition-all ${
+                    paymentMethod === "momo" ? "bg-indigo-600 text-white shadow-md" : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  Mobile Money (MoMo)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod("card")}
+                  className={`py-2 text-xs font-semibold rounded-lg transition-all ${
+                    paymentMethod === "card" ? "bg-indigo-600 text-white shadow-md" : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  Credit / Debit Card
+                </button>
+              </div>
+
+              {/* Amount input */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-300">Payment Amount (GH₵)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500"
+                  placeholder="Enter amount"
+                />
+              </div>
+
+              {paymentMethod === "momo" ? (
+                <>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-slate-300">Network Provider</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {(["mtn", "vodafone", "airteltigo"] as const).map((prov) => (
+                        <button
+                          key={prov}
+                          type="button"
+                          onClick={() => setMomoProvider(prov)}
+                          className={`py-2 text-xs uppercase font-bold rounded-xl border transition-all ${
+                            momoProvider === prov
+                              ? "bg-emerald-500/20 border-emerald-500 text-emerald-300"
+                              : "bg-slate-800 border-slate-700 text-slate-400"
+                          }`}
+                        >
+                          {prov}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-slate-300">MoMo Phone Number</label>
+                    <input
+                      type="text"
+                      value={paymentPhone}
+                      onChange={(e) => setPaymentPhone(e.target.value)}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500"
+                      placeholder="e.g., 0241234567"
+                    />
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-slate-300">Card Number</label>
+                    <input
+                      type="text"
+                      placeholder="4532 •••• •••• 8921"
+                      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-slate-300">Expiry Date</label>
+                      <input
+                        type="text"
+                        placeholder="MM/YY"
+                        className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-slate-300">CVV</label>
+                      <input
+                        type="password"
+                        placeholder="123"
+                        maxLength={4}
+                        className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <button
+                type="button"
+                disabled={processingPayment}
+                onClick={async () => {
+                  const amt = parseFloat(paymentAmount);
+                  if (!amt || amt <= 0) {
+                    toast.error("Please enter a valid payment amount");
+                    return;
+                  }
+                  if (amt > activePaymentFee.balance) {
+                    toast.error("Payment amount cannot exceed outstanding balance");
+                    return;
+                  }
+                  if (paymentMethod === "momo" && !paymentPhone) {
+                    toast.error("Please enter your MoMo phone number");
+                    return;
+                  }
+
+                  setProcessingPayment(true);
+                  try {
+                    const methodLabel = paymentMethod === "momo" ? `MoMo (${momoProvider.toUpperCase()})` : "Credit/Debit Card";
+                    await recordStudentFeePaymentDetailed(
+                      propertyId,
+                      activePaymentFee.id,
+                      selectedStudent.id,
+                      amt,
+                      methodLabel,
+                      `Online payment via ${methodLabel}`
+                    );
+                    toast.success("Payment completed successfully!");
+                    setPaymentModalOpen(false);
+                    // Refresh ward data
+                    await handleSelectWard(selectedStudent);
+                  } catch (err) {
+                    console.error("Payment failed:", err);
+                    toast.error("Payment processing failed");
+                  } finally {
+                    setProcessingPayment(false);
+                  }
+                }}
+                className="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-2"
+              >
+                {processingPayment ? (
+                  "Processing Payment..."
+                ) : (
+                  <>
+                    <CheckCircle className="w-5 h-5" /> Pay GH₵{parseFloat(paymentAmount || "0").toFixed(2)} Now
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
