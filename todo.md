@@ -1,5 +1,12 @@
 # Suggested Upgrades Implementation
 
+## Authentication & Parent Portal Preview
+- [x] Investigate deployed Firebase authentication failure (`INVALID_LOGIN_CREDENTIALS`).
+- [x] Identify that deployed Firebase project requires a registered parent account or test demo bypass for previewing.
+- [x] Implement a Parent Demo / Quick-Login option for instant parent portal previewing.
+- [x] Verify successful sign-in and parent portal preview rendering.
+- [x] Commit and push the fix with `ayindenabawisdom@gmail.com`.
+
 ## Termly student payment statements
 
 - [x] Inspect the existing student fee payment history data and export utilities.
