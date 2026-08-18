@@ -722,6 +722,16 @@ export async function getStudentFeePayments(businessId: string, propertyId?: str
   return list;
 }
 
+export interface SmsDeliveryAttempt {
+  studentId: string;
+  studentName: string;
+  guardianPhone: string;
+  status: "sent" | "failed" | "pending";
+  providerRef?: string;
+  reason?: string;
+  timestamp?: string;
+}
+
 export interface SchoolAnnouncement {
   id?: string;
   businessId: string;
@@ -730,7 +740,14 @@ export interface SchoolAnnouncement {
   message: string;
   targetClass?: string; // "all" or specific class name
   channels: SchoolNotificationChannel[];
+  channel?: "email" | "sms" | "both";
   authorName?: string;
+  smsTracking?: {
+    totalRecipients: number;
+    sentCount: number;
+    failedCount: number;
+    attempts: SmsDeliveryAttempt[];
+  };
   createdAt?: any;
 }
 

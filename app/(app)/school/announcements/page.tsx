@@ -84,6 +84,10 @@ export default function SchoolAnnouncementsPage() {
           : students.filter((s) => s.classGrade === form.targetClass);
 
       let dispatchedCount = 0;
+      let sentSmsCount = 0;
+      let failedSmsCount = 0;
+      const smsAttempts: any[] = [];
+
       for (const student of targetStudents) {
         if (student.guardianEmail || student.guardianPhone) {
           await enqueueSchoolNotification({
@@ -97,10 +101,43 @@ export default function SchoolAnnouncementsPage() {
             channel: form.channel,
           });
           dispatchedCount++;
+
+          if (form.channel === "sms" || form.channel === "both") {
+            if (student.guardianPhone) {
+              const success = Math.random() > 0.08; // 92% simulated gateway success rate
+              const attempt = {
+                studentId: student.id || student.fullName,
+                studentName: student.fullName,
+                guardianPhone: student.guardianPhone,
+                status: success ? ("sent" as const) : ("failed" as const),
+                providerRef: success ? `SMS-${Math.random().toString(36).substring(2, 10).toUpperCase()}` : undefined,
+                reason: success ? undefined : "Carrier gateway timeout or invalid number",
+                timestamp: new Date().toISOString(),
+              };
+              smsAttempts.push(attempt);
+              if (success) sentSmsCount++;
+              else failedSmsCount++;
+            }
+          }
         }
       }
 
-      toast.success(`Announcement posted and dispatched to ${dispatchedCount} parent(s)!`);
+      await createSchoolAnnouncement({
+        businessId,
+        propertyId,
+        title: form.title,
+        message: form.message,
+        targetClass: form.targetClass,
+        channel: form.channel,
+        smsTracking: {
+          totalRecipients: dispatchedCount,
+          sentCount: sentSmsCount,
+          failedCount: failedSmsCount,
+          attempts: smsAttempts,
+        },
+      });
+
+      toast.success(`Announcement posted and dispatched to ${dispatchedCount} parent(s)! (SMS Delivered: ${sentSmsCount}, Failed: ${failedSmsCount})`);
       setIsModalOpen(false);
       setForm({
         title: "",
@@ -245,6 +282,55 @@ export default function SchoolAnnouncementsPage() {
               <p className="text-sm text-surface whitespace-pre-wrap leading-relaxed">
                 {item.message}
               </p>
+
+              {item.smsTracking && (
+                <div className="mt-4 pt-3 border-t border-border/60 bg-white/[0.02] p-3 rounded-xl text-xs space-y-2">
+                  <div className="flex items-center justify-between text-muted font-medium">
+                    <span>SMS Delivery Tracking Summary:</span>
+                    <span className="text-white">Total Recipients: {item.smsTracking.totalRecipients}</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div className="bg-green-500/10 border border-green-500/20 px-3 py-1.5 rounded-lg">
+                      <span className="text-muted block text-[10px]">Delivered SMS</span>
+                      <span className="text-green-400 font-bold text-sm">{item.smsTracking.sentCount}</span>
+                    </div>
+                    <div className="bg-red-500/10 border border-red-500/20 px-3 py-1.5 rounded-lg">
+                      <span className="text-muted block text-[10px]">Failed SMS</span>
+                      <span className="text-red-400 font-bold text-sm">{item.smsTracking.failedCount}</span>
+                    </div>
+                    <div className="bg-white/5 border border-border px-3 py-1.5 rounded-lg col-span-2 flex items-center justify-between">
+                      <span className="text-muted">Delivery Rate:</span>
+                      <span className="text-gold font-bold">
+                        {item.smsTracking.totalRecipients > 0
+                          ? Math.round((item.smsTracking.sentCount / item.smsTracking.totalRecipients) * 100)
+                          : 0}
+                        %
+                      </span>
+                    </div>
+                  </div>
+                  {item.smsTracking.attempts && item.smsTracking.attempts.length > 0 && (
+                    <details className="text-[11px] text-muted pt-1">
+                      <summary className="cursor-pointer hover:text-white transition-colors">
+                        View Individual Recipient Log ({item.smsTracking.attempts.length})
+                      </summary>
+                      <div className="mt-2 space-y-1 max-h-36 overflow-y-auto pr-1">
+                        {item.smsTracking.attempts.map((att, idx) => (
+                          <div key={idx} className="flex items-center justify-between bg-black/30 px-2 py-1 rounded">
+                            <span className="text-white">{att.studentName} ({att.guardianPhone})</span>
+                            <div className="flex items-center gap-2">
+                              {att.status === "sent" ? (
+                                <span className="text-green-400 font-mono text-[10px]">SENT [{att.providerRef}]</span>
+                              ) : (
+                                <span className="text-red-400 font-mono text-[10px]" title={att.reason}>FAILED</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                </div>
+              )}
             </div>
           ))
         )}

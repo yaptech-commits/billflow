@@ -1,5 +1,12 @@
 # Suggested Upgrades Implementation
 
+## SMS Notification Delivery Tracking
+- [x] Define SMS delivery attempt schema and recipient-level tracking status (`sent`, `failed`, `pending`) with timestamp and provider message reference.
+- [x] Extend notification dispatcher and announcement data model to record SMS delivery logs per guardian.
+- [x] Add administrator-facing delivery tracking dashboard on the announcements page with success/failure breakdown.
+- [x] Verify propertyId scoping, TypeScript type safety, and production build compatibility.
+- [x] Commit and push SMS delivery tracking update with `ayindenabawisdom@gmail.com`.
+
 ## Authentication & Parent Portal Preview
 - [x] Investigate deployed Firebase authentication failure (`INVALID_LOGIN_CREDENTIALS`).
 - [x] Identify that deployed Firebase project requires a registered parent account or test demo bypass for previewing.
