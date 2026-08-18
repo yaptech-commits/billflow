@@ -12,7 +12,7 @@
 - [x] Restore the main BillFlow staff/owner login and unrelated guardian-page wording to their previous behavior.
 - [x] Keep the Student ID/Name-only access change limited to `/school/portal` and its property-scoped lookup API.
 - [x] Verify the Parent Portal landing page opens the selected student dashboard without parent email/password login.
-- [ ] Commit and push the scoped correction with author email `ayindenabawisdom@gmail.com`.
+- [x] Commit and push the scoped correction with author email `ayindenabawisdom@gmail.com`.
 
 ## Parent Portal 404 Route & Navigation Fix
 - [x] Identify why Vercel returned 404 on `/school/portal` (route grouping `(app)` vs flat URL structure).
