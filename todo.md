@@ -1,5 +1,15 @@
 # Suggested Upgrades Implementation
 
+## Classes page
+
+- [x] Inspect the existing property-aware student schema and query helpers.
+- [x] Add a Classes page that groups students by class and shows class/student counts.
+- [x] Add class selection and student detail rows without duplicating student records.
+- [x] Link Classes under the School group for Super Admin and school owners.
+- [x] Verify TypeScript, production build, route links, and property_id filters.
+- [ ] Commit and push the BillFlow Classes page.
+
+
 - [ ] **Mobile Thermal Bluetooth & Web Bluetooth Printing**: Add direct Web Bluetooth API printing support for 58mm and 80mm ESC/POS thermal printers in the POS success modal.
 - [ ] **Barcode Scanner Integration**: Implement continuous keyboard/USB scanner event listeners (`keypress` / barcode prefix / Enter detection) for instant product barcode lookup at POS checkout.
 - [ ] **Shift-Drawer Reconciliation**: Build cash-drawer audit breakdowns, expected vs. actual cash counts, multi-currency cash/momo/card reconciliation, and discrepancy reporting into the shift closing modal.

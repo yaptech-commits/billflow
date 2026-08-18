@@ -61,6 +61,7 @@ export default function Sidebar() {
     { name: "Guests", icon: UserRound, path: "/hotel/guests", roles: ["owner", "salesperson", "super_admin"], hotel: true },
     { name: "Revenue & Audit", icon: BarChart3, path: "/hotel/reports", roles: ["owner", "salesperson", "super_admin"], hotel: true },
     { name: "Online Booking", icon: Ticket, path: "/hotel/booking-widget", roles: ["owner", "salesperson", "super_admin"], hotel: true },
+    { name: "Classes", icon: GraduationCap, path: "/school/classes", roles: ["owner", "super_admin"], school: true },
     { name: "Students", icon: Users, path: "/school/students", roles: ["owner", "super_admin"], school: true },
     { name: "Fees & Billing", icon: CreditCard, path: "/school/fees", roles: ["owner", "super_admin"], school: true },
     { name: "Attendance", icon: ClipboardList, path: "/school/attendance", roles: ["owner", "super_admin"], school: true },
@@ -154,8 +155,8 @@ export default function Sidebar() {
       key: "school",
       label: "School",
       shortLabel: "SCH",
-      description: "Students, fees, attendance, report cards, analytics, and parent access",
-      paths: ["/school/students", "/school/fees", "/school/attendance", "/school/reports", "/school/analytics", "/school/portal"],
+      description: "Classes, students, fees, attendance, report cards, analytics, and parent access",
+      paths: ["/school/classes", "/school/students", "/school/fees", "/school/attendance", "/school/reports", "/school/analytics", "/school/portal"],
     },
     {
       key: "administration",
