@@ -1,5 +1,13 @@
 # Suggested Upgrades Implementation
 
+## Parent Portal Student ID/Name-Only Access
+- [x] Replace email/password login with a landing-page lookup accepting Student ID or Ward Name only.
+- [x] Match lookups against property-scoped student records and prevent cross-property results.
+- [x] Open the selected student's portal dashboard without requiring an AuthContext parent session.
+- [x] Handle duplicate ward names by requiring the parent to select the intended student before opening the dashboard.
+- [x] Verify attendance, fees, performance, report cards, and announcements are populated from the selected student.
+- [ ] Commit and push the implementation with author email `ayindenabawisdom@gmail.com`.
+
 ## Parent Portal 404 Route & Navigation Fix
 - [x] Identify why Vercel returned 404 on `/school/portal` (route grouping `(app)` vs flat URL structure).
 - [x] Relocate portal page from `app/(app)/school/portal/page.tsx` to `app/school/portal/page.tsx` so the URL `/school/portal` is directly accessible without routing middleware/grouping constraints.
