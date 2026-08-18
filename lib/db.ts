@@ -277,8 +277,10 @@ export interface BusinessProfile {
   ownerEmail?: string;
   /** Data URL (base64) of the uploaded logo. Small logos only — see MAX_LOGO_BYTES. */
   logoDataUrl?: string;
-  /** Hex color, e.g. "#F5A623". Falls back to BillFlow\'s default gold if unset. */
+  /** Hex color, e.g. "#F5A623". Used for invoice and receipt branding. */
   accentColor?: string;
+  /** Hex color for the public Parent Portal. Falls back to the portal indigo when unset. */
+  portalAccentColor?: string;
   /** Currency code, e.g. "GHS" or "USD". Defaults to "GHS" if unset. */
   currency?: string;
   /** Shown at the bottom of invoices/receipts, e.g. return policy or thank-you note. */

@@ -5,6 +5,12 @@ import { getAdminDb } from "@/lib/firebase-admin";
 export const dynamic = "force-dynamic";
 
 const DEFAULT_PROPERTY_ID = "default_property";
+const DEFAULT_PORTAL_ACCENT = "#4F46E5";
+
+function safeHexColor(value: unknown) {
+  const color = String(value || "").trim();
+  return /^#[0-9a-f]{6}$/i.test(color) ? color : DEFAULT_PORTAL_ACCENT;
+}
 
 function normalize(value: unknown) {
   return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
@@ -148,6 +154,7 @@ async function readDashboard(db: Firestore, student: any, studentId: string) {
       name: business.businessName || business.propertyName || "BillFlow School",
       propertyName: business.propertyName || "",
       logoDataUrl: business.logoDataUrl || "",
+      portalAccentColor: safeHexColor(business.portalAccentColor || business.accentColor),
       currency: business.currency || "GHS",
     },
     attendance,
