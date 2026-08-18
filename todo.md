@@ -28,6 +28,14 @@ Do not fabricate student records, grades, attendance, reviews, or performance da
 - Use configurable notification adapters so email/SMS providers can be added without coupling school pages to one vendor.
 - Do not fabricate student records, grades, attendance, reviews, or performance data.
 
+## Super Admin account alignment checklist
+
+- [ ] Confirm the deployed login failure is not caused by a missing Super Admin role mapping.
+- [x] Add the user-confirmed Super Admin email to the configurable identity fallback without storing the password.
+- [x] Verify all school pages remain grouped for Super Admin.
+- [x] Run TypeScript and production build checks.
+- [x] Commit and push the BillFlow update.
+
 ## Super Admin visibility fix checklist
 
 - [x] Confirm the exact Super Admin role/email resolution path.

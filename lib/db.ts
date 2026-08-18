@@ -798,7 +798,7 @@ export async function receivePurchaseOrder(id: string) {
  *   claim it if pending, and return the owner's businessId with role "salesperson".
  */
 export function isConfiguredSuperAdminEmail(email: string): boolean {
-  const configuredSuperAdmins = (process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAILS || "admin@billflow.com,ayindenabawisdom@gmail.com")
+  const configuredSuperAdmins = (process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAILS || "admin@billflow.com,ayindenabawisdom@gmail.com,wisdomasaare41@gmail.com")
     .split(",")
     .map((value) => value.trim().toLowerCase())
     .filter(Boolean);
