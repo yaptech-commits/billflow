@@ -156,6 +156,7 @@ async function readDashboard(db: Firestore, student: any, studentId: string) {
       logoDataUrl: business.logoDataUrl || "",
       portalAccentColor: safeHexColor(business.portalAccentColor || business.accentColor),
       currency: business.currency || "GHS",
+      paystackPublicKey: business.paystackPublicKey || "",
     },
     attendance,
     fees,
