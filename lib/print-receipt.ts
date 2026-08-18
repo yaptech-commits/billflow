@@ -12,6 +12,7 @@ type PrintItem = {
 
 type ReceiptPrintData = {
   invoiceNumber?: string;
+  documentTitle?: string;
   issuedAt?: Date | string | number;
   dueDate?: Date | string | number;
   items: PrintItem[];
@@ -26,6 +27,8 @@ type ReceiptPrintData = {
   change?: number;
   customerName?: string;
   customerAddress?: string;
+  studentName?: string;
+  classGrade?: string;
   cashierName?: string;
   currencyCode?: string;
   footerNote?: string;
@@ -91,12 +94,7 @@ const billFlowMark = `
   </svg>
 `;
 
-export function printReceipt(data: ReceiptPrintData) {
-  if (typeof window === "undefined") return;
-
-  const printWindow = window.open("", "_blank", "width=900,height=1200");
-  if (!printWindow) return;
-
+export function buildReceiptHtml(data: ReceiptPrintData) {
   const currency = data.currencyCode || "GHS";
   const items = Array.isArray(data.items) ? data.items : [];
   const subtotal = data.subtotal != null
@@ -123,6 +121,7 @@ export function printReceipt(data: ReceiptPrintData) {
   const titleSize = thermalWidth ? (thermalWidth === 58 ? "10mm" : "14mm") : "25mm";
   const markSize = thermalWidth ? (thermalWidth === 58 ? "18mm" : "25mm") : "43mm";
   const tableFontSize = thermalWidth ? (thermalWidth === 58 ? "2.7mm" : "3.2mm") : "4.25mm";
+  const documentTitle = data.documentTitle || "INVOICE";
 
   const itemsHtml = items.map((item) => {
     const unitPrice = Number(item.unitPrice ?? item.price ?? 0);
@@ -139,9 +138,11 @@ export function printReceipt(data: ReceiptPrintData) {
   }).join("");
 
   const addressLines = String(data.customerAddress || "").split(/\n|,/).map(line => line.trim()).filter(Boolean);
-  const customerDetails = addressLines.length
-    ? addressLines.map(escapeHtml).join("<br />")
-    : "";
+  const customerDetails = [
+    data.studentName ? `Student: ${escapeHtml(data.studentName)}` : "",
+    data.classGrade ? `Class: ${escapeHtml(data.classGrade)}` : "",
+    ...addressLines.map(escapeHtml),
+  ].filter(Boolean).join("<br />");
 
   const html = `
     <!doctype html>
@@ -149,7 +150,7 @@ export function printReceipt(data: ReceiptPrintData) {
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>Invoice - ${escapeHtml(data.invoiceNumber || "Invoice")}</title>
+        <title>${escapeHtml(documentTitle)} - ${escapeHtml(data.invoiceNumber || "Invoice")}</title>
         <style>
           @page { size: ${thermalWidth ? `${thermalWidth}mm auto` : "A4 portrait"}; margin: 0; }
           * { box-sizing: border-box; }
@@ -207,7 +208,7 @@ export function printReceipt(data: ReceiptPrintData) {
       <body>
         <main class="page">
           <header class="header">
-            <div class="invoice-heading"><h1>INVOICE</h1><div class="heading-rule"></div></div>
+            <div class="invoice-heading"><h1>${escapeHtml(documentTitle)}</h1><div class="heading-rule"></div></div>
             ${markHtml}
           </header>
 
@@ -243,12 +244,35 @@ export function printReceipt(data: ReceiptPrintData) {
             ${data.footerNote ? `<p class="footer-note">${escapeHtml(data.footerNote)}</p>` : ""}
           </footer>
         </main>
-        <script>window.addEventListener('load', function () { setTimeout(function () { window.print(); }, 120); });</script>
       </body>
     </html>
   `;
 
+  return html;
+}
+
+export function printReceipt(data: ReceiptPrintData) {
+  if (typeof window === "undefined") return;
+
+  const printWindow = window.open("", "_blank", "width=900,height=1200");
+  if (!printWindow) return;
+
+  const html = buildReceiptHtml(data);
   printWindow.document.open();
-  printWindow.document.write(html);
+  printWindow.document.write(`${html}<script>window.addEventListener('load', function () { setTimeout(function () { window.print(); }, 120); });</script>`);
   printWindow.document.close();
+}
+
+export function downloadReceipt(data: ReceiptPrintData, filename = "billflow-receipt.html") {
+  if (typeof window === "undefined") return;
+
+  const blob = new Blob([buildReceiptHtml(data)], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

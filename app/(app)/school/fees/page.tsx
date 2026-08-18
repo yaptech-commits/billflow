@@ -19,6 +19,7 @@ import {
   DEFAULT_PROPERTY_ID,
 } from "@/lib/school-db";
 import { BusinessProfile, getBusinessProfile } from "@/lib/db";
+import { printReceipt, downloadReceipt } from "@/lib/print-receipt";
 import { toast } from "react-hot-toast";
 import { DollarSign, Plus, FileText, CheckCircle2, Clock, AlertCircle, CreditCard, X } from "lucide-react";
 import Modal from "@/components/ui/Modal";
@@ -37,6 +38,17 @@ export default function FeesPage() {
   const [isPayOpen, setIsPayOpen] = useState(false);
   const [selectedFee, setSelectedFee] = useState<StudentFee | null>(null);
   const [payAmount, setPayAmount] = useState(0);
+  const [paymentReceipt, setPaymentReceipt] = useState<{
+    receiptNumber: string;
+    issuedAt: Date;
+    studentName: string;
+    classGrade: string;
+    feeTitle: string;
+    amount: number;
+    paymentAmount: number;
+    totalPaid: number;
+    balance: number;
+  } | null>(null);
 
   const [structForm, setStructForm] = useState({
     title: "",
@@ -138,8 +150,20 @@ export default function FeesPage() {
     e.preventDefault();
     if (!selectedFee || !selectedFee.id) return;
     try {
-      await recordStudentFeePayment(selectedFee.id, payAmount);
+      const updatedFee = await recordStudentFeePayment(selectedFee.id, payAmount);
       const student = students.find((item) => item.id === selectedFee.studentId);
+      const issuedAt = new Date();
+      setPaymentReceipt({
+        receiptNumber: `FEE-${issuedAt.getTime().toString(36).toUpperCase()}`,
+        issuedAt,
+        studentName: student?.fullName || selectedFee.studentName,
+        classGrade: student?.classGrade || selectedFee.classGrade || "Not assigned",
+        feeTitle: selectedFee.feeTitle,
+        amount: updatedFee.amount,
+        paymentAmount: payAmount,
+        totalPaid: updatedFee.amountPaid || 0,
+        balance: Math.max(0, updatedFee.amount - (updatedFee.amountPaid || 0)),
+      });
       if (student && (student.guardianEmail || student.guardianPhone)) {
         await enqueueSchoolNotification({
           businessId: businessId || "",
@@ -174,6 +198,38 @@ export default function FeesPage() {
   const totalBilled = studentFees.reduce((acc, f) => acc + f.amount, 0);
   const totalCollected = studentFees.reduce((acc, f) => acc + (f.amountPaid || 0), 0);
   const totalOutstanding = totalBilled - totalCollected;
+  const receiptData = paymentReceipt
+    ? {
+        documentTitle: "FEE RECEIPT",
+        invoiceNumber: paymentReceipt.receiptNumber,
+        issuedAt: paymentReceipt.issuedAt,
+        dueDate: paymentReceipt.issuedAt,
+        items: [{
+          productName: paymentReceipt.feeTitle,
+          quantity: 1,
+          unitPrice: paymentReceipt.amount,
+        }],
+        subtotal: paymentReceipt.amount,
+        taxAmount: 0,
+        total: paymentReceipt.amount,
+        amountPaid: paymentReceipt.paymentAmount,
+        customerName: paymentReceipt.studentName,
+        studentName: paymentReceipt.studentName,
+        classGrade: paymentReceipt.classGrade,
+        businessName: businessProfile?.businessName,
+        footerNote: `Payment received: ${paymentReceipt.paymentAmount.toLocaleString()} • Balance remaining: ${paymentReceipt.balance.toLocaleString()}`,
+        currencyCode: businessProfile?.currency || "GHS",
+      }
+    : null;
+
+  const handlePrintPaymentReceipt = () => {
+    if (receiptData) printReceipt(receiptData);
+  };
+
+  const handleDownloadPaymentReceipt = () => {
+    if (!receiptData || !paymentReceipt) return;
+    downloadReceipt(receiptData, `${paymentReceipt.receiptNumber}.html`);
+  };
 
   return (
     <div className="space-y-6">
@@ -503,6 +559,52 @@ export default function FeesPage() {
           </div>
         </form>
       </Modal>
+
+      {paymentReceipt && (
+        <Modal open={Boolean(paymentReceipt)} onClose={() => setPaymentReceipt(null)} title="Fee Payment Receipt">
+          <div className="space-y-4">
+            <div className="rounded-lg border border-border bg-surface-hover/30 p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted">Receipt number</p>
+                  <p className="font-mono text-sm text-white">{paymentReceipt.receiptNumber}</p>
+                </div>
+                <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+              </div>
+              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <p className="text-xs text-muted">Student</p>
+                  <p className="font-semibold text-white">{paymentReceipt.studentName}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted">Class</p>
+                  <p className="font-semibold text-white">{paymentReceipt.classGrade}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted">Fee item</p>
+                  <p className="text-sm text-white">{paymentReceipt.feeTitle}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted">Amount paid</p>
+                  <p className="font-mono font-semibold text-emerald-400">{businessProfile?.currency || "$"}{paymentReceipt.paymentAmount.toLocaleString()}</p>
+                </div>
+              </div>
+            </div>
+            <p className="text-xs text-muted">The student name and class are included in both the printed receipt and downloaded HTML receipt.</p>
+            <div className="flex flex-wrap justify-end gap-3 border-t border-border pt-4">
+              <button type="button" onClick={() => setPaymentReceipt(null)} className="btn-ghost">
+                Close
+              </button>
+              <button type="button" onClick={handleDownloadPaymentReceipt} className="btn-ghost">
+                Download receipt
+              </button>
+              <button type="button" onClick={handlePrintPaymentReceipt} className="btn-primary">
+                Print receipt
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

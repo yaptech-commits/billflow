@@ -1,5 +1,14 @@
 # Suggested Upgrades Implementation
 
+## Fee payment receipt student and class details
+
+- [ ] Inspect the existing fee payment receipt print/download implementation and student-fee fields.
+- [ ] Include student name and class details in the visible receipt header/details.
+- [ ] Ensure both print and download/export output contain the same student and class information.
+- [ ] Preserve existing payment totals, receipt identifiers, and payment persistence.
+- [ ] Verify TypeScript, production build, and receipt rendering behavior.
+- [ ] Commit and push the receipt update with `ayindenabawisdom@gmail.com`.
+
 ## Fee assignment class selector
 
 - [x] Inspect the existing Assign Fee to Student modal and property-aware student/class loading.
