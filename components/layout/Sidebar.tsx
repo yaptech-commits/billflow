@@ -31,6 +31,12 @@ function getNav(role: StaffRole | null) {
       { href: "/suppliers",       icon: Truck,          label: "Suppliers" },
       { href: "/purchase-orders", icon: ClipboardList,  label: "Purchase Orders" },
     ]},
+    { label: "School Management", items: [
+      { href: "/school/students",   icon: Users,          label: "Students" },
+      { href: "/school/fees",       icon: CreditCard,     label: "Fees & Billing" },
+      { href: "/school/attendance", icon: ClipboardList,  label: "Attendance" },
+      { href: "/school/reports",    icon: BarChart2,      label: "Report Cards" },
+    ]},
     { label: "Business", items: businessItems },
   ];
 }
