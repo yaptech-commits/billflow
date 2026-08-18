@@ -4,9 +4,11 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import {
   Student,
+  SchoolClass,
   FeeStructure,
   StudentFee,
   getStudents,
+  getSchoolClasses,
   getFeeStructures,
   createFeeStructure,
   deleteFeeStructure,
@@ -25,6 +27,7 @@ export default function FeesPage() {
   const { businessId, role, propertyId: authPropertyId } = useAuth();
   const propertyId = authPropertyId || DEFAULT_PROPERTY_ID;
   const [students, setStudents] = useState<Student[]>([]);
+  const [classes, setClasses] = useState<SchoolClass[]>([]);
   const [feeStructures, setFeeStructures] = useState<FeeStructure[]>([]);
   const [studentFees, setStudentFees] = useState<StudentFee[]>([]);
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
@@ -43,19 +46,22 @@ export default function FeesPage() {
   });
 
   const [assignForm, setAssignForm] = useState({
+    classGrade: "",
     studentId: "",
     feeStructureId: "",
   });
 
   const loadData = async () => {
     if (!businessId) return;
-    const [stList, fsList, sfList, prof] = await Promise.all([
+    const [stList, classList, fsList, sfList, prof] = await Promise.all([
       getStudents(businessId, propertyId),
+      getSchoolClasses(businessId, propertyId),
       getFeeStructures(businessId, propertyId),
       getStudentFees(businessId, propertyId),
       getBusinessProfile(businessId),
     ]);
     setStudents(stList);
+    setClasses(classList);
     setFeeStructures(fsList);
     setStudentFees(sfList);
     setBusinessProfile(prof);
@@ -158,6 +164,13 @@ export default function FeesPage() {
     }
   };
 
+  const classOptions = Array.from(new Set([
+    ...classes.map((item) => item.name),
+    ...students.map((item) => item.classGrade).filter(Boolean),
+  ])).sort((a, b) => a.localeCompare(b));
+  const assignableStudents = assignForm.classGrade
+    ? students.filter((student) => student.classGrade === assignForm.classGrade)
+    : students;
   const totalBilled = studentFees.reduce((acc, f) => acc + f.amount, 0);
   const totalCollected = studentFees.reduce((acc, f) => acc + (f.amountPaid || 0), 0);
   const totalOutstanding = totalBilled - totalCollected;
@@ -397,20 +410,40 @@ export default function FeesPage() {
       <Modal open={isAssignOpen} onClose={() => setIsAssignOpen(false)} title="Assign Fee to Student">
         <form onSubmit={handleAssignFee} className="space-y-4">
           <div>
+            <label className="text-xs text-muted mb-1 block">Select Class *</label>
+            <select
+              required
+              value={assignForm.classGrade}
+              onChange={(e) => setAssignForm({ ...assignForm, classGrade: e.target.value, studentId: "" })}
+              className="input-field w-full bg-surface"
+            >
+              <option value="">-- Choose Class --</option>
+              {classOptions.map((classGrade) => (
+                <option key={classGrade} value={classGrade}>
+                  {classGrade} ({students.filter((student) => student.classGrade === classGrade).length} students)
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
             <label className="text-xs text-muted mb-1 block">Select Student *</label>
             <select
               required
               value={assignForm.studentId}
               onChange={(e) => setAssignForm({ ...assignForm, studentId: e.target.value })}
               className="input-field w-full bg-surface"
+              disabled={!assignForm.classGrade}
             >
-              <option value="">-- Choose Student --</option>
-              {students.map((st) => (
+              <option value="">{assignForm.classGrade ? "-- Choose Student --" : "-- Choose a class first --"}</option>
+              {assignableStudents.map((st) => (
                 <option key={st.id} value={st.id}>
-                  {st.fullName} ({st.admissionNumber} - {st.classGrade})
+                  {st.fullName} ({st.admissionNumber})
                 </option>
               ))}
             </select>
+            {assignForm.classGrade && assignableStudents.length === 0 && (
+              <p className="text-xs text-amber-400 mt-1">No students are currently enrolled in this class.</p>
+            )}
           </div>
           <div>
             <label className="text-xs text-muted mb-1 block">Select Fee Structure *</label>

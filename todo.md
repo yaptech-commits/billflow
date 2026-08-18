@@ -1,5 +1,14 @@
 # Suggested Upgrades Implementation
 
+## Fee assignment class selector
+
+- [x] Inspect the existing Assign Fee to Student modal and property-aware student/class loading.
+- [x] Add a class selector above the student selector.
+- [x] Filter the student dropdown by the selected class and reset invalid student selections.
+- [x] Preserve the existing fee assignment persistence and permissions.
+- [x] Verify TypeScript, production build, and route behavior.
+- [ ] Commit and push the fee-assignment class selector with `ayindenabawisdom@gmail.com`.
+
 ## School dashboard quick actions
 
 - [x] Inspect the School dashboard section and existing student/attendance routes.
