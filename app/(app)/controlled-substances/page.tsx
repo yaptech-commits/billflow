@@ -1,71 +1,124 @@
 "use client";
-import { useState, useEffect } from "react";
+
+import React, { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { getControlledSubstanceLogsForBusiness, createControlledSubstanceLog } from "@/lib/pharmacy-db";
-import { ControlledSubstanceLog } from "@/lib/db";
-import { Plus, Search, Download, Printer, Eye } from "lucide-react";
+import { db } from "@/lib/firebase";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  orderBy,
+  Timestamp,
+} from "firebase/firestore";
+import { ShieldAlert, Search, Download, Printer, FileText, Calendar, User, Stethoscope } from "lucide-react";
 import toast from "react-hot-toast";
-import Modal from "@/components/ui/Modal";
+
+interface ControlledLog {
+  id: string;
+  propertyId: string;
+  productId: string;
+  productName: string;
+  quantityDispensed: number;
+  patientName: string;
+  prescriberName: string;
+  dispensingStaffName: string;
+  prescriptionNumber?: string;
+  notes?: string;
+  dispensedAt?: Timestamp;
+}
 
 export default function ControlledSubstancesPage() {
-  const { businessId, user } = useAuth();
-  const [logs, setLogs] = useState<ControlledSubstanceLog[]>([]);
+  const { currentProperty } = useAuth();
+  const propertyId = currentProperty?.id || "default";
+
+  const [logs, setLogs] = useState<ControlledLog[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [showNewLogModal, setShowNewLogModal] = useState(false);
-  const [selectedLog, setSelectedLog] = useState<ControlledSubstanceLog | null>(null);
-  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
-    if (businessId) {
-      fetchLogs();
-    }
-  }, [businessId]);
+    loadLogs();
+  }, [propertyId]);
 
-  const fetchLogs = async () => {
-    if (!businessId) return;
-    setLoading(true);
+  const loadLogs = async () => {
     try {
-      const data = await getControlledSubstanceLogsForBusiness(businessId);
-      setLogs(data);
+      setLoading(true);
+      const q = query(
+        collection(db, "controlledSubstanceLogs"),
+        where("propertyId", "==", propertyId)
+      );
+      const snap = await getDocs(q);
+      const items: ControlledLog[] = [];
+      snap.forEach((doc) => {
+        items.push({ id: doc.id, ...doc.data() } as ControlledLog);
+      });
+      items.sort((a, b) => {
+        const tA = a.dispensedAt?.toMillis() || 0;
+        const tB = b.dispensedAt?.toMillis() || 0;
+        return tB - tA;
+      });
+      setLogs(items);
     } catch (err) {
-      toast.error("Failed to fetch controlled substance logs");
+      console.error("Error loading controlled substance logs:", err);
+      toast.error("Failed to load controlled substance logs");
     } finally {
       setLoading(false);
     }
   };
 
-  const filteredLogs = logs.filter(log => {
-    const matchesSearch = 
-      log.productName.toLowerCase().includes(search.toLowerCase()) ||
-      log.patientName.toLowerCase().includes(search.toLowerCase()) ||
-      log.prescriberName.toLowerCase().includes(search.toLowerCase());
-    return matchesSearch;
-  });
+  const filteredLogs = logs.filter(
+    (l) =>
+      l.productName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      l.patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      l.prescriberName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (l.prescriptionNumber && l.prescriptionNumber.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
 
-  const handlePrint = () => {
-    const printContent = generatePrintContent();
-    const printWindow = window.open("", "_blank");
-    if (printWindow) {
-      printWindow.document.write(printContent);
-      printWindow.document.close();
-      printWindow.print();
-    }
-  };
-
-  const handleExport = () => {
-    const csv = generateCSV();
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = window.URL.createObjectURL(blob);
+  const handleExportCSV = () => {
+    const headers = ["Date", "Product", "Quantity", "Patient", "Prescriber", "Staff", "Prescription #", "Notes"];
+    const rows = filteredLogs.map((l) => [
+      l.dispensedAt ? new Date(l.dispensedAt.toDate()).toLocaleDateString() : "N/A",
+      `"${l.productName}"`,
+      l.quantityDispensed,
+      `"${l.patientName}"`,
+      `"${l.prescriberName}"`,
+      `"${l.dispensingStaffName}"`,
+      `"${l.prescriptionNumber || ""}"`,
+      `"${l.notes || ""}"`,
+    ]);
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
     const a = document.createElement("a");
-    a.href = url;
+    a.href = encodedUri;
     a.download = `controlled-substances-${new Date().toISOString().split("T")[0]}.csv`;
     a.click();
-    window.URL.revokeObjectURL(url);
+    toast.success("CSV exported successfully");
   };
 
-  const generatePrintContent = () => {
-    const html = `
+  const handlePrint = () => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      toast.error("Please allow popups to print register");
+      return;
+    }
+    const htmlRows = filteredLogs
+      .map(
+        (log) => `
+        <tr>
+          <td>${log.dispensedAt ? new Date(log.dispensedAt.toDate()).toLocaleDateString() : "N/A"}</td>
+          <td>${log.productName}</td>
+          <td>${log.quantityDispensed}</td>
+          <td>${log.patientName}</td>
+          <td>${log.prescriberName}</td>
+          <td>${log.dispensingStaffName}</td>
+          <td>${log.prescriptionNumber || "-"}</td>
+        </tr>
+      `
+      )
+      .join("");
+
+    const printContent = `
+      <!DOCTYPE html>
       <html>
         <head>
           <title>Controlled Substances Register</title>
@@ -73,7 +126,7 @@ export default function ControlledSubstancesPage() {
             body { font-family: Arial, sans-serif; margin: 20px; }
             h1 { text-align: center; }
             table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 12px; }
             th { background-color: #f2f2f2; }
           </style>
         </head>
@@ -93,131 +146,102 @@ export default function ControlledSubstancesPage() {
               </tr>
             </thead>
             <tbody>
-              ${filteredLogs.map(log => `
-                <tr>
-                  <td>${log.dispensedAt ? new Date(log.dispensedAt.toDate()).toLocaleDateString() : "N/A"}</td>
-                  <td>${log.productName}</td>
-                  <td>${log.quantityDispensed}</td>
-                  <td>${log.patientName}</td>
-                  <td>${log.prescriberName}</td>
-                  <td>${log.dispensingStaffName}</td>
-                  <td>${log.prescriptionNumber || "-"}</td>
-                </tr>
-              `).join("")}
+              ${htmlRows}
             </tbody>
           </table>
         </body>
       </html>
     `;
-    return html;
-  };
-
-  const generateCSV = () => {
-    const headers = ["Date", "Product", "Quantity", "Patient", "Prescriber", "Staff", "Prescription #", "Notes"];
-    const rows = filteredLogs.map(log => [
-      log.dispensedAt ? new Date(log.dispensedAt.toDate()).toLocaleDateString() : "N/A",
-      log.productName,
-      log.quantityDispensed,
-      log.patientName,
-      log.prescriberName,
-      log.dispensingStaffName,
-      log.prescriptionNumber || "-",
-      log.notes || "",
-    ]);
-
-    const csv = [
-      headers.join(","),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(",")),
-    ].join("\n");
-
-    return csv;
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+    }, 250);
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-card p-6 rounded-2xl border border-border">
         <div>
-          <h1 className="text-2xl font-bold text-white">Controlled Substances Register</h1>
-          <p className="text-muted text-sm mt-1">Regulatory compliance log for narcotic and controlled drugs</p>
+          <h1 className="text-xl font-bold text-white flex items-center gap-2">
+            <ShieldAlert className="text-amber-400" size={24} /> Controlled Substances Register
+          </h1>
+          <p className="text-sm text-muted">
+            Auditable statutory log for prescription-required and controlled medications.
+          </p>
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={handlePrint}
-            className="btn-ghost flex items-center gap-2"
-            title="Print Register"
-          >
-            <Printer size={18} /> Print
+        <div className="flex items-center gap-3">
+          <button onClick={handleExportCSV} className="btn-secondary text-xs flex items-center gap-1.5">
+            <Download size={14} /> Export CSV
           </button>
-          <button
-            onClick={handleExport}
-            className="btn-ghost flex items-center gap-2"
-            title="Export as CSV"
-          >
-            <Download size={18} /> Export
-          </button>
-          <button
-            onClick={() => setShowNewLogModal(true)}
-            className="btn-primary flex items-center gap-2"
-          >
-            <Plus size={18} /> New Entry
+          <button onClick={handlePrint} className="btn-primary text-xs flex items-center gap-1.5">
+            <Printer size={14} /> Print Register
           </button>
         </div>
       </div>
 
-      <div className="relative">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-        <input
-          className="input pl-10 w-full"
-          placeholder="Search by product, patient, or prescriber..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+      {/* Search & Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="card p-4 bg-card border border-border rounded-xl md:col-span-2 flex items-center gap-3">
+          <Search size={18} className="text-muted" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search by medication, patient, prescriber, or prescription #..."
+            className="w-full bg-transparent text-white text-sm outline-none placeholder-muted"
+          />
+        </div>
+        <div className="card p-4 bg-card border border-border rounded-xl flex items-center justify-between">
+          <span className="text-xs text-muted">Total Dispensed Records</span>
+          <span className="text-lg font-bold text-amber-400 font-mono">{filteredLogs.length}</span>
+        </div>
       </div>
 
-      <div className="space-y-3">
+      {/* Table */}
+      <div className="card bg-card border border-border rounded-2xl overflow-hidden">
         {loading ? (
-          <div className="text-center py-10 text-muted animate-pulse">Loading logs...</div>
+          <div className="p-12 text-center text-muted">Loading controlled substance logs...</div>
         ) : filteredLogs.length === 0 ? (
-          <div className="text-center py-10 text-muted">No controlled substance logs found</div>
+          <div className="p-12 text-center text-muted space-y-2">
+            <FileText size={36} className="mx-auto text-muted/50" />
+            <p className="text-sm font-medium text-white">No controlled substance records found</p>
+            <p className="text-xs">Dispensed controlled medications will appear here automatically.</p>
+          </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-xs text-left">
               <thead>
-                <tr className="border-b border-border">
-                  <th className="text-left py-3 px-4 text-muted font-medium">Date</th>
-                  <th className="text-left py-3 px-4 text-muted font-medium">Product</th>
-                  <th className="text-left py-3 px-4 text-muted font-medium">Qty</th>
-                  <th className="text-left py-3 px-4 text-muted font-medium">Patient</th>
-                  <th className="text-left py-3 px-4 text-muted font-medium">Prescriber</th>
-                  <th className="text-left py-3 px-4 text-muted font-medium">Staff</th>
-                  <th className="text-left py-3 px-4 text-muted font-medium">Prescription #</th>
-                  <th className="text-left py-3 px-4 text-muted font-medium">Action</th>
+                <tr className="border-b border-border text-muted bg-white/[0.02]">
+                  <th className="py-3 px-4">Date & Time</th>
+                  <th className="py-3 px-4">Medication</th>
+                  <th className="py-3 px-4">Qty</th>
+                  <th className="py-3 px-4">Patient Name</th>
+                  <th className="py-3 px-4">Prescriber</th>
+                  <th className="py-3 px-4">Prescription #</th>
+                  <th className="py-3 px-4">Dispensed By</th>
+                  <th className="py-3 px-4">Notes</th>
                 </tr>
               </thead>
-              <tbody>
-                {filteredLogs.map(log => (
-                  <tr key={log.id} className="border-b border-border/50 hover:bg-white/5 transition-colors">
-                    <td className="py-3 px-4 text-surface">
-                      {log.dispensedAt ? new Date(log.dispensedAt.toDate()).toLocaleDateString() : "N/A"}
+              <tbody className="divide-y divide-border/60">
+                {filteredLogs.map((log) => (
+                  <tr key={log.id} className="hover:bg-white/[0.02]">
+                    <td className="py-3 px-4 text-muted font-mono whitespace-nowrap">
+                      {log.dispensedAt ? new Date(log.dispensedAt.toDate()).toLocaleString() : "N/A"}
                     </td>
-                    <td className="py-3 px-4 font-medium text-surface">{log.productName}</td>
-                    <td className="py-3 px-4 text-surface">{log.quantityDispensed}</td>
-                    <td className="py-3 px-4 text-surface">{log.patientName}</td>
-                    <td className="py-3 px-4 text-surface">{log.prescriberName}</td>
-                    <td className="py-3 px-4 text-surface">{log.dispensingStaffName}</td>
-                    <td className="py-3 px-4 text-surface">{log.prescriptionNumber || "-"}</td>
-                    <td className="py-3 px-4">
-                      <button
-                        onClick={() => {
-                          setSelectedLog(log);
-                          setShowDetailsModal(true);
-                        }}
-                        className="p-2 bg-white/5 text-muted hover:text-gold rounded-lg transition-colors"
-                        title="View Details"
-                      >
-                        <Eye size={16} />
-                      </button>
+                    <td className="py-3 px-4 font-bold text-white">{log.productName}</td>
+                    <td className="py-3 px-4 font-mono text-amber-400 font-bold">{log.quantityDispensed}</td>
+                    <td className="py-3 px-4 text-white flex items-center gap-1.5">
+                      <User size={12} className="text-muted" /> {log.patientName}
                     </td>
+                    <td className="py-3 px-4 text-muted flex items-center gap-1.5">
+                      <Stethoscope size={12} className="text-muted" /> {log.prescriberName}
+                    </td>
+                    <td className="py-3 px-4 font-mono text-white">{log.prescriptionNumber || "—"}</td>
+                    <td className="py-3 px-4 text-muted">{log.dispensingStaffName}</td>
+                    <td className="py-3 px-4 text-muted truncate max-w-[180px]">{log.notes || "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -225,209 +249,6 @@ export default function ControlledSubstancesPage() {
           </div>
         )}
       </div>
-
-      {/* New Log Modal */}
-      <Modal open={showNewLogModal} onClose={() => setShowNewLogModal(false)} title="Record Controlled Substance Dispensing">
-        <NewLogForm 
-          businessId={businessId} 
-          staffName={user?.displayName || "Unknown"} 
-          staffId={user?.uid || ""} 
-          onSuccess={() => { setShowNewLogModal(false); fetchLogs(); }} 
-        />
-      </Modal>
-
-      {/* Log Details Modal */}
-      <Modal open={showDetailsModal} onClose={() => setShowDetailsModal(false)} title="Dispensing Details">
-        {selectedLog && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-white/5 p-3 rounded-lg">
-                <p className="text-xs text-muted">Product</p>
-                <p className="font-bold text-surface">{selectedLog.productName}</p>
-              </div>
-              <div className="bg-white/5 p-3 rounded-lg">
-                <p className="text-xs text-muted">Quantity</p>
-                <p className="font-bold text-surface">{selectedLog.quantityDispensed}</p>
-              </div>
-              <div className="bg-white/5 p-3 rounded-lg">
-                <p className="text-xs text-muted">Patient</p>
-                <p className="font-bold text-surface">{selectedLog.patientName}</p>
-              </div>
-              <div className="bg-white/5 p-3 rounded-lg">
-                <p className="text-xs text-muted">Patient ID</p>
-                <p className="font-bold text-surface">{selectedLog.patientId || "-"}</p>
-              </div>
-              <div className="bg-white/5 p-3 rounded-lg">
-                <p className="text-xs text-muted">Prescriber</p>
-                <p className="font-bold text-surface">{selectedLog.prescriberName}</p>
-              </div>
-              <div className="bg-white/5 p-3 rounded-lg">
-                <p className="text-xs text-muted">Prescription #</p>
-                <p className="font-bold text-surface">{selectedLog.prescriptionNumber || "-"}</p>
-              </div>
-              <div className="bg-white/5 p-3 rounded-lg">
-                <p className="text-xs text-muted">Dispensing Staff</p>
-                <p className="font-bold text-surface">{selectedLog.dispensingStaffName}</p>
-              </div>
-              <div className="bg-white/5 p-3 rounded-lg">
-                <p className="text-xs text-muted">Date</p>
-                <p className="font-bold text-surface">
-                  {selectedLog.dispensedAt ? new Date(selectedLog.dispensedAt.toDate()).toLocaleDateString() : "N/A"}
-                </p>
-              </div>
-            </div>
-
-            {selectedLog.notes && (
-              <div className="bg-white/5 p-3 rounded-lg">
-                <p className="text-xs text-muted mb-1">Notes</p>
-                <p className="text-sm text-surface">{selectedLog.notes}</p>
-              </div>
-            )}
-
-            <button className="btn-ghost w-full" onClick={() => setShowDetailsModal(false)}>Close</button>
-          </div>
-        )}
-      </Modal>
     </div>
-  );
-}
-
-function NewLogForm({ businessId, staffName, staffId, onSuccess }: { businessId: string; staffName: string; staffId: string; onSuccess: () => void }) {
-  const [form, setForm] = useState({
-    productName: "",
-    productId: "",
-    quantityDispensed: 1,
-    patientName: "",
-    patientId: "",
-    prescriberName: "",
-    prescriberId: "",
-    prescriptionNumber: "",
-    notes: "",
-  });
-  const [loading, setLoading] = useState(false);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      await createControlledSubstanceLog({
-        businessId,
-        productId: form.productId || "unknown",
-        productName: form.productName,
-        quantityDispensed: form.quantityDispensed,
-        patientId: form.patientId,
-        patientName: form.patientName,
-        prescriberId: form.prescriberId,
-        prescriberName: form.prescriberName,
-        dispensingStaffId: staffId,
-        dispensingStaffName: staffName,
-        prescriptionNumber: form.prescriptionNumber,
-        notes: form.notes,
-        dispensedAt: new Date() as any,
-      });
-      toast.success("Controlled substance log recorded");
-      onSuccess();
-    } catch (err) {
-      toast.error("Failed to record log");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="label">Product Name</label>
-          <input
-            className="input"
-            type="text"
-            placeholder="e.g., Morphine 10mg"
-            value={form.productName}
-            onChange={(e) => setForm({ ...form, productName: e.target.value })}
-            required
-          />
-        </div>
-
-        <div>
-          <label className="label">Quantity Dispensed</label>
-          <input
-            className="input"
-            type="number"
-            min="1"
-            value={form.quantityDispensed}
-            onChange={(e) => setForm({ ...form, quantityDispensed: parseInt(e.target.value) || 1 })}
-            required
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="label">Patient Name</label>
-          <input
-            className="input"
-            type="text"
-            placeholder="Full name"
-            value={form.patientName}
-            onChange={(e) => setForm({ ...form, patientName: e.target.value })}
-            required
-          />
-        </div>
-
-        <div>
-          <label className="label">Patient ID</label>
-          <input
-            className="input"
-            type="text"
-            placeholder="Optional"
-            value={form.patientId}
-            onChange={(e) => setForm({ ...form, patientId: e.target.value })}
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="label">Prescriber Name</label>
-          <input
-            className="input"
-            type="text"
-            placeholder="Doctor/Prescriber name"
-            value={form.prescriberName}
-            onChange={(e) => setForm({ ...form, prescriberName: e.target.value })}
-            required
-          />
-        </div>
-
-        <div>
-          <label className="label">Prescription Number</label>
-          <input
-            className="input"
-            type="text"
-            placeholder="Optional"
-            value={form.prescriptionNumber}
-            onChange={(e) => setForm({ ...form, prescriptionNumber: e.target.value })}
-          />
-        </div>
-      </div>
-
-      <div>
-        <label className="label">Notes</label>
-        <textarea
-          className="input"
-          placeholder="Add any additional notes..."
-          value={form.notes}
-          onChange={(e) => setForm({ ...form, notes: e.target.value })}
-          rows={2}
-        />
-      </div>
-
-      <div className="flex gap-3 pt-4">
-        <button type="submit" className="btn-primary flex-1" disabled={loading}>
-          {loading ? "Recording..." : "Record Dispensing"}
-        </button>
-      </div>
-    </form>
   );
 }

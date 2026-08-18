@@ -1,5 +1,12 @@
 # Suggested Upgrades Implementation
 
+## Parent Portal Landing Page & Ward ID Login
+- [x] Design parent portal landing page layout with ward name and student ID lookup (`/school/portal`).
+- [x] Implement secure ward matching against property-scoped student records with attendance, fee balance, and performance overview.
+- [x] Add quick demo ward profiles for instant parent previewing.
+- [x] Verify production build compatibility, type safety, and property scoping.
+- [x] Commit and push the Parent Portal landing page update with `ayindenabawisdom@gmail.com`.
+
 ## SMS Notification Delivery Tracking
 - [x] Define SMS delivery attempt schema and recipient-level tracking status (`sent`, `failed`, `pending`) with timestamp and provider message reference.
 - [x] Extend notification dispatcher and announcement data model to record SMS delivery logs per guardian.
