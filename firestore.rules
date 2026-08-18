@@ -39,6 +39,37 @@ service cloud.firestore {
       return isSignedIn() && isOwner(businessId);
     }
 
+    // Parent links use a deterministic ID so rules can verify a guardian-to-student
+    // relationship without running a collection query.
+    function parentLinkDoc(businessId, studentId) {
+      return get(/databases/$(database)/documents/parentLinks/$(businessId + '__' + studentId + '__' + request.auth.token.email));
+    }
+
+    function isParentForStudent(businessId, studentId) {
+      return isSignedIn()
+        && request.auth.token.email != null
+        && exists(/databases/$(database)/documents/parentLinks/$(businessId + '__' + studentId + '__' + request.auth.token.email))
+        && parentLinkDoc(businessId, studentId).data.status == 'active'
+        && parentLinkDoc(businessId, studentId).data.parentEmail == request.auth.token.email
+        && (!parentLinkDoc(businessId, studentId).data.keys().hasAny(['parentUid']) || parentLinkDoc(businessId, studentId).data.parentUid == request.auth.uid);
+    }
+
+    function parentPropertyMatches(data, businessId, studentId) {
+      return !data.keys().hasAny(['propertyId'])
+        || !parentLinkDoc(businessId, studentId).data.keys().hasAny(['propertyId'])
+        || data.propertyId == parentLinkDoc(businessId, studentId).data.propertyId;
+    }
+
+    function canReadStudent(data, studentId) {
+      return isBusinessMember(data.businessId)
+        || (isParentForStudent(data.businessId, studentId) && parentPropertyMatches(data, data.businessId, studentId));
+    }
+
+    function canReadSchoolRecord(data) {
+      return isBusinessMember(data.businessId)
+        || (isParentForStudent(data.businessId, data.studentId) && parentPropertyMatches(data, data.businessId, data.studentId));
+    }
+
     // ── staffIndex ────────────────────────────────────────────────────────
     // One doc per staff user, keyed by their uid: { businessId, role, status }.
     // Kept in sync by the app whenever a staff invite is claimed (see note
@@ -63,6 +94,63 @@ service cloud.firestore {
         (resource.data.status == 'pending' && resource.data.email == request.auth.token.email)
       );
       allow delete: if isSignedIn() && isBusinessOwner(resource.data.businessId);
+    }
+
+    // ── parent access links ─────────────────────────────────────────────────
+    match /parentLinks/{linkId} {
+      allow read: if isSignedIn() && (
+        isBusinessMember(resource.data.businessId) ||
+        (resource.data.parentEmail == request.auth.token.email && resource.data.status == 'active')
+      );
+      allow create: if isBusinessMember(request.resource.data.businessId);
+      allow update: if isBusinessOwner(resource.data.businessId) || (
+        resource.data.parentEmail == request.auth.token.email &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['parentUid', 'updatedAt'])
+      );
+      allow delete: if isBusinessOwner(resource.data.businessId);
+    }
+
+    // ── school records ──────────────────────────────────────────────────────
+    match /students/{id} {
+      allow read: if canReadStudent(resource.data, id);
+      allow create: if isBusinessMember(request.resource.data.businessId);
+      allow update, delete: if isBusinessMember(resource.data.businessId);
+    }
+
+    match /feeStructures/{id} {
+      allow read: if isBusinessMember(resource.data.businessId);
+      allow create: if isBusinessMember(request.resource.data.businessId);
+      allow update, delete: if isBusinessMember(resource.data.businessId);
+    }
+
+    match /studentFees/{id} {
+      allow read: if canReadSchoolRecord(resource.data);
+      allow create: if isBusinessMember(request.resource.data.businessId);
+      allow update, delete: if isBusinessMember(resource.data.businessId);
+    }
+
+    match /attendance/{id} {
+      allow read: if canReadSchoolRecord(resource.data);
+      allow create: if isBusinessMember(request.resource.data.businessId);
+      allow update, delete: if isBusinessMember(resource.data.businessId);
+    }
+
+    match /assessments/{id} {
+      allow read: if canReadSchoolRecord(resource.data);
+      allow create: if isBusinessMember(request.resource.data.businessId);
+      allow update, delete: if isBusinessMember(resource.data.businessId);
+    }
+
+    match /schoolNotifications/{id} {
+      allow read: if isBusinessMember(resource.data.businessId) || (
+        canReadSchoolRecord(resource.data) && resource.data.recipientEmail == request.auth.token.email
+      );
+      allow create: if isBusinessMember(request.resource.data.businessId);
+      allow update, delete: if isBusinessMember(resource.data.businessId);
+    }
+
+    match /schoolNotificationPreferences/{id} {
+      allow read, write: if isBusinessMember(resource.data.businessId) || isBusinessMember(request.resource.data.businessId);
     }
 
     // ── businessId-scoped collections shared by the whole business ─────────

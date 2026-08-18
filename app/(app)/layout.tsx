@@ -1,6 +1,5 @@
 "use client";
-import { useEffect } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 export const dynamic = 'force-dynamic';
 
@@ -8,13 +7,18 @@ import Sidebar from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
-  const router = useRouter();
-  const pathname = usePathname();
+  const { user, loading, role } = useAuth();
+  const [pathname, setPathname] = useState("");
 
   useEffect(() => {
-    if (!loading && !user) router.replace("/auth/login");
-  }, [user, loading, router]);
+    setPathname(window.location.pathname);
+  }, []);
+
+  useEffect(() => {
+    if (!loading && !user) window.location.replace("/auth/login");
+    if (!loading && user && role === "parent" && !pathname.startsWith("/school/portal")) window.location.replace("/school/portal");
+    if (!loading && user && role !== "parent" && pathname.startsWith("/school/portal")) window.location.replace("/dashboard");
+  }, [user, loading, role, pathname]);
 
   if (loading || !user) {
     return (
@@ -32,6 +36,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     "/payments": "Payments",
     "/reports": "Reports",
     "/settings": "Settings",
+    "/school/portal": "Parent Portal",
+    "/school/analytics": "Term Analytics",
   };
 
   return (

@@ -2,10 +2,10 @@
 
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { Student, getStudents, createStudent, updateStudent, deleteStudent } from "@/lib/school-db";
+import { Student, ParentLink, getStudents, createStudent, updateStudent, deleteStudent, createParentLink, getParentLinks } from "@/lib/school-db";
 import { BusinessProfile, getBusinessProfile } from "@/lib/db";
 import { toast } from "react-hot-toast";
-import { Users, UserPlus, Search, Edit, Trash2, GraduationCap, X, Check } from "lucide-react";
+import { Users, UserPlus, Search, Edit, Trash2, GraduationCap, ShieldCheck, X, Check } from "lucide-react";
 import Modal from "@/components/ui/Modal";
 
 export default function StudentsPage() {
@@ -13,6 +13,10 @@ export default function StudentsPage() {
   const propertyId = "default_property";
   const [students, setStudents] = useState<Student[]>([]);
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
+  const [parentLinks, setParentLinks] = useState<ParentLink[]>([]);
+  const [selectedParentStudent, setSelectedParentStudent] = useState<Student | null>(null);
+  const [isParentModalOpen, setIsParentModalOpen] = useState(false);
+  const [parentForm, setParentForm] = useState({ parentName: "", parentEmail: "", parentPhone: "" });
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
@@ -29,12 +33,14 @@ export default function StudentsPage() {
 
   const loadData = async () => {
     if (!businessId) return;
-    const [stList, prof] = await Promise.all([
+    const [stList, prof, links] = await Promise.all([
       getStudents(businessId, propertyId),
       getBusinessProfile(businessId),
+      getParentLinks(businessId, propertyId),
     ]);
     setStudents(stList);
     setBusinessProfile(prof);
+    setParentLinks(links);
   };
 
   useEffect(() => {
@@ -85,6 +91,41 @@ export default function StudentsPage() {
       status: s.status,
     });
     setIsAddOpen(true);
+  };
+
+  const openParentModal = (student: Student) => {
+    setSelectedParentStudent(student);
+    setParentForm({
+      parentName: student.guardianName || "",
+      parentEmail: student.guardianEmail || "",
+      parentPhone: student.guardianPhone || "",
+    });
+    setIsParentModalOpen(true);
+  };
+
+  const handleCreateParentLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!businessId || !selectedParentStudent?.id || !parentForm.parentEmail.trim()) {
+      toast.error("A guardian email is required to create portal access.");
+      return;
+    }
+    try {
+      await createParentLink({
+        businessId,
+        propertyId,
+        studentId: selectedParentStudent.id,
+        studentName: selectedParentStudent.fullName,
+        parentEmail: parentForm.parentEmail,
+        parentName: parentForm.parentName,
+        parentPhone: parentForm.parentPhone,
+      });
+      toast.success("Parent portal access created. The guardian can sign in with this email.");
+      setIsParentModalOpen(false);
+      setSelectedParentStudent(null);
+      loadData();
+    } catch (err: any) {
+      toast.error(err.message || "Could not create parent access.");
+    }
   };
 
   const handleDelete = async (id?: string) => {
@@ -161,13 +202,14 @@ export default function StudentsPage() {
                 <th className="py-3 px-4">Guardian Name</th>
                 <th className="py-3 px-4">Guardian Phone</th>
                 <th className="py-3 px-4">Status</th>
+                <th className="py-3 px-4">Parent Portal</th>
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border text-sm">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-muted">
+                  <td colSpan={8} className="py-8 text-center text-muted">
                     No students found matching your search.
                   </td>
                 </tr>
@@ -189,6 +231,13 @@ export default function StudentsPage() {
                       >
                         {s.status}
                       </span>
+                    </td>
+                    <td className="py-3 px-4">
+                      {parentLinks.some((link) => link.studentId === s.id) ? (
+                        <span className="inline-flex items-center gap-1 text-xs text-emerald-300"><ShieldCheck size={13} /> Linked</span>
+                      ) : (
+                        <button onClick={() => openParentModal(s)} className="text-xs text-gold hover:underline">Create access</button>
+                      )}
                     </td>
                     <td className="py-3 px-4 text-right space-x-2">
                       <button
@@ -327,6 +376,16 @@ export default function StudentsPage() {
               {editingStudent ? "Save Changes" : "Register Student"}
             </button>
           </div>
+        </form>
+      </Modal>
+
+      <Modal open={isParentModalOpen} onClose={() => setIsParentModalOpen(false)} title={`Parent access · ${selectedParentStudent?.fullName || "Student"}`}>
+        <form onSubmit={handleCreateParentLink} className="space-y-4">
+          <p className="text-xs text-muted">The guardian can sign in with this email to view only the linked student’s attendance, fees, report cards, and notifications.</p>
+          <div><label className="text-xs text-muted mb-1 block">Guardian name</label><input className="input-field w-full" value={parentForm.parentName} onChange={(e) => setParentForm({ ...parentForm, parentName: e.target.value })} /></div>
+          <div><label className="text-xs text-muted mb-1 block">Guardian email *</label><input className="input-field w-full" type="email" required value={parentForm.parentEmail} onChange={(e) => setParentForm({ ...parentForm, parentEmail: e.target.value })} /></div>
+          <div><label className="text-xs text-muted mb-1 block">Guardian phone</label><input className="input-field w-full" value={parentForm.parentPhone} onChange={(e) => setParentForm({ ...parentForm, parentPhone: e.target.value })} /></div>
+          <div className="flex justify-end gap-3 pt-4 border-t border-border"><button type="button" onClick={() => setIsParentModalOpen(false)} className="btn-ghost">Cancel</button><button type="submit" className="btn-primary">Create portal access</button></div>
         </form>
       </Modal>
     </div>

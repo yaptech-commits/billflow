@@ -13,6 +13,8 @@ import {
   assignFeeToStudent,
   getStudentFees,
   recordStudentFeePayment,
+  enqueueSchoolNotification,
+  DEFAULT_PROPERTY_ID,
 } from "@/lib/school-db";
 import { BusinessProfile, getBusinessProfile } from "@/lib/db";
 import { toast } from "react-hot-toast";
@@ -20,8 +22,8 @@ import { DollarSign, Plus, FileText, CheckCircle2, Clock, AlertCircle, CreditCar
 import Modal from "@/components/ui/Modal";
 
 export default function FeesPage() {
-  const { businessId, role } = useAuth();
-  const propertyId = "default_property";
+  const { businessId, role, propertyId: authPropertyId } = useAuth();
+  const propertyId = authPropertyId || DEFAULT_PROPERTY_ID;
   const [students, setStudents] = useState<Student[]>([]);
   const [feeStructures, setFeeStructures] = useState<FeeStructure[]>([]);
   const [studentFees, setStudentFees] = useState<StudentFee[]>([]);
@@ -104,6 +106,20 @@ export default function FeesPage() {
         amount: struct.amount,
         dueDate: struct.dueDate,
       });
+      if (student.guardianEmail || student.guardianPhone) {
+        await enqueueSchoolNotification({
+          businessId,
+          propertyId,
+          studentId: student.id || "",
+          studentName: student.fullName,
+          recipientEmail: student.guardianEmail,
+          recipientPhone: student.guardianPhone,
+          title: "New school fee assigned",
+          message: `${struct.title} of ${struct.amount.toFixed(2)} has been assigned to ${student.fullName}. Due ${struct.dueDate}.`,
+          type: "fee_assigned",
+          channels: ["in_app", "email", "sms"],
+        });
+      }
       toast.success(`Assigned ${struct.title} to ${student.fullName}`);
       setIsAssignOpen(false);
       loadData();
@@ -117,6 +133,21 @@ export default function FeesPage() {
     if (!selectedFee || !selectedFee.id) return;
     try {
       await recordStudentFeePayment(selectedFee.id, payAmount);
+      const student = students.find((item) => item.id === selectedFee.studentId);
+      if (student && (student.guardianEmail || student.guardianPhone)) {
+        await enqueueSchoolNotification({
+          businessId: businessId || "",
+          propertyId,
+          studentId: student.id || selectedFee.studentId,
+          studentName: student.fullName,
+          recipientEmail: student.guardianEmail,
+          recipientPhone: student.guardianPhone,
+          title: "School fee payment received",
+          message: `A payment of ${payAmount.toFixed(2)} was recorded for ${selectedFee.feeTitle}.`,
+          type: "fee_payment",
+          channels: ["in_app", "email", "sms"],
+        });
+      }
       toast.success("Fee payment recorded successfully.");
       setIsPayOpen(false);
       setSelectedFee(null);

@@ -11,6 +11,8 @@ import {
   saveAssessment,
   deleteAssessment,
   getAttendance,
+  enqueueSchoolNotification,
+  DEFAULT_PROPERTY_ID,
 } from "@/lib/school-db";
 import { getBusinessProfile, BusinessProfile } from "@/lib/db";
 import { Award, FileText, Printer, Plus, Trash2, Search, BookOpen, CheckCircle } from "lucide-react";
@@ -18,8 +20,8 @@ import Modal from "@/components/ui/Modal";
 import toast from "react-hot-toast";
 
 export default function SchoolReportsPage() {
-  const { businessId, role } = useAuth();
-  const propertyId = "default_property";
+  const { businessId, role, propertyId: authPropertyId } = useAuth();
+  const propertyId = authPropertyId || DEFAULT_PROPERTY_ID;
   const [students, setStudents] = useState<Student[]>([]);
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
@@ -44,7 +46,7 @@ export default function SchoolReportsPage() {
     const [stList, assList, attList, prof] = await Promise.all([
       getStudents(businessId, propertyId),
       getAssessments(businessId, propertyId, undefined, selectedTerm),
-      getAttendance(businessId, propertyId),
+      getAttendance(businessId, propertyId, undefined, selectedTerm),
       getBusinessProfile(businessId),
     ]);
     setStudents(stList);
@@ -90,6 +92,31 @@ export default function SchoolReportsPage() {
       loadData();
     } catch {
       toast.error("Failed to save assessment.");
+    }
+  };
+
+  const handlePublishReportCard = async () => {
+    if (!businessId || !activeStudent) return;
+    if (!activeStudent.guardianEmail && !activeStudent.guardianPhone) {
+      toast.error("Add a guardian email or phone before publishing this report card.");
+      return;
+    }
+    try {
+      await enqueueSchoolNotification({
+        businessId,
+        propertyId,
+        studentId: activeStudent.id!,
+        studentName: activeStudent.fullName,
+        recipientEmail: activeStudent.guardianEmail,
+        recipientPhone: activeStudent.guardianPhone,
+        title: "Report card published",
+        message: `${selectedTerm} report card for ${activeStudent.fullName} is now available in the BillFlow parent portal.`,
+        type: "report_card_published",
+        channels: ["in_app", "email", "sms"],
+      });
+      toast.success("Guardian notification queued.");
+    } catch (err: any) {
+      toast.error(err.message || "Could not publish the report card notification.");
     }
   };
 
@@ -185,12 +212,20 @@ export default function SchoolReportsPage() {
                   </h3>
                   <p className="text-xs text-muted">{selectedTerm} Official Academic Evaluation</p>
                 </div>
-                <button
-                  onClick={() => window.print()}
-                  className="btn-ghost border border-border text-xs px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-accent/40 text-foreground"
-                >
-                  <Printer size={14} /> Print / Export PDF
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handlePublishReportCard}
+                    className="btn-primary text-xs px-3 py-2 rounded-lg"
+                  >
+                    Notify guardian
+                  </button>
+                  <button
+                    onClick={() => window.print()}
+                    className="btn-ghost border border-border text-xs px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-accent/40 text-foreground"
+                  >
+                    <Printer size={14} /> Print / Export PDF
+                  </button>
+                </div>
               </div>
 
               {/* Student Metadata Card */}

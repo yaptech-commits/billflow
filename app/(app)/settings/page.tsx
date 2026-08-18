@@ -8,6 +8,12 @@ import {
   DEFAULT_ACCENT_COLOR, MAX_LOGO_BYTES, CURRENCIES, DEFAULT_CURRENCY,
   DEFAULT_TAX_RATE, DEFAULT_TAX_LABEL,
 } from "@/lib/db";
+import {
+  DEFAULT_PROPERTY_ID,
+  getNotificationPreferences,
+  saveNotificationPreferences,
+  SchoolNotificationPreferences,
+} from "@/lib/school-db";
 import toast from "react-hot-toast";
 import { Upload, X } from "lucide-react";
 
@@ -23,7 +29,8 @@ function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
 }
 
 export default function SettingsPage() {
-  const { user, businessId, role } = useAuth();
+  const { user, businessId, role, propertyId: authPropertyId } = useAuth();
+  const propertyId = authPropertyId || DEFAULT_PROPERTY_ID;
   const [name, setName] = useState(user?.displayName ?? "");
   const [saving, setSaving] = useState(false);
 
@@ -104,6 +111,27 @@ export default function SettingsPage() {
 
   const toggle = (key: keyof typeof toggles) =>
     setToggles(t => ({ ...t, [key]: !t[key] }));
+
+  const [schoolNotifications, setSchoolNotifications] = useState<SchoolNotificationPreferences | null>(null);
+  const [schoolNotificationsSaving, setSchoolNotificationsSaving] = useState(false);
+
+  useEffect(() => {
+    if (!businessId) return;
+    getNotificationPreferences(businessId, propertyId).then(setSchoolNotifications).catch(() => undefined);
+  }, [businessId, propertyId]);
+
+  const saveSchoolNotificationSettings = async () => {
+    if (!businessId || !schoolNotifications || role !== "owner") return;
+    setSchoolNotificationsSaving(true);
+    try {
+      await saveNotificationPreferences({ ...schoolNotifications, businessId, propertyId });
+      toast.success("School notification preferences saved");
+    } catch (err: any) {
+      toast.error(err.message || "Could not save school notification preferences");
+    } finally {
+      setSchoolNotificationsSaving(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!auth.currentUser) return;
@@ -290,6 +318,35 @@ export default function SettingsPage() {
           </div>
         ))}
       </div>
+
+      {role === "owner" && schoolNotifications && (
+        <div className="card">
+          <div className="flex items-start justify-between gap-4 mb-5">
+            <div><h2 className="font-grotesk font-semibold text-white">School notifications</h2><p className="text-xs text-muted mt-1">Choose which guardian updates are placed in the notification outbox for this property.</p></div>
+            <span className={`text-[11px] px-2 py-1 rounded ${schoolNotifications.enabled ? "bg-emerald-500/10 text-emerald-300" : "bg-border text-muted"}`}>{schoolNotifications.enabled ? "Enabled" : "Paused"}</span>
+          </div>
+          <div className="space-y-1">
+            {[
+              ["enabled", "Send school notifications", "Pause all school notification events"],
+              ["attendanceAbsence", "Attendance absence alerts", "Notify guardians when a student is marked absent"],
+              ["feeAssigned", "Fee assignment alerts", "Notify guardians when a fee is assigned"],
+              ["feePayment", "Fee payment receipts", "Notify guardians when a fee payment is recorded"],
+              ["reportCardPublished", "Report card alerts", "Notify guardians when report cards are published"],
+              ["inApp", "Parent portal inbox", "Keep a copy in the parent portal"],
+              ["email", "Email delivery intent", "Queue email delivery when a sender is configured"],
+              ["sms", "SMS delivery intent", "Queue SMS delivery when a sender is configured"],
+              ["push", "Push delivery intent", "Queue push delivery when a sender is configured"],
+            ].map(([key, label, sub]) => (
+              <div key={key} className="flex items-center justify-between py-3 border-b border-border last:border-0">
+                <div><p className="text-sm text-surface">{label}</p><p className="text-xs text-muted mt-0.5">{sub}</p></div>
+                <Toggle on={Boolean(schoolNotifications[key as keyof SchoolNotificationPreferences])} onToggle={() => setSchoolNotifications((current) => current ? { ...current, [key]: !current[key as keyof SchoolNotificationPreferences] } : current)} />
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-end mt-4"><button onClick={saveSchoolNotificationSettings} disabled={schoolNotificationsSaving} className="btn-primary">{schoolNotificationsSaving ? "Saving…" : "Save school notification settings"}</button></div>
+          <p className="text-[11px] text-muted mt-3">The browser-safe app records notification intents in Firestore. Connect a trusted server-side email/SMS sender to deliver external messages without exposing provider secrets.</p>
+        </div>
+      )}
 
       {/* Danger zone */}
       <div className="card border-red/20">

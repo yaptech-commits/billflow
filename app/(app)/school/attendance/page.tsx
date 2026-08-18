@@ -9,6 +9,8 @@ import {
   getAttendance,
   recordAttendance,
   deleteAttendance,
+  enqueueSchoolNotification,
+  DEFAULT_PROPERTY_ID,
 } from "@/lib/school-db";
 import { getBusinessProfile, BusinessProfile } from "@/lib/db";
 import { CheckSquare, Calendar, Search, Trash2, Plus, Check, X, AlertCircle } from "lucide-react";
@@ -16,14 +18,15 @@ import Modal from "@/components/ui/Modal";
 import toast from "react-hot-toast";
 
 export default function AttendancePage() {
-  const { businessId, role } = useAuth();
-  const propertyId = "default_property";
+  const { businessId, role, propertyId: authPropertyId } = useAuth();
+  const propertyId = authPropertyId || DEFAULT_PROPERTY_ID;
   const [students, setStudents] = useState<Student[]>([]);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
   
   const todayStr = new Date().toISOString().split("T")[0];
   const [selectedDate, setSelectedDate] = useState(todayStr);
+  const [selectedTerm, setSelectedTerm] = useState(`Term 1, ${new Date().getFullYear()}`);
   const [selectedClass, setSelectedClass] = useState("All");
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -38,7 +41,7 @@ export default function AttendancePage() {
     if (!businessId) return;
     const [stList, attList, prof] = await Promise.all([
       getStudents(businessId, propertyId),
-      getAttendance(businessId, propertyId, selectedDate),
+      getAttendance(businessId, propertyId, selectedDate, selectedTerm),
       getBusinessProfile(businessId),
     ]);
     setStudents(stList);
@@ -48,7 +51,7 @@ export default function AttendancePage() {
 
   useEffect(() => {
     loadData();
-  }, [businessId, propertyId, selectedDate]);
+  }, [businessId, propertyId, selectedDate, selectedTerm]);
 
   const filteredStudents = students.filter((s) => {
     if (selectedClass !== "All" && s.classGrade !== selectedClass) return false;
@@ -76,9 +79,24 @@ export default function AttendancePage() {
         studentName: student.fullName,
         classGrade: student.classGrade,
         date: selectedDate,
+        term: selectedTerm,
         status,
         remarks: "",
       });
+      if (status === "absent" && (student.guardianEmail || student.guardianPhone)) {
+        await enqueueSchoolNotification({
+          businessId,
+          propertyId,
+          studentId: student.id!,
+          studentName: student.fullName,
+          recipientEmail: student.guardianEmail,
+          recipientPhone: student.guardianPhone,
+          title: "Attendance absence recorded",
+          message: `${student.fullName} was marked absent on ${selectedDate}. Please contact the school if this needs correction.`,
+          type: "attendance_absence",
+          channels: ["in_app", "email", "sms"],
+        });
+      }
       toast.success(`Marked ${student.fullName} as ${status}`);
       loadData();
     } catch (err) {
@@ -101,8 +119,23 @@ export default function AttendancePage() {
           studentName: st.fullName,
           classGrade: st.classGrade,
           date: selectedDate,
+          term: selectedTerm,
           status,
         });
+        if (status === "absent" && (st.guardianEmail || st.guardianPhone)) {
+          await enqueueSchoolNotification({
+              businessId,
+              propertyId,
+              studentId: st.id!,
+              studentName: st.fullName,
+              recipientEmail: st.guardianEmail,
+              recipientPhone: st.guardianPhone,
+              title: "Attendance absence recorded",
+              message: `${st.fullName} was marked absent on ${selectedDate}.`,
+              type: "attendance_absence",
+            channels: ["in_app", "email", "sms"],
+          });
+        }
       }
       toast.success(`Bulk marked ${filteredStudents.length} students as ${status}`);
       loadData();
@@ -136,6 +169,12 @@ export default function AttendancePage() {
               onChange={(e) => setSelectedDate(e.target.value)}
               className="bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-gold"
             />
+          </div>
+          <div>
+            <label className="block text-xs text-muted mb-1">Term</label>
+            <select value={selectedTerm} onChange={(e) => setSelectedTerm(e.target.value)} className="bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-gold">
+              {[1, 2, 3].map((term) => <option key={term}>{`Term ${term}, ${new Date().getFullYear()}`}</option>)}
+            </select>
           </div>
           <div>
             <label className="block text-xs text-muted mb-1">Filter Class</label>

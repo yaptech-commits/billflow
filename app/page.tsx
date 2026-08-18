@@ -1,18 +1,16 @@
 "use client";
 import { useEffect } from "react";
 export const dynamic = 'force-dynamic';
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 
 export default function Home() {
   const { user, loading } = useAuth();
-  const router = useRouter();
 
   useEffect(() => {
     if (!loading) {
-      router.replace(user ? "/dashboard" : "/auth/login");
+      window.location.assign(user ? "/dashboard" : "/auth/login");
     }
-  }, [user, loading, router]);
+  }, [user, loading]);
 
   return (
     <div className="min-h-screen bg-black flex items-center justify-center">

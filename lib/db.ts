@@ -171,7 +171,7 @@ export interface StockMovement {
   createdAt?: Timestamp | null;
 }
 export type StaffStatus = "pending" | "active";
-export type StaffRole = "owner" | "salesperson";
+export type StaffRole = "owner" | "salesperson" | "superadmin";
 
 export interface Staff {
   id?: string;
@@ -801,6 +801,14 @@ export async function resolveBusinessContext(
   uid: string,
   email: string
 ): Promise<{ businessId: string; role: StaffRole; staffId?: string }> {
+  const configuredSuperAdmins = (process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAILS || "admin@billflow.com")
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+  if (configuredSuperAdmins.includes(email.trim().toLowerCase())) {
+    return { businessId: "admin", role: "superadmin" };
+  }
+
   // Already-claimed staff record for this uid takes priority.
   const claimedSnap = await getDocs(
     query(col("staff"), where("staffUid", "==", uid))
