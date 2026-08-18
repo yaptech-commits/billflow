@@ -259,7 +259,7 @@ export interface Staff {
 }
 
 export type BusinessType = "general" | "pharmacy" | "hotel" | "coldstore" | "school";
-export type BusinessModule = "general" | "pharmacy" | "hotel" | "coldstore";
+export type BusinessModule = "general" | "pharmacy" | "hotel" | "coldstore" | "school";
 
 export interface BusinessProfile {
   businessId: string;

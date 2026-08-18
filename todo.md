@@ -1,5 +1,14 @@
 # Suggested Upgrades Implementation
 
+## School dashboard statistics
+
+- [x] Inspect the existing dashboard and school collections/helpers.
+- [x] Add property-scoped metrics for students, classes, attendance, fees, payments, and report cards.
+- [x] Render school statistics only for school accounts and Super Admin school context.
+- [x] Add loading, empty, refresh, and error states without fabricated values.
+- [x] Verify TypeScript, production build, permissions, and property_id filters.
+- [ ] Commit and push the school dashboard statistics update with `ayindenabawisdom@gmail.com`.
+
 ## Classes page
 
 ### Classes enhancements

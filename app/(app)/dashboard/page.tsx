@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { getInvoices, getPayments, getClients, getBusinessProfile, getProducts, getHotelRooms, getReservations, getGuestFolio, getHousekeepingTasks, getPrescriptionsByBusiness, Invoice, Payment, BusinessProfile, BusinessModule, CURRENCIES } from "@/lib/db";
 import { getProductBatchesForBusiness, getInsuranceClaimsForBusiness, getStockAdjustmentsForBusiness, getControlledSubstanceLogsForBusiness } from "@/lib/pharmacy-db";
+import { buildTermAnalytics, getAssessments, getAttendance, getAvailableTerms, getSchoolClasses, getStudentFees, getStudents } from "@/lib/school-db";
 import StatCard from "@/components/ui/StatCard";
 import Badge from "@/components/ui/Badge";
 import { formatMoney } from "@/lib/utils";
@@ -17,6 +18,7 @@ function resolveActiveModules(profile: BusinessProfile | null): BusinessModule[]
     case "hotel": return ["hotel"];
     case "pharmacy": return ["pharmacy"];
     case "coldstore": return ["coldstore"];
+    case "school": return ["school"];
     default: return ["general"];
   }
 }
@@ -102,6 +104,27 @@ export default function DashboardPage() {
           safe(getStockAdjustmentsForBusiness(businessId), []),
         ]);
         nextData.coldstore = { products, batches, adjustments };
+      }
+      if (modules.includes("school")) {
+        const propertyId = prof?.propertyId || "default_property";
+        const [students, classes, fees, attendance, assessments] = await Promise.all([
+          safe(getStudents(businessId, propertyId), []),
+          safe(getSchoolClasses(businessId, propertyId), []),
+          safe(getStudentFees(businessId, propertyId), []),
+          safe(getAttendance(businessId, propertyId), []),
+          safe(getAssessments(businessId, propertyId), []),
+        ]);
+        const terms = getAvailableTerms(assessments, attendance);
+        const term = terms[terms.length - 1] || "";
+        nextData.school = {
+          students,
+          classes,
+          fees,
+          attendance,
+          assessments,
+          term,
+          analytics: buildTermAnalytics(students, assessments, attendance, term),
+        };
       }
       setModuleData(nextData);
     } catch (error) {

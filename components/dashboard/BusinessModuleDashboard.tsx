@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AlertTriangle, BedDouble, CalendarCheck, CheckCircle2, ClipboardList, ConciergeBell, CreditCard, Pill, ShieldCheck, Thermometer, Truck, Users, Warehouse } from "lucide-react";
 import StatCard from "@/components/ui/StatCard";
 import { BusinessModule, BusinessProfile, ControlledSubstanceLog, GuestFolio, HotelRoom, HousekeepingTask, InsuranceClaim, Invoice, Product, ProductBatch, Prescription, Reservation, StockAdjustment } from "@/lib/db";
+import { Assessment, AttendanceRecord, SchoolClass, Student, StudentFee, TermAnalytics } from "@/lib/school-db";
 import { formatMoney } from "@/lib/utils";
 
 export interface HotelDashboardModuleData {
@@ -24,6 +25,16 @@ export interface PharmacyDashboardModuleData {
   invoices: Invoice[];
 }
 
+export interface SchoolDashboardModuleData {
+  students: Student[];
+  classes: SchoolClass[];
+  fees: StudentFee[];
+  attendance: AttendanceRecord[];
+  assessments: Assessment[];
+  term: string;
+  analytics: TermAnalytics;
+}
+
 export interface DashboardModuleData {
   hotel?: HotelDashboardModuleData;
   pharmacy?: PharmacyDashboardModuleData;
@@ -32,6 +43,7 @@ export interface DashboardModuleData {
     batches: ProductBatch[];
     adjustments: StockAdjustment[];
   };
+  school?: SchoolDashboardModuleData;
 }
 
 function toDate(value: any): Date | null {
@@ -117,6 +129,33 @@ function PharmacySection({ data, profile }: { data: PharmacyDashboardModuleData;
   return <section className="space-y-4 mb-8"><SectionHeading title="Pharmacy operations" description="Drug sales, stock risk, clinical activity, and claims visibility." href="/drugs" icon={<Pill size={18} />} /><div className="grid grid-cols-2 md:grid-cols-4 gap-4"><ModuleStat href="/reports" label="Drug sales revenue" value={formatMoney(drugRevenue, profile.currency)} delta="Paid invoices containing drugs" accent="gold" /><ModuleStat href="/expiry-alerts" label="Expiry alerts" value={String(expiryAlerts.length)} delta="Next 30 days" trend={expiryAlerts.length ? "down" : "up"} accent={expiryAlerts.length ? "red" : "green"} /><ModuleStat href="/products" label="Low-stock drugs" value={String(lowStock.length)} delta="At or below reorder level" trend={lowStock.length ? "down" : "up"} accent={lowStock.length ? "red" : "green"} /><ModuleStat href="/prescriptions" label="Prescriptions" value={String(prescriptionsToday)} delta={`${prescriptionsWeek} in the last 7 days`} accent="blue" /></div><div className="grid grid-cols-2 md:grid-cols-4 gap-4"><ModuleStat href="/insurance-claims" label="Claims pending" value={String(claims.pending)} delta={`${claims.approved} approved / ${claims.rejected} rejected`} accent="gold" /><ModuleStat href="/controlled-substances" label="Controlled dispensed" value={String(controlledToday)} delta="Units today" accent="red" /><ModuleStat href="/stock-adjustments" label="Recent adjustments" value={String(data.adjustments.length)} delta="Loss and stock corrections" accent="blue" /><ModuleStat href="/drugs" label="Tracked drug SKUs" value={String(drugProducts.length)} delta="Products in pharmacy view" accent="green" /></div><div className="grid md:grid-cols-3 gap-5"><div className="card md:col-span-2"><div className="flex items-center justify-between mb-4"><div><h3 className="font-grotesk font-semibold text-white">Top-selling drugs</h3><p className="text-xs text-muted mt-1">Derived from the existing invoice item lines.</p></div><Pill className="text-gold" size={18} /></div>{topDrugEntries.length === 0 ? <p className="text-sm text-muted py-6 text-center">No drug sales recorded yet.</p> : <div className="space-y-3">{topDrugEntries.map(([name, quantity], index) => <div key={name} className="flex items-center justify-between"><div className="flex items-center gap-3"><span className="text-xs text-muted w-4">{index + 1}.</span><span className="text-sm text-surface">{name}</span></div><span className="text-xs text-muted">{quantity} sold</span></div>)}</div>}</div><div className="card"><h3 className="font-grotesk font-semibold text-white mb-4">Recent adjustments</h3>{recentAdjustments.length === 0 ? <p className="text-sm text-muted py-5 text-center">No stock adjustments.</p> : <div className="space-y-3">{recentAdjustments.map(item => <div key={item.id} className="border-b border-border last:border-0 pb-2"><p className="text-sm text-surface truncate">{item.productName}</p><p className="text-xs text-muted">{item.reason} · {item.quantityAdjusted}</p></div>)}</div>}</div></div></section>;
 }
 
+function SchoolSection({ data, profile }: { data: SchoolDashboardModuleData; profile: BusinessProfile }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const activeStudents = data.students.filter(student => student.status === "active");
+  const classNames = new Set([
+    ...data.classes.map(item => item.name.trim()).filter(Boolean),
+    ...activeStudents.map(student => (student.classGrade || "Unassigned").trim() || "Unassigned"),
+  ]);
+  const todayAttendance = data.attendance.filter(record => record.date === today);
+  const attendanceMarked = todayAttendance.filter(record => activeStudents.some(student => student.id === record.studentId));
+  const present = attendanceMarked.filter(record => record.status === "present" || record.status === "excused").length;
+  const absent = attendanceMarked.filter(record => record.status === "absent").length;
+  const late = attendanceMarked.filter(record => record.status === "late").length;
+  const attendanceRate = attendanceMarked.length ? Math.round((present / attendanceMarked.length) * 100) : 0;
+  const feeTotal = data.fees.reduce((sum, fee) => sum + Number(fee.amount || 0), 0);
+  const feePaid = data.fees.reduce((sum, fee) => sum + Number(fee.amountPaid || 0), 0);
+  const feeOutstanding = Math.max(0, feeTotal - feePaid);
+  const assessedStudents = new Set(data.analytics.students.filter(row => row.assessmentCount > 0).map(row => row.studentId)).size;
+  const studentClassCounts = activeStudents.reduce((counts, student) => {
+    const className = (student.classGrade || "Unassigned").trim() || "Unassigned";
+    counts[className] = (counts[className] || 0) + 1;
+    return counts;
+  }, {} as Record<string, number>);
+  const leadingClasses = Object.entries(studentClassCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+  return <section className="space-y-4 mb-8"><SectionHeading title={`${profile.propertyName || profile.businessName} · School`} description="Enrollment, attendance, fee collection, and term performance for this school property." href="/school/analytics" icon={<Users size={18} />} /><div className="grid grid-cols-2 md:grid-cols-4 gap-4"><ModuleStat href="/school/students" label="Active students" value={String(activeStudents.length)} delta={`${data.students.length} total student records`} accent="blue" /><ModuleStat href="/school/classes" label="Classes" value={String(classNames.size)} delta={`${leadingClasses.length ? leadingClasses[0][0] : "No enrollment yet"} has the largest roster`} accent="gold" /><ModuleStat href="/school/attendance" label="Today's attendance" value={attendanceMarked.length ? `${attendanceRate}%` : "Not marked"} delta={`${present} present · ${absent} absent · ${late} late`} trend={absent ? "down" : "up"} accent={absent ? "red" : "green"} /><ModuleStat href="/school/fees" label="Outstanding fees" value={formatMoney(feeOutstanding, profile.currency)} delta={`${formatMoney(feePaid, profile.currency)} collected`} trend={feeOutstanding ? "down" : "up"} accent={feeOutstanding ? "red" : "green"} /></div><div className="grid grid-cols-2 md:grid-cols-4 gap-4"><ModuleStat href="/school/fees" label="Fees assigned" value={formatMoney(feeTotal, profile.currency)} delta={`${data.fees.length} fee records`} accent="gold" /><ModuleStat href="/school/analytics" label="Term average" value={`${data.analytics.averageScore.toFixed(1)}%`} delta={data.term ? `Selected term: ${data.term}` : "No term selected"} accent="blue" /><ModuleStat href="/school/analytics" label="Pass rate" value={`${data.analytics.passRate.toFixed(1)}%`} delta={`${data.analytics.studentCount} students in term scope`} accent="green" /><ModuleStat href="/school/reports" label="Report-card coverage" value={`${assessedStudents}/${activeStudents.length || data.students.length}`} delta="Students with assessments" accent="gold" /></div><div className="grid md:grid-cols-3 gap-5"><div className="card md:col-span-2"><div className="flex items-center justify-between mb-4"><div><h3 className="font-grotesk font-semibold text-white">Class enrollment</h3><p className="text-xs text-muted mt-1">Active students grouped by class in this property.</p></div><Link href="/school/classes" className="text-xs text-gold hover:underline">Manage classes</Link></div>{leadingClasses.length === 0 ? <p className="text-sm text-muted py-6 text-center">No active student enrollment recorded yet.</p> : <div className="space-y-3">{leadingClasses.map(([name, count]) => <div key={name}><div className="flex items-center justify-between text-sm mb-1"><span className="text-surface">{name}</span><span className="text-white font-semibold">{count}</span></div><div className="h-2 rounded-full bg-white/10 overflow-hidden"><div className="h-full rounded-full bg-gold" style={{ width: `${Math.min(100, Math.round((count / Math.max(1, activeStudents.length)) * 100))}%` }} /></div></div>)}</div>}</div><div className="card"><h3 className="font-grotesk font-semibold text-white mb-4">Attendance today</h3><div className="space-y-3 text-sm"><div className="flex justify-between text-surface"><span>Marked</span><span className="text-white font-semibold">{attendanceMarked.length}/{activeStudents.length}</span></div><div className="flex justify-between text-surface"><span>Present / excused</span><span className="text-green font-semibold">{present}</span></div><div className="flex justify-between text-surface"><span>Absent</span><span className="text-red font-semibold">{absent}</span></div><div className="flex justify-between text-surface"><span>Late</span><span className="text-gold font-semibold">{late}</span></div></div><Link href="/school/attendance" className="inline-block text-xs text-gold hover:underline mt-5">Open attendance register</Link></div></div></section>;
+}
+
 function ColdStoreSection({ data, profile }: { data: NonNullable<DashboardModuleData["coldstore"]>; profile: BusinessProfile }) {
   const freshness = data.batches.filter(batch => isWithinDays(batch.expiryDate, 30));
   const wastage = data.adjustments.filter(item => item.reason === "wastage" || item.reason === "damage" || item.reason === "expired");
@@ -125,5 +164,5 @@ function ColdStoreSection({ data, profile }: { data: NonNullable<DashboardModule
 }
 
 export default function BusinessModuleDashboard({ modules, data, profile }: { modules: BusinessModule[]; data: DashboardModuleData; profile: BusinessProfile }) {
-  return <div>{modules.includes("hotel") && data.hotel ? <HotelSection data={data.hotel} profile={profile} /> : null}{modules.includes("pharmacy") && data.pharmacy ? <PharmacySection data={data.pharmacy} profile={profile} /> : null}{modules.includes("coldstore") && data.coldstore ? <ColdStoreSection data={data.coldstore} profile={profile} /> : null}</div>;
+  return <div>{modules.includes("school") && data.school ? <SchoolSection data={data.school} profile={profile} /> : null}{modules.includes("hotel") && data.hotel ? <HotelSection data={data.hotel} profile={profile} /> : null}{modules.includes("pharmacy") && data.pharmacy ? <PharmacySection data={data.pharmacy} profile={profile} /> : null}{modules.includes("coldstore") && data.coldstore ? <ColdStoreSection data={data.coldstore} profile={profile} /> : null}</div>;
 }
