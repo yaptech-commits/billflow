@@ -15,7 +15,7 @@ import {
 import { getBusinessProfile, BusinessProfile } from "@/lib/db";
 import { Award, FileText, Printer, Plus, Trash2, Search, BookOpen, CheckCircle } from "lucide-react";
 import Modal from "@/components/ui/Modal";
-import { toast } from "sonner";
+import toast from "react-hot-toast";
 
 export default function SchoolReportsPage() {
   const { businessId, role } = useAuth();
@@ -282,7 +282,6 @@ export default function SchoolReportsPage() {
                     {Number(averageScore) >= 70
                       ? "Excellent academic performance! Keep up the brilliant work."
                       : Number(averageScore) >= 50
-                      credits
                       ? "Satisfactory performance. More effort needed in weaker subjects."
                       : "Needs significant academic improvement and regular attendance."}
                   </p>
@@ -298,7 +297,7 @@ export default function SchoolReportsPage() {
       </div>
 
       {/* Add Assessment Modal */}
-      <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Record Subject Score">
+      <Modal open={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Record Subject Score">
         <form onSubmit={handleSaveAssessment} className="space-y-4">
           <div>
             <label className="block text-xs text-muted mb-1">Student</label>

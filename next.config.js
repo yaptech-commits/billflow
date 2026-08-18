@@ -7,5 +7,9 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
   output: "standalone",
+  staticPageGenerationTimeout: 1000,
+  experimental: {
+    missingSuspenseWithCSRBailout: false,
+  },
 };
 module.exports = nextConfig;

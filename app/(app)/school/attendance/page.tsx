@@ -13,7 +13,7 @@ import {
 import { getBusinessProfile, BusinessProfile } from "@/lib/db";
 import { CheckSquare, Calendar, Search, Trash2, Plus, Check, X, AlertCircle } from "lucide-react";
 import Modal from "@/components/ui/Modal";
-import { toast } from "sonner";
+import toast from "react-hot-toast";
 
 export default function AttendancePage() {
   const { businessId, role } = useAuth();
