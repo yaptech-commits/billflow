@@ -119,7 +119,7 @@ export interface ParentLink {
 }
 
 export type SchoolNotificationChannel = "in_app" | "email" | "sms" | "push";
-export type SchoolNotificationType = "attendance_absence" | "fee_assigned" | "fee_payment" | "report_card_published";
+export type SchoolNotificationType = "attendance_absence" | "fee_assigned" | "fee_payment" | "report_card_published" | "announcement";
 export type SchoolNotificationStatus = "queued" | "sent" | "failed" | "read";
 
 export interface SchoolNotification {
@@ -808,6 +808,7 @@ export interface SchoolAnnouncement {
     totalRecipients: number;
     sentCount: number;
     failedCount: number;
+    pendingCount?: number;
     attempts: SmsDeliveryAttempt[];
   };
   createdAt?: any;

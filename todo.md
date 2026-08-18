@@ -1,5 +1,12 @@
 # Suggested Upgrades Implementation
 
+## School Announcements Page
+- [x] Add a dedicated administrator page for composing announcements to parents.
+- [x] Support school-wide or class-targeted audiences with property-aware student and guardian selection.
+- [x] Add preview, publish, and delivery-state handling using the existing announcement and notification helpers.
+- [x] Preserve delivery tracking and parent-visible announcements in the existing portal.
+- [ ] Build, verify, commit, and push the announcements page with author email `ayindenabawisdom@gmail.com`.
+
 ## School Bulk Fee Assignment by Class
 - [x] Add a Bulk Assign Fees to Class action under School Fees & Billing.
 - [x] Select a property-scoped class and fee structure, then assign the fee to all matching students.
