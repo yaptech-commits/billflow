@@ -1,5 +1,14 @@
 # Suggested Upgrades Implementation
 
+## Termly student payment statements
+
+- [ ] Inspect the existing student fee payment history data and export utilities.
+- [ ] Define term-aware statement aggregation with student, class, charges, payments, and balance.
+- [ ] Add a downloadable statement document for each student without duplicating payment records.
+- [ ] Add statement access to the school fee ledger with a term selector.
+- [ ] Verify propertyId scoping, TypeScript, production build, and downloaded output.
+- [ ] Commit and push the payment statement update with `ayindenabawisdom@gmail.com`.
+
 ## Fee payment receipt student and class details
 
 - [ ] Inspect the existing fee payment receipt print/download implementation and student-fee fields.

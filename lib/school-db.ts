@@ -50,6 +50,7 @@ export interface FeeStructure {
   classGrade: string;
   amount: number;
   dueDate: string;
+  term?: string;
   createdAt?: any;
 }
 
@@ -65,6 +66,7 @@ export interface StudentFee {
   amountPaid: number;
   status: "unpaid" | "partial" | "paid";
   dueDate: string;
+  term?: string;
   createdAt?: any;
 }
 
@@ -659,4 +661,63 @@ export function buildTermAnalytics(
 
 export function getAvailableTerms(assessments: Assessment[], attendance: AttendanceRecord[]) {
   return Array.from(new Set([...assessments.map((assessment) => assessment.term), ...attendance.map((record) => record.term).filter(Boolean) as string[]])).sort();
+}
+
+
+// ─── TERMLY STUDENT PAYMENT STATEMENTS ──────────────────────────────────────
+
+export interface FeePaymentLogEntry {
+  id?: string;
+  businessId: string;
+  propertyId?: string;
+  studentId: string;
+  studentName: string;
+  classGrade: string;
+  feeId: string;
+  feeTitle: string;
+  amountPaid: number;
+  paymentMethod?: string;
+  term?: string;
+  recordedAt?: any;
+}
+
+export async function recordStudentFeePaymentDetailed(
+  feeId: string,
+  paymentAmount: number,
+  paymentMethod = "Cash",
+  term = "Term 1",
+) {
+  const ref = doc(db, "studentFees", feeId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) throw new Error("Fee record not found");
+  const data = snap.data() as StudentFee;
+  const newPaid = (data.amountPaid || 0) + paymentAmount;
+  const newStatus = newPaid >= data.amount ? "paid" : newPaid > 0 ? "partial" : "unpaid";
+  await updateDoc(ref, { amountPaid: newPaid, status: newStatus });
+
+  // Also record in fee payment logs for detailed statement history
+  await addDoc(collection(db, "studentFeePayments"), {
+    businessId: data.businessId,
+    propertyId: data.propertyId || DEFAULT_PROPERTY_ID,
+    studentId: data.studentId,
+    studentName: data.studentName,
+    classGrade: data.classGrade,
+    feeId,
+    feeTitle: data.feeTitle,
+    amountPaid: paymentAmount,
+    paymentMethod,
+    term,
+    recordedAt: serverTimestamp(),
+  });
+
+  return { ...data, amountPaid: newPaid, status: newStatus } as StudentFee;
+}
+
+export async function getStudentFeePayments(businessId: string, propertyId?: string, studentId?: string, term?: string) {
+  const snap = await getDocs(query(collection(db, "studentFeePayments"), where("businessId", "==", businessId)));
+  let list = snap.docs.map((d) => ({ ...d.data(), id: d.id } as FeePaymentLogEntry));
+  list = scopedList(list, propertyId);
+  if (studentId) list = list.filter((item) => item.studentId === studentId);
+  if (term && term !== "All") list = list.filter((item) => !item.term || item.term === term);
+  return list;
 }

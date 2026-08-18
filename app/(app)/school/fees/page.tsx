@@ -7,6 +7,7 @@ import {
   SchoolClass,
   FeeStructure,
   StudentFee,
+  FeePaymentLogEntry,
   getStudents,
   getSchoolClasses,
   getFeeStructures,
@@ -14,7 +15,8 @@ import {
   deleteFeeStructure,
   assignFeeToStudent,
   getStudentFees,
-  recordStudentFeePayment,
+  getStudentFeePayments,
+  recordStudentFeePaymentDetailed,
   enqueueSchoolNotification,
   DEFAULT_PROPERTY_ID,
 } from "@/lib/school-db";
@@ -32,6 +34,18 @@ export default function FeesPage() {
   const [feeStructures, setFeeStructures] = useState<FeeStructure[]>([]);
   const [studentFees, setStudentFees] = useState<StudentFee[]>([]);
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
+  const [isStatementOpen, setIsStatementOpen] = useState(false);
+  const [statementStudentId, setStatementStudentId] = useState("");
+  const [statementTerm, setStatementTerm] = useState("Term 1");
+  const [statementData, setStatementData] = useState<{
+    student: Student;
+    fees: StudentFee[];
+    payments: FeePaymentLogEntry[];
+    totalBilled: number;
+    totalPaid: number;
+    balance: number;
+    term: string;
+  } | null>(null);
 
   const [isStructOpen, setIsStructOpen] = useState(false);
   const [isAssignOpen, setIsAssignOpen] = useState(false);
@@ -55,6 +69,7 @@ export default function FeesPage() {
     classGrade: "All",
     amount: 1000,
     dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0],
+    term: "Term 1",
   });
 
   const [assignForm, setAssignForm] = useState({
@@ -99,6 +114,7 @@ export default function FeesPage() {
         classGrade: "All",
         amount: 1000,
         dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0],
+        term: "Term 1",
       });
       loadData();
     } catch (err) {
@@ -123,6 +139,7 @@ export default function FeesPage() {
         feeTitle: struct.title,
         amount: struct.amount,
         dueDate: struct.dueDate,
+        term: struct.term || "Term 1",
       });
       if (student.guardianEmail || student.guardianPhone) {
         await enqueueSchoolNotification({
@@ -150,7 +167,7 @@ export default function FeesPage() {
     e.preventDefault();
     if (!selectedFee || !selectedFee.id) return;
     try {
-      const updatedFee = await recordStudentFeePayment(selectedFee.id, payAmount);
+      const updatedFee = await recordStudentFeePaymentDetailed(selectedFee.id, payAmount, "Cash", selectedFee.term || "Term 1");
       const student = students.find((item) => item.id === selectedFee.studentId);
       const issuedAt = new Date();
       setPaymentReceipt({
@@ -198,6 +215,25 @@ export default function FeesPage() {
   const totalBilled = studentFees.reduce((acc, f) => acc + f.amount, 0);
   const totalCollected = studentFees.reduce((acc, f) => acc + (f.amountPaid || 0), 0);
   const totalOutstanding = totalBilled - totalCollected;
+
+  const prepareStatement = async (student: Student, term: string) => {
+    if (!businessId || !student.id) return;
+    const feesForTerm = studentFees.filter((fee) => fee.studentId === student.id && (term === "Full Academic Year" || !fee.term || fee.term === term));
+    const payments = await getStudentFeePayments(businessId, propertyId, student.id, term);
+    const billed = feesForTerm.reduce((sum, fee) => sum + Number(fee.amount || 0), 0);
+    const paidFromFees = feesForTerm.reduce((sum, fee) => sum + Number(fee.amountPaid || 0), 0);
+    const paidFromLogs = payments.reduce((sum, payment) => sum + Number(payment.amountPaid || 0), 0);
+    setStatementData({
+      student,
+      fees: feesForTerm,
+      payments,
+      totalBilled: billed,
+      totalPaid: paidFromLogs || paidFromFees,
+      balance: Math.max(0, billed - (paidFromLogs || paidFromFees)),
+      term,
+    });
+  };
+
   const receiptData = paymentReceipt
     ? {
         documentTitle: "FEE RECEIPT",
@@ -242,7 +278,10 @@ export default function FeesPage() {
             Manage term fees, student billing, fee structures, and collection receipts for {businessProfile?.businessName || "School"}.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={() => setIsStatementOpen(true)} className="btn-ghost border border-border flex items-center gap-2">
+            <FileText size={16} /> Termly Statement
+          </button>
           <button onClick={() => setIsStructOpen(true)} className="btn-ghost border border-border flex items-center gap-2">
             <Plus size={16} /> New Fee Item
           </button>
@@ -365,7 +404,18 @@ export default function FeesPage() {
                             {sf.status}
                           </span>
                         </td>
-                        <td className="py-3 px-3 text-right">
+                        <td className="py-3 px-3 text-right space-x-2">
+                          <button
+                            onClick={() => {
+                              const st = students.find((s) => s.id === sf.studentId);
+                              if (st) {
+                                void prepareStatement(st, "Term 1");
+                              }
+                            }}
+                            className="px-3 py-1 bg-surface-hover/80 text-white hover:bg-surface-hover rounded text-xs font-semibold border border-border"
+                          >
+                            Statement
+                          </button>
                           {sf.status !== "paid" && (
                             <button
                               onClick={() => {
@@ -450,6 +500,19 @@ export default function FeesPage() {
                 className="input-field w-full"
               />
             </div>
+          </div>
+          <div>
+            <label className="text-xs text-muted mb-1 block">Academic Term *</label>
+            <select
+              required
+              value={structForm.term}
+              onChange={(e) => setStructForm({ ...structForm, term: e.target.value })}
+              className="input-field w-full bg-surface"
+            >
+              <option value="Term 1">Term 1</option>
+              <option value="Term 2">Term 2</option>
+              <option value="Term 3">Term 3</option>
+            </select>
           </div>
           <div className="flex justify-end gap-3 pt-4 border-t border-border">
             <button type="button" onClick={() => setIsStructOpen(false)} className="btn-ghost">
@@ -600,6 +663,177 @@ export default function FeesPage() {
               </button>
               <button type="button" onClick={handlePrintPaymentReceipt} className="btn-primary">
                 Print receipt
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Termly Statement Generator Modal */}
+      <Modal open={isStatementOpen} onClose={() => setIsStatementOpen(false)} title="Generate Termly Student Payment Statement">
+        <div className="space-y-4">
+          <div>
+            <label className="text-xs text-muted mb-1 block">Select Term *</label>
+            <select
+              value={statementTerm}
+              onChange={(e) => setStatementTerm(e.target.value)}
+              className="input-field w-full bg-surface"
+            >
+              <option value="Term 1">Term 1</option>
+              <option value="Term 2">Term 2</option>
+              <option value="Term 3">Term 3</option>
+              <option value="Full Academic Year">Full Academic Year</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-muted mb-1 block">Select Student *</label>
+            <select
+              value={statementStudentId}
+              onChange={(e) => setStatementStudentId(e.target.value)}
+              className="input-field w-full bg-surface"
+            >
+              <option value="">-- Choose Student --</option>
+              {students.map((st) => (
+                <option key={st.id} value={st.id}>
+                  {st.fullName} ({st.classGrade} - {st.admissionNumber})
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex justify-end gap-3 pt-4 border-t border-border">
+            <button type="button" onClick={() => setIsStatementOpen(false)} className="btn-ghost">
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={!statementStudentId}
+              onClick={async () => {
+                const st = students.find((s) => s.id === statementStudentId);
+                if (!st) return;
+                await prepareStatement(st, statementTerm);
+                setIsStatementOpen(false);
+              }}
+              className="btn-primary disabled:opacity-50"
+            >
+              Generate Statement
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Student Statement Preview & Download Modal */}
+      {statementData && (
+        <Modal open={Boolean(statementData)} onClose={() => setStatementData(null)} title="Termly Student Payment Statement">
+          <div className="space-y-4">
+            <div className="rounded-lg border border-border bg-surface-hover/30 p-4 space-y-3">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="font-bold text-white text-base">{statementData.student.fullName}</h3>
+                  <p className="text-xs text-muted">Class: {statementData.student.classGrade} | Admission No: {statementData.student.admissionNumber}</p>
+                </div>
+                <div className="text-right">
+                  <span className="text-xs uppercase tracking-wide font-mono px-2 py-1 rounded bg-gold/10 text-gold border border-gold/20">
+                    {statementData.term}
+                  </span>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-2 pt-2 border-t border-border/50 text-xs">
+                <div>
+                  <span className="text-muted block">Total Billed</span>
+                  <span className="font-mono font-semibold text-white">{businessProfile?.currency || "$"}{statementData.totalBilled.toLocaleString()}</span>
+                </div>
+                <div>
+                  <span className="text-muted block">Total Paid</span>
+                  <span className="font-mono font-semibold text-emerald-400">{businessProfile?.currency || "$"}{statementData.totalPaid.toLocaleString()}</span>
+                </div>
+                <div>
+                  <span className="text-muted block">Balance Due</span>
+                  <span className="font-mono font-semibold text-amber-400">{businessProfile?.currency || "$"}{statementData.balance.toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto max-h-56 border border-border rounded">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-surface border-b border-border text-muted uppercase">
+                  <tr>
+                    <th className="py-2 px-3">Entry</th>
+                    <th className="py-2 px-3">Billed</th>
+                    <th className="py-2 px-3">Paid</th>
+                    <th className="py-2 px-3">Status / Method</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {statementData.fees.length === 0 && statementData.payments.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="py-4 text-center text-muted">No fee or payment records found for this student.</td>
+                    </tr>
+                  ) : (
+                    <>
+                      {statementData.fees.map((f) => (
+                        <tr key={`fee-${f.id}`}>
+                          <td className="py-2 px-3 font-semibold text-white">{f.feeTitle}</td>
+                          <td className="py-2 px-3 font-mono">{businessProfile?.currency || "$"}{f.amount.toLocaleString()}</td>
+                          <td className="py-2 px-3 font-mono text-emerald-400">{businessProfile?.currency || "$"}{(f.amountPaid || 0).toLocaleString()}</td>
+                          <td className="py-2 px-3 uppercase text-[10px] font-bold text-muted">{f.status}</td>
+                        </tr>
+                      ))}
+                      {statementData.payments.map((payment) => (
+                        <tr key={`payment-${payment.id}`} className="bg-emerald-500/5">
+                          <td className="py-2 px-3 text-emerald-300">Payment • {payment.feeTitle}</td>
+                          <td className="py-2 px-3 text-muted">—</td>
+                          <td className="py-2 px-3 font-mono text-emerald-400">{businessProfile?.currency || "$"}{payment.amountPaid.toLocaleString()}</td>
+                          <td className="py-2 px-3 text-[10px] text-muted">{payment.paymentMethod || "Cash"}</td>
+                        </tr>
+                      ))}
+                    </>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4 border-t border-border">
+              <button type="button" onClick={() => setStatementData(null)} className="btn-ghost">
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!statementData) return;
+                  const statementReceiptData = {
+                    documentTitle: `STUDENT PAYMENT STATEMENT (${statementData.term.toUpperCase()})`,
+                    invoiceNumber: `STM-${Date.now().toString(36).toUpperCase()}`,
+                    issuedAt: new Date(),
+                    dueDate: new Date(),
+                    items: [
+                      ...statementData.fees.map((f) => ({
+                        productName: `${f.feeTitle} [${statementData.term} | Status: ${f.status.toUpperCase()}]`,
+                        quantity: 1,
+                        unitPrice: f.amount,
+                      })),
+                      ...statementData.payments.map((payment) => ({
+                        productName: `Payment received • ${payment.feeTitle} [${payment.paymentMethod || "Cash"}]`,
+                        quantity: 1,
+                        unitPrice: -Math.abs(payment.amountPaid),
+                      })),
+                    ],
+                    subtotal: statementData.totalBilled,
+                    taxAmount: 0,
+                    total: statementData.totalBilled,
+                    amountPaid: statementData.totalPaid,
+                    customerName: statementData.student.fullName,
+                    studentName: statementData.student.fullName,
+                    classGrade: statementData.student.classGrade,
+                    businessName: businessProfile?.businessName || "School",
+                    footerNote: `Term: ${statementData.term} • Total Billed: ${statementData.totalBilled.toLocaleString()} • Total Paid: ${statementData.totalPaid.toLocaleString()} • Balance Due: ${statementData.balance.toLocaleString()}`,
+                    currencyCode: businessProfile?.currency || "GHS",
+                  };
+                  downloadReceipt(statementReceiptData, `Statement_${statementData.student.fullName.replace(/\s+/g, "_")}_${statementData.term.replace(/\s+/g, "")}.html`);
+                  toast.success("Termly student payment statement downloaded successfully.");
+                }}
+                className="btn-primary flex items-center gap-2"
+              >
+                <FileText size={16} /> Download Statement HTML
               </button>
             </div>
           </div>
