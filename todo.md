@@ -1,10 +1,10 @@
 # Suggested Upgrades Implementation
 
 ## Deployed Parent Portal Verification
-- [ ] Inspect `https://billflow-blue.vercel.app/school/portal` directly and record whether it still serves the old login flow.
-- [ ] Compare the deployed result with the pushed `fix/super-admin-school-grouping` branch and identify the deployment branch/version mismatch if present.
-- [ ] Correct and push the exact source used by the live Vercel deployment, then recheck the URL.
-- [ ] Report the confirmed live result to the user.
+- [x] Inspect `https://billflow-blue.vercel.app/school/portal` directly and record whether it still serves the old login flow.
+- [x] Compare the deployed result with the pushed `fix/super-admin-school-grouping` branch and identify the deployment branch/version mismatch if present.
+- [x] Correct and push the exact source used by the live Vercel deployment, then recheck the URL.
+- [x] Report the confirmed live result to the user.
 
 ## Parent Portal Student ID/Name-Only Access
 - [x] Replace email/password login with a landing-page lookup accepting Student ID or Ward Name only.
