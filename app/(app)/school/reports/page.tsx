@@ -12,12 +12,9 @@ import {
   deleteAssessment,
   getAttendance,
   enqueueSchoolNotification,
-  getNotificationPreferences,
   DEFAULT_PROPERTY_ID,
-  SchoolNotificationChannel,
 } from "@/lib/school-db";
 import { getBusinessProfile, BusinessProfile } from "@/lib/db";
-import { buildReportCardNotificationContent } from "@/lib/school-notification-templates";
 import { Award, FileText, Printer, Plus, Trash2, Search, BookOpen, CheckCircle } from "lucide-react";
 import Modal from "@/components/ui/Modal";
 import toast from "react-hot-toast";
@@ -29,7 +26,6 @@ export default function SchoolReportsPage() {
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
-  const [notificationPreferences, setNotificationPreferences] = useState<Awaited<ReturnType<typeof getNotificationPreferences>> | null>(null);
 
   const [selectedStudentId, setSelectedStudentId] = useState("");
   const [selectedTerm, setSelectedTerm] = useState("Term 1, 2026");
@@ -47,18 +43,16 @@ export default function SchoolReportsPage() {
 
   const loadData = async () => {
     if (!businessId) return;
-    const [stList, assList, attList, prof, prefs] = await Promise.all([
+    const [stList, assList, attList, prof] = await Promise.all([
       getStudents(businessId, propertyId),
       getAssessments(businessId, propertyId, undefined, selectedTerm),
       getAttendance(businessId, propertyId, undefined, selectedTerm),
       getBusinessProfile(businessId),
-      getNotificationPreferences(businessId, propertyId),
     ]);
     setStudents(stList);
     setAssessments(assList);
     setAttendance(attList);
     setBusinessProfile(prof);
-    setNotificationPreferences(prefs);
 
     if (stList.length > 0 && !selectedStudentId) {
       setSelectedStudentId(stList[0].id!);
@@ -108,22 +102,6 @@ export default function SchoolReportsPage() {
       return;
     }
     try {
-      const prefs = notificationPreferences || await getNotificationPreferences(businessId, propertyId);
-      const content = buildReportCardNotificationContent({
-        profile: businessProfile,
-        studentName: activeStudent.fullName,
-        classGrade: activeStudent.classGrade || "Not assigned",
-        term: selectedTerm,
-        averageScore,
-        presentDays: totalPresent,
-        absentDays: totalAbsent,
-        templateSubject: prefs.reportCardEmailSubject,
-        templateBody: prefs.reportCardEmailBody,
-      });
-      const channels: SchoolNotificationChannel[] = ["in_app"];
-      if (activeStudent.guardianEmail && prefs.email !== false) channels.push("email");
-      if (activeStudent.guardianPhone && prefs.sms !== false) channels.push("sms");
-      if (activeStudent.guardianPhone && prefs.whatsapp === true) channels.push("whatsapp");
       await enqueueSchoolNotification({
         businessId,
         propertyId,
@@ -131,12 +109,10 @@ export default function SchoolReportsPage() {
         studentName: activeStudent.fullName,
         recipientEmail: activeStudent.guardianEmail,
         recipientPhone: activeStudent.guardianPhone,
-        title: content.title,
-        message: content.message,
-        html: content.html,
-        metadata: { deliveryPurpose: "report_card", term: selectedTerm, averageScore },
+        title: "Report card published",
+        message: `${selectedTerm} report card for ${activeStudent.fullName} is now available in the BillFlow parent portal.`,
         type: "report_card_published",
-        channels,
+        channels: ["in_app", "email", "sms"],
       });
       toast.success("Guardian notification queued.");
     } catch (err: any) {

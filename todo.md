@@ -1,52 +1,231 @@
 # Suggested Upgrades Implementation
 
-## General BillFlow Audit
-- [ ] Inventory routes, build state, API handlers, roles, and data-access boundaries.
-- [ ] Audit authentication, authorization, property/business scoping, secrets, and protected API routes.
-- [ ] Audit payments, notifications, destructive operations, input validation, and client error handling.
-- [ ] Fix verified defects without changing intended business behavior.
-- [ ] Rebuild, run focused checks, document residual risks, commit, and push with author email `ayindenabawisdom@gmail.com`.
-
-## Automatic Admission Letter Email
-- [x] Trigger an admission-letter email after a student is successfully registered.
-- [x] Use the existing guardian email/contact fields and property-scoped school branding.
-- [x] Queue and track email delivery without blocking or falsely failing student registration.
-- [x] Show an administrator-visible fallback when no valid guardian email is available.
-- [x] Build, verify, promote, commit, and push the automated admission email implementation with author email `ayindenabawisdom@gmail.com`.
-
-## Admission Communication Enhancements
-- [x] Add secure provider/webhook configuration guidance and validation for school email delivery.
-- [x] Add an administrator admission-letter history view with property-scoped delivery statuses and timestamps.
-- [x] Add optional guardian SMS delivery alongside admission email with channel-level tracking and fallback messaging.
-- [x] Build, verify, commit, and push the communication enhancements with author email `ayindenabawisdom@gmail.com`.
-
-## Admission Communication Follow-ups
-- [x] Add a branded admission-letter preview and confirm-before-dispatch flow.
-- [x] Add bounded automatic retries for queued admission notifications.
-- [x] Add a property-scoped CSV export for admission communication logs.
-- [x] Build, verify, commit, and push the follow-up improvements with author email `ayindenabawisdom@gmail.com`.
-
-## School Communication Extensions
-- [x] Add manual re-triggering for failed admission-letter deliveries with audit tracking.
-- [x] Add configurable branded templates for fee receipts and report-card notifications.
-- [x] Add optional WhatsApp delivery configuration and channel-level tracking.
-- [x] Build, verify, promote, commit, and push the communication additions with author email `ayindenabawisdom@gmail.com`.
-
-## Vercel Deployment Fix
-- [ ] Inspect Vercel project branch and repository integration settings.
-- [ ] Confirm the pushed BillFlow commit `15a30ee` is available on the intended branch.
-- [ ] Correct the deployment trigger or branch configuration with the least invasive action.
-- [ ] Verify a new deployment contains the security-events route and latest commit.
-
-## Vercel Hobby Plan Deployment Remediation
-- [ ] Change `vercel.json` notification retry schedule from every 15 minutes to once daily.
-- [ ] Run the production build and verify the cron configuration.
-- [ ] Commit and push the deployment-compatible change with author email `ayindenabawisdom@gmail.com`.
-- [ ] Trigger and verify the Vercel preview deployment for commit `15a30ee` plus the cron fix.
-
 ## School Admissions Page
 - [x] Create an Admissions page inside the grouped School Management features.
 - [x] Automatically list students from the existing property-scoped student records after registration.
 - [x] Add a printable admission letter for each student with school branding and admission details.
 - [x] Add Admissions to the School sidebar group and preserve existing student registration behavior.
 - [x] Build, verify, promote, commit, and push the Admissions implementation with author email `ayindenabawisdom@gmail.com`.
+
+## Automatic Student ID on Registration
+- [x] Generate a Student ID automatically when a student is registered.
+- [x] Guarantee uniqueness within the business/property and preserve existing IDs for current students.
+- [x] Show the generated ID in the registration result and student record while keeping Parent Portal lookup compatible.
+- [x] Build, verify, commit, and push the automatic Student ID implementation with author email `ayindenabawisdom@gmail.com`.
+
+## School Navigation: Announcements Grouping
+- [x] Add Announcements to the grouped School Management feature list in the sidebar.
+- [x] Preserve the existing `/school/announcements` composer route and school-only access rules.
+- [x] Ensure Announcements appears for the appropriate school owner and Super Admin views without becoming a separate top-level module.
+- [x] Build, verify, commit, and push the navigation correction with author email `ayindenabawisdom@gmail.com`.
+
+## School Announcements Page
+- [x] Add a dedicated administrator page for composing announcements to parents.
+- [x] Support school-wide or class-targeted audiences with property-aware student and guardian selection.
+- [x] Add preview, publish, and delivery-state handling using the existing announcement and notification helpers.
+- [x] Preserve delivery tracking and parent-visible announcements in the existing portal.
+- [x] Build, verify, commit, and push the announcements page with author email `ayindenabawisdom@gmail.com`.
+
+## School Bulk Fee Assignment by Class
+- [x] Add a Bulk Assign Fees to Class action under School Fees & Billing.
+- [x] Select a property-scoped class and fee structure, then assign the fee to all matching students.
+- [x] Prevent duplicate fee assignments for the same student, fee structure, term, and property.
+- [x] Show assignment results with created, skipped, and failed counts while preserving individual assignment behavior.
+- [x] Build, verify, commit, and push the bulk class fee assignment implementation with author email `ayindenabawisdom@gmail.com`.
+
+## Parent Portal Pay Fees
+- [x] Add a Pay Fees action when the selected ward has an outstanding fee balance.
+- [x] Reuse the existing BillFlow payment provider flow and link payment metadata to the student, fee statement, business, and property.
+- [x] Handle payment loading, success, cancellation, and failure states without marking fees paid from the client alone.
+- [x] Show confirmation/receipt details after the backend confirms payment and preserve the existing report and fee dashboard behavior.
+- [x] Build, verify, commit, and push the Parent Portal payment implementation with author email `ayindenabawisdom@gmail.com`.
+
+## Parent Portal Accent Color Customization
+- [x] Add an owner setting to customize the Parent Portal accent color using the existing business profile branding settings.
+- [x] Apply the saved accent color to the Parent Portal landing page without changing the main BillFlow login or unrelated modules.
+- [x] Preserve readable contrast and use the existing default accent when no custom color is configured.
+- [x] Build, verify, commit, and push the Parent Portal accent-color implementation with author email `ayindenabawisdom@gmail.com`.
+
+## Parent Portal School Branding
+- [x] Replace the fixed `BillFlow School` header label with the configured school/business name.
+- [x] Display the configured school logo in the Parent Portal header with a safe fallback when none is saved.
+- [x] Keep branding property-aware and avoid changing the main BillFlow login or unrelated pages.
+- [x] Verify the branded Parent Portal build and live route, then commit and push with author email `ayindenabawisdom@gmail.com`.
+
+## Deployed Parent Portal Verification
+- [x] Inspect `https://billflow-blue.vercel.app/school/portal` directly and record whether it still serves the old login flow.
+- [x] Compare the deployed result with the pushed `fix/super-admin-school-grouping` branch and identify the deployment branch/version mismatch if present.
+- [x] Correct and push the exact source used by the live Vercel deployment, then recheck the URL.
+- [x] Report the confirmed live result to the user.
+
+## Parent Portal Student ID/Name-Only Access
+- [x] Replace email/password login with a landing-page lookup accepting Student ID or Ward Name only.
+- [x] Match lookups against property-scoped student records and prevent cross-property results.
+- [x] Open the selected student's portal dashboard without requiring an AuthContext parent session.
+- [x] Handle duplicate ward names by requiring the parent to select the intended student before opening the dashboard.
+- [x] Verify attendance, fees, performance, report cards, and announcements are populated from the selected student.
+- [x] Commit and push the implementation with author email `ayindenabawisdom@gmail.com`.
+
+## Parent Portal Scope Correction
+- [x] Restore the main BillFlow staff/owner login and unrelated guardian-page wording to their previous behavior.
+- [x] Keep the Student ID/Name-only access change limited to `/school/portal` and its property-scoped lookup API.
+- [x] Verify the Parent Portal landing page opens the selected student dashboard without parent email/password login.
+- [x] Commit and push the scoped correction with author email `ayindenabawisdom@gmail.com`.
+
+## Parent Portal 404 Route & Navigation Fix
+- [x] Identify why Vercel returned 404 on `/school/portal` (route grouping `(app)` vs flat URL structure).
+- [x] Relocate portal page from `app/(app)/school/portal/page.tsx` to `app/school/portal/page.tsx` so the URL `/school/portal` is directly accessible without routing middleware/grouping constraints.
+- [x] Verify production build compatibility and successful push with `ayindenabawisdom@gmail.com`.
+
+## Parent Portal Report Card Viewing & Download
+- [x] Design report card review modal on Parent Portal displaying termly grades, remarks, teacher notes, and attendance summaries.
+- [x] Integrate HTML/PDF-ready printable document generation using BillFlow receipt printing patterns (`downloadReceipt`).
+- [x] Connect report card viewer to property-scoped student report card records.
+- [x] Verify production build compatibility, type safety, and property scoping.
+- [x] Commit and push the Parent Portal report card update with `ayindenabawisdom@gmail.com`.
+
+## Parent Portal Fee Payment Integration (Mobile Money & Cards)
+- [x] Design secure fee payment modal on Parent Portal supporting Mobile Money (MTN, Vodafone, AirtelTigo) and Credit/Debit Cards.
+- [x] Integrate amount entry, provider reference collection, and cash/payment confirmation handling.
+- [x] Connect parent payments to existing property-scoped student fee ledger and payment history logs.
+- [x] Verify production build compatibility, type safety, and property isolation.
+- [x] Commit and push the Parent Portal payment update with `ayindenabawisdom@gmail.com`.
+
+## Parent Portal Landing Page & Ward ID Login
+- [x] Design parent portal landing page layout with ward name and student ID lookup (`/school/portal`).
+- [x] Implement secure ward matching against property-scoped student records with attendance, fee balance, and performance overview.
+- [x] Add quick demo ward profiles for instant parent previewing.
+- [x] Verify production build compatibility, type safety, and property scoping.
+- [x] Commit and push the Parent Portal landing page update with `ayindenabawisdom@gmail.com`.
+
+## SMS Notification Delivery Tracking
+- [x] Define SMS delivery attempt schema and recipient-level tracking status (`sent`, `failed`, `pending`) with timestamp and provider message reference.
+- [x] Extend notification dispatcher and announcement data model to record SMS delivery logs per guardian.
+- [x] Add administrator-facing delivery tracking dashboard on the announcements page with success/failure breakdown.
+- [x] Verify propertyId scoping, TypeScript type safety, and production build compatibility.
+- [x] Commit and push SMS delivery tracking update with `ayindenabawisdom@gmail.com`.
+
+## Authentication & Parent Portal Preview
+- [x] Investigate deployed Firebase authentication failure (`INVALID_LOGIN_CREDENTIALS`).
+- [x] Identify that deployed Firebase project requires a registered parent account or test demo bypass for previewing.
+- [x] Implement a Parent Demo / Quick-Login option for instant parent portal previewing.
+- [x] Verify successful sign-in and parent portal preview rendering.
+- [x] Commit and push the fix with `ayindenabawisdom@gmail.com`.
+
+## Termly student payment statements
+
+- [x] Inspect the existing student fee payment history data and export utilities.
+- [x] Define term-aware statement aggregation with student, class, charges, payments, and balance.
+- [x] Add a downloadable statement document for each student without duplicating payment records.
+- [x] Add statement access to the school fee ledger with a term selector.
+- [x] Verify propertyId scoping, TypeScript, production build, and downloaded output.
+- [x] Commit and push the payment statement update with `ayindenabawisdom@gmail.com`.
+
+## Fee payment receipt student and class details
+
+- [ ] Inspect the existing fee payment receipt print/download implementation and student-fee fields.
+- [ ] Include student name and class details in the visible receipt header/details.
+- [ ] Ensure both print and download/export output contain the same student and class information.
+- [ ] Preserve existing payment totals, receipt identifiers, and payment persistence.
+- [ ] Verify TypeScript, production build, and receipt rendering behavior.
+- [ ] Commit and push the receipt update with `ayindenabawisdom@gmail.com`.
+
+## Fee assignment class selector
+
+- [x] Inspect the existing Assign Fee to Student modal and property-aware student/class loading.
+- [x] Add a class selector above the student selector.
+- [x] Filter the student dropdown by the selected class and reset invalid student selections.
+- [x] Preserve the existing fee assignment persistence and permissions.
+- [x] Verify TypeScript, production build, and route behavior.
+- [ ] Commit and push the fee-assignment class selector with `ayindenabawisdom@gmail.com`.
+
+## School dashboard quick actions
+
+- [x] Inspect the School dashboard section and existing student/attendance routes.
+- [x] Add a Register new student quick-action button linking to the existing student form.
+- [x] Add a Record attendance quick-action button linking to the existing attendance register.
+- [x] Ensure actions are visible only within the School dashboard context and respect existing permissions.
+- [x] Verify TypeScript, production build, and route behavior.
+- [ ] Commit and push the quick-action update with `ayindenabawisdom@gmail.com`.
+
+## School dashboard statistics
+
+- [x] Inspect the existing dashboard and school collections/helpers.
+- [x] Add property-scoped metrics for students, classes, attendance, fees, payments, and report cards.
+- [x] Render school statistics only for school accounts and Super Admin school context.
+- [x] Add loading, empty, refresh, and error states without fabricated values.
+- [x] Verify TypeScript, production build, permissions, and property_id filters.
+- [ ] Commit and push the school dashboard statistics update with `ayindenabawisdom@gmail.com`.
+
+## Classes page
+
+### Classes enhancements
+
+#### Class management
+
+- [x] Add create-class form with property-aware class metadata and optional teacher assignment.
+- [x] Add edit-class workflow for class name and teacher changes.
+- [x] Keep empty classes visible and preserve student grouping after edits.
+- [x] Prevent duplicate class names within the same business and property.
+- [x] Verify TypeScript, production build, permissions, and route behavior.
+- [ ] Commit and push class create/edit changes with `ayindenabawisdom@gmail.com`.
+
+
+- [x] Add property-aware class metadata with teacher assignment fields.
+- [x] Add owner/Super Admin controls to assign or change a class teacher.
+- [x] Add a guarded bulk promotion workflow with explicit source and destination classes.
+- [x] Add daily attendance summary metrics for every class.
+- [x] Verify property_id scoping, permissions, TypeScript, production build, and route behavior.
+- [ ] Commit and push the Classes enhancements with `ayindenabawisdom@gmail.com`.
+
+
+- [x] Inspect the existing property-aware student schema and query helpers.
+- [x] Add a Classes page that groups students by class and shows class/student counts.
+- [x] Add class selection and student detail rows without duplicating student records.
+- [x] Link Classes under the School group for Super Admin and school owners.
+- [x] Verify TypeScript, production build, route links, and property_id filters.
+- [ ] Commit and push the BillFlow Classes page.
+
+
+- [ ] **Mobile Thermal Bluetooth & Web Bluetooth Printing**: Add direct Web Bluetooth API printing support for 58mm and 80mm ESC/POS thermal printers in the POS success modal.
+- [ ] **Barcode Scanner Integration**: Implement continuous keyboard/USB scanner event listeners (`keypress` / barcode prefix / Enter detection) for instant product barcode lookup at POS checkout.
+- [ ] **Shift-Drawer Reconciliation**: Build cash-drawer audit breakdowns, expected vs. actual cash counts, multi-currency cash/momo/card reconciliation, and discrepancy reporting into the shift closing modal.
+- [ ] **Production Verification & Push**: Run type checks, production build, commit with `ayindenabawisdom@gmail.com`, and push to GitHub.
+
+
+## Super Admin business-type navigation grouping
+- [x] Define General, Pharmacy, Hotel, and Administration page groups.
+- [x] Add collapsible grouped sections for Super Admin navigation.
+- [x] Preserve existing owner/staff filtering and hotel/pharmacy gating.
+- [x] Validate TypeScript and route behavior.
+- [x] Commit and push the navigation update.
+
+**Design decision:** In Super Admin global view, show all page groups. When a business is selected, keep all groups visible so Super Admin retains global access, while visually highlighting the selected business type where possible.
+
+**Style reminder:** BillFlow uses a dark operational sidebar with gold active states, compact spacing, and accessible icon labels. Group headers should reinforce hierarchy without introducing a second visual language.
+
+
+## Hotel Room POS
+- [x] Map existing POS cart, tax, payment, receipt, invoice, and product-charge helpers.
+- [x] Build a hotel-only Room POS page with Free, Reserved, and Occupied room sections.
+- [x] Connect room selection to reservation, check-in, folio, partial-payment, and checkout flows.
+- [x] Reuse existing products for minibar, food, laundry, and service charges.
+- [x] Verify permissions, TypeScript, route behavior, and billing persistence.
+- [x] Commit and push the Room POS implementation.
+
+**Structural decision:** Room availability remains date-range based and room status remains reservation/housekeeping based; the Room POS page is only a front-desk entry point into those existing records and the existing POS billing pipeline.
+
+
+## Modular Business Dashboard
+- [ ] Map existing dashboard cards, charts, activity panels, and business module data sources.
+- [ ] Extend the existing dashboard with conditional General, Hotel, Pharmacy, and Cold Store sections.
+- [ ] Add clickable links for module metrics and preserve pure Hotel-only dashboard behavior.
+- [ ] Verify TypeScript, dashboard routes, permissions, and module gating.
+- [ ] Commit and push the modular dashboard implementation.
+
+
+## Shared Financial Pages Access & Data Scope
+- [x] Audit business-type page maps in business-type-config.ts and sidebar gating.
+- [x] Ensure Invoices, Payments, and Reports are present for Hotel, Pharmacy, Cold Store, and General business accounts.
+- [x] Verify that data queries filter strictly by businessId and salesperson scope.
+- [x] Validate TypeScript compilation, commit, and push changes to main.

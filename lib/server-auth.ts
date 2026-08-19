@@ -1,13 +1,11 @@
+import { NextRequest } from "next/server";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
-import { recordSecurityEvent } from "@/lib/security-events-server";
-import type { NextRequest } from "next/server";
 
 export type ServerActor = {
   uid: string;
   email: string | null;
   businessId: string;
-  role: "owner" | "salesperson" | "super_admin";
-  propertyId?: string | null;
+  role: "owner" | "salesperson";
 };
 
 export class HttpError extends Error {
@@ -17,96 +15,30 @@ export class HttpError extends Error {
   }
 }
 
-type DecodedServerToken = {
-  uid: string;
-  email?: string;
-  role?: string;
-  super_admin?: boolean;
-  admin?: boolean;
-};
-
-function configuredSuperAdminEmails() {
-  return new Set(
-    (process.env.SUPER_ADMIN_EMAILS || process.env.SUPER_ADMIN_EMAIL || "")
-      .split(",")
-      .map((email) => email.trim().toLowerCase())
-      .filter(Boolean),
-  );
-}
-
-function hasSuperAdminClaim(decoded: DecodedServerToken) {
-  const email = String(decoded.email || "").trim().toLowerCase();
-  return decoded.role === "super_admin"
-    || decoded.super_admin === true
-    || decoded.admin === true
-    || (email.length > 0 && configuredSuperAdminEmails().has(email));
-}
-
-async function decodeRequestToken(request: NextRequest): Promise<DecodedServerToken> {
+export async function requireServerActor(request: NextRequest): Promise<ServerActor> {
   const authorization = request.headers.get("authorization");
   if (!authorization?.startsWith("Bearer ")) {
-    void recordSecurityEvent({
-      category: "security_event",
-      eventType: "invalid_session",
-      severity: "medium",
-      title: "Unauthenticated API request",
-      message: "A protected API route was requested without a Firebase bearer token.",
-      route: request.nextUrl.pathname,
-      metadata: { method: request.method },
-    });
     throw new HttpError(401, "Authentication required");
   }
 
+  let decoded;
   try {
-    return await getAdminAuth().verifyIdToken(authorization.slice("Bearer ".length), true) as DecodedServerToken;
+    decoded = await getAdminAuth().verifyIdToken(authorization.slice(7), true);
   } catch {
-    void recordSecurityEvent({
-      category: "security_event",
-      eventType: "invalid_session",
-      severity: "high",
-      title: "Invalid or expired session",
-      message: "A protected API route received an invalid or expired Firebase session token.",
-      route: request.nextUrl.pathname,
-      metadata: { method: request.method },
-    });
     throw new HttpError(401, "Invalid or expired session");
   }
-}
 
-export async function requireServerActor(request: NextRequest): Promise<ServerActor> {
-  const decoded = await decodeRequestToken(request);
-  const db = getAdminDb();
-
-  if (hasSuperAdminClaim(decoded)) {
-    return {
-      uid: decoded.uid,
-      email: decoded.email ?? null,
-      businessId: "SUPER_ADMIN",
-      role: "super_admin",
-      propertyId: null,
-    };
-  }
-
-  const indexSnap = await db.collection("staffIndex").doc(decoded.uid).get();
+  const indexSnap = await getAdminDb().collection("staffIndex").doc(decoded.uid).get();
   if (!indexSnap.exists) {
-    const profileSnap = await db.collection("businessProfiles").doc(decoded.uid).get();
-    const profile = profileSnap.data() as Record<string, any> | undefined;
-    if (profile?.status === "suspended") {
-      throw new HttpError(403, "Your account has been suspended");
-    }
-    if (profile?.status === "pending") {
-      throw new HttpError(403, "Your account is pending approval");
-    }
     return {
       uid: decoded.uid,
       email: decoded.email ?? null,
       businessId: decoded.uid,
       role: "owner",
-      propertyId: typeof profile?.propertyId === "string" ? profile.propertyId : null,
     };
   }
 
-  const index = indexSnap.data() as Record<string, any> | undefined;
+  const index = indexSnap.data();
   if (
     index?.status !== "active" ||
     index?.role !== "salesperson" ||
@@ -121,29 +53,7 @@ export async function requireServerActor(request: NextRequest): Promise<ServerAc
     email: decoded.email ?? null,
     businessId: index.businessId,
     role: "salesperson",
-    propertyId: typeof index.propertyId === "string" ? index.propertyId : null,
   };
-}
-
-export async function requireServerSuperAdmin(request: NextRequest): Promise<ServerActor> {
-  const actor = await requireServerActor(request);
-  if (actor.role !== "super_admin") {
-    void recordSecurityEvent({
-      category: "security_event",
-      eventType: "unauthorized_api_attempt",
-      severity: "high",
-      title: "Unauthorized super-admin API attempt",
-      message: `${actor.role} attempted to access a super-admin-only API route.`,
-      actorUid: actor.uid,
-      actorEmail: actor.email,
-      businessId: actor.businessId,
-      propertyId: actor.propertyId,
-      route: request.nextUrl.pathname,
-      metadata: { method: request.method, role: actor.role },
-    });
-    throw new HttpError(403, "Super-admin access required");
-  }
-  return actor;
 }
 
 export function errorResponseDetails(error: unknown) {

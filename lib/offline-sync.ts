@@ -113,19 +113,13 @@ export async function syncQueue(key: string, syncFn: (data: any) => Promise<any>
 
 export async function syncAllOfflineData(syncHandlers: {
   sale: (data: any) => Promise<any>;
-  invoice?: (data: any) => Promise<any>;
-  payment?: (data: any) => Promise<any>;
+  invoice: (data: any) => Promise<any>;
+  payment: (data: any) => Promise<any>;
   folio?: (data: any) => Promise<any>;
 }) {
   const salesResult = await syncQueue(SYNC_QUEUE_KEY, syncHandlers.sale);
-  const invoiceQueue = getOfflineQueue(OFFLINE_INVOICES_KEY);
-  const paymentQueue = getOfflineQueue(OFFLINE_PAYMENTS_KEY);
-  const invoicesResult = syncHandlers.invoice
-    ? await syncQueue(OFFLINE_INVOICES_KEY, syncHandlers.invoice)
-    : { synced: 0, failed: invoiceQueue.length };
-  const paymentsResult = syncHandlers.payment
-    ? await syncQueue(OFFLINE_PAYMENTS_KEY, syncHandlers.payment)
-    : { synced: 0, failed: paymentQueue.length };
+  const invoicesResult = await syncQueue(OFFLINE_INVOICES_KEY, syncHandlers.invoice);
+  const paymentsResult = await syncQueue(OFFLINE_PAYMENTS_KEY, syncHandlers.payment);
   let foliosResult = { synced: 0, failed: 0 };
   if (syncHandlers.folio) {
     foliosResult = await syncQueue(OFFLINE_FOLIOS_KEY, syncHandlers.folio);
@@ -167,13 +161,12 @@ function resolveActiveBusinessId(explicitBusinessId?: string) {
 
 /** Publishes only aggregate queue telemetry; invoice, payment, and product payloads never leave the browser. */
 export async function reportOfflineSyncTelemetry(businessId?: string, syncResult?: { synced: number; failed: number }) {
-  if (typeof window === "undefined" || !navigator.onLine || !db) return;
+  if (typeof window === "undefined" || !navigator.onLine) return;
   const resolvedBusinessId = resolveActiveBusinessId(businessId);
   if (!resolvedBusinessId || resolvedBusinessId === "default") return;
 
   const summary = getOfflineSummary();
-  const firestore = db;
-  const telemetryRef = doc(firestore, "syncTelemetry", resolvedBusinessId);
+  const telemetryRef = doc(db, "syncTelemetry", resolvedBusinessId);
   try {
     await setDoc(telemetryRef, {
       businessId: resolvedBusinessId,
@@ -197,18 +190,17 @@ export function subscribeToManualSyncCommands(
   },
   onComplete?: (result: { synced: number; failed: number }) => void
 ) {
-  if (typeof window === "undefined" || !businessId || !db) return () => undefined;
+  if (typeof window === "undefined" || !businessId) return () => undefined;
 
-  const firestore = db;
-  const commandsQuery = query(collection(firestore, "syncCommands"), where("businessId", "==", businessId));
+  const commandsQuery = query(collection(db, "syncCommands"), where("businessId", "==", businessId));
   return onSnapshot(commandsQuery, (snapshot) => {
     snapshot.docs
       .filter(command => command.data().status === "requested")
       .forEach(async (commandSnapshot) => {
-        const commandRef = doc(firestore, "syncCommands", commandSnapshot.id);
+        const commandRef = doc(db, "syncCommands", commandSnapshot.id);
         let claimed = false;
         try {
-          await runTransaction(firestore, async (transaction) => {
+          await runTransaction(db, async (transaction) => {
             const current = await transaction.get(commandRef);
             if (current.exists() && current.data().status === "requested") {
               transaction.update(commandRef, { status: "processing", startedAt: new Date().toISOString() });

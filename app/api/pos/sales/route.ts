@@ -16,7 +16,6 @@ interface PrescriptionValidation {
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const DEFAULT_PROPERTY_ID = "default_property";
 
 function parseBody(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -98,25 +97,12 @@ function parseBody(value: unknown) {
   const hotelContext = body.hotelContext && typeof body.hotelContext === "object" && !Array.isArray(body.hotelContext)
     ? body.hotelContext as Record<string, unknown>
     : undefined;
-  if (
-    hotelContext && (
-      typeof hotelContext.propertyId !== "string" ||
-      !hotelContext.propertyId.trim() ||
-      typeof hotelContext.reservationId !== "string" ||
-      !hotelContext.reservationId.trim() ||
-      typeof hotelContext.guestId !== "string" ||
-      !hotelContext.guestId.trim() ||
-      typeof hotelContext.roomNumber !== "string" ||
-      !hotelContext.roomNumber.trim() ||
-      (hotelContext.roomId !== undefined && typeof hotelContext.roomId !== "string")
-    )
-  ) {
+  if (hotelContext && (typeof hotelContext.propertyId !== "string" || typeof hotelContext.reservationId !== "string" || typeof hotelContext.guestId !== "string" || typeof hotelContext.roomNumber !== "string" || (hotelContext.roomId !== undefined && typeof hotelContext.roomId !== "string"))) {
     throw new HttpError(400, "Invalid hotel folio context");
   }
 
   return {
     items: Array.from(combined, ([productId, quantity]): RequestedLine => ({ productId, quantity })),
-    propertyId: typeof body.propertyId === "string" && body.propertyId.trim() ? body.propertyId.trim().slice(0, 128) : undefined,
     paymentMethod: paymentMethod as PaymentMethod,
     shiftId: body.shiftId,
     idempotencyKey: body.idempotencyKey,
@@ -125,14 +111,7 @@ function parseBody(value: unknown) {
     discountAmount,
     amountPaid: amountPaid === undefined ? undefined : Number(amountPaid),
     roomCharge: parsedRoomCharge,
-    hotelContext: hotelContext ? {
-      propertyId: (hotelContext.propertyId as string).trim(),
-      reservationId: (hotelContext.reservationId as string).trim(),
-      guestId: (hotelContext.guestId as string).trim(),
-      roomNumber: (hotelContext.roomNumber as string).trim(),
-      roomId: typeof hotelContext.roomId === "string" && hotelContext.roomId.trim() ? hotelContext.roomId.trim() : undefined,
-      checkout: hotelContext.checkout === true,
-    } : undefined,
+    hotelContext: hotelContext ? { propertyId: hotelContext.propertyId as string, reservationId: hotelContext.reservationId as string, guestId: hotelContext.guestId as string, roomNumber: hotelContext.roomNumber as string, roomId: typeof hotelContext.roomId === "string" ? hotelContext.roomId : undefined, checkout: hotelContext.checkout === true } : undefined,
   };
 }
 
@@ -160,20 +139,10 @@ export async function POST(request: NextRequest) {
     ];
     const reservationRef = input.hotelContext?.reservationId ? db.collection("hotelReservations").doc(input.hotelContext.reservationId) : null;
     const roomRef = input.hotelContext?.roomId ? db.collection("hotelRooms").doc(input.hotelContext.roomId) : null;
-    const relatedHotelRefs = [reservationRef, roomRef].filter(
-      (ref): ref is Exclude<typeof ref, null> => ref !== null,
-    );
 
     const result = await db.runTransaction(async (transaction) => {
-      const snapshots = await transaction.getAll(invoiceRef, shiftRef, profileRef, ...productRefs, ...relatedHotelRefs);
-      const [existingInvoice, shiftSnap, profileSnap] = snapshots;
-      const productStartIndex = 3;
-      const productEndIndex = productStartIndex + productRefs.length;
-      const productSnaps = snapshots.slice(productStartIndex, productEndIndex);
-      const reservationSnap = reservationRef ? snapshots[productEndIndex] : undefined;
-      const roomSnap = roomRef
-        ? snapshots[productEndIndex + (reservationRef ? 1 : 0)]
-        : undefined;
+      const snapshots = await transaction.getAll(invoiceRef, shiftRef, profileRef, ...productRefs);
+      const [existingInvoice, shiftSnap, profileSnap, ...productSnaps] = snapshots;
 
       if (existingInvoice.exists) {
         const existing = existingInvoice.data();
@@ -208,61 +177,6 @@ export async function POST(request: NextRequest) {
         throw new HttpError(403, "You can only sell during your own active shift");
       }
 
-      const isSuperAdmin = String(actor.role) === "super_admin";
-      const activePropertyId = isSuperAdmin
-        ? input.propertyId || input.hotelContext?.propertyId
-        : actor.propertyId || input.hotelContext?.propertyId || input.propertyId;
-      if (!isSuperAdmin && actor.propertyId && input.propertyId && input.propertyId !== actor.propertyId) {
-        throw new HttpError(403, "The selected property is outside your account scope");
-      }
-      if (!isSuperAdmin && actor.propertyId && input.hotelContext?.propertyId && input.hotelContext.propertyId !== actor.propertyId) {
-        throw new HttpError(403, "The selected hotel property is outside your account scope");
-      }
-      if (shift?.propertyId && activePropertyId && String(shift.propertyId) !== activePropertyId) {
-        throw new HttpError(403, "The selected shift belongs to a different property");
-      }
-
-      let salePropertyId = activePropertyId || undefined;
-      if (input.hotelContext) {
-        if (salePropertyId && input.hotelContext.propertyId !== salePropertyId) {
-          throw new HttpError(403, "The hotel folio belongs to a different property");
-        }
-        salePropertyId = input.hotelContext.propertyId;
-
-        const reservation = reservationSnap?.data();
-        if (!reservationSnap?.exists || !reservation) {
-          throw new HttpError(404, "The selected hotel reservation was not found");
-        }
-        if (
-          reservation.businessId !== actor.businessId ||
-          reservation.propertyId !== input.hotelContext.propertyId ||
-          reservation.guestId !== input.hotelContext.guestId ||
-          reservation.roomNumber !== input.hotelContext.roomNumber ||
-          (typeof reservation.roomId === "string" && input.hotelContext.roomId && reservation.roomId !== input.hotelContext.roomId)
-        ) {
-          throw new HttpError(403, "The selected reservation is outside your account or property scope");
-        }
-        if (reservation.status !== "checked_in") {
-          throw new HttpError(409, "Hotel folio charges require a checked-in reservation");
-        }
-
-        if (roomRef) {
-          const room = roomSnap?.data();
-          if (
-            !roomSnap?.exists ||
-            !room ||
-            room.businessId !== actor.businessId ||
-            room.propertyId !== input.hotelContext.propertyId ||
-            room.roomNumber !== input.hotelContext.roomNumber ||
-            (typeof reservation.roomId === "string" && reservation.roomId !== roomRef.id)
-          ) {
-            throw new HttpError(403, "The selected room is outside the reservation scope");
-          }
-        }
-        if (input.hotelContext.checkout && !roomRef) {
-          throw new HttpError(400, "Checkout requires a room assignment");
-        }
-      }
       let lineTotalCents = 0;
       const canonicalItems: Array<{ productId: string; productName: string; quantity: number; unitPrice: number; previousStockQty: number; folioType?: "room_charge" | "food_beverage" | "service"; isRoomCharge: boolean }> = productSnaps.map((productSnap, index) => {
         const requested = input.items[index];
@@ -280,11 +194,6 @@ export async function POST(request: NextRequest) {
         ) {
           throw new HttpError(409, "A selected product is invalid");
         }
-        const productPropertyId = String(product.propertyId || DEFAULT_PROPERTY_ID);
-        if (salePropertyId && productPropertyId !== salePropertyId) {
-          throw new HttpError(403, `The product ${product.name} belongs to a different property`);
-        }
-        if (!salePropertyId && product.propertyId) salePropertyId = productPropertyId;
         if (product.stockQty < requested.quantity) {
           throw new HttpError(409, `Not enough stock for ${product.name}`);
         }
@@ -326,6 +235,7 @@ export async function POST(request: NextRequest) {
       }
 
       const profile = profileSnap.exists ? profileSnap.data() : {};
+      const isSuperAdmin = String(actor.role) === "super_admin";
       if (input.hotelContext && !isSuperAdmin && profile?.businessType !== "hotel") {
         throw new HttpError(403, "Hotel folio charges are available only for Hotel businesses");
       }
@@ -394,8 +304,7 @@ export async function POST(request: NextRequest) {
         dueAt: isPaid ? null : now,
         ...(isPaid ? { paidAt: now } : {}),
         createdAt: now,
-          ...(salePropertyId ? { propertyId: salePropertyId } : {}),
-          ...(input.hotelContext ? { reservationId: input.hotelContext.reservationId, roomNumber: input.hotelContext.roomNumber, sourceModule: "hotel_room_pos" } : {}),
+        ...(input.hotelContext ? { propertyId: input.hotelContext.propertyId, reservationId: input.hotelContext.reservationId, roomNumber: input.hotelContext.roomNumber, sourceModule: "hotel_room_pos" } : {}),
       });
 
       if (requestedPaidCents > 0) {
@@ -412,8 +321,7 @@ export async function POST(request: NextRequest) {
           amount: paidAmount,
           status: "success",
           createdAt: now,
-          ...(salePropertyId ? { propertyId: salePropertyId } : {}),
-          ...(input.hotelContext ? { reservationId: input.hotelContext.reservationId } : {}),
+          ...(input.hotelContext ? { propertyId: input.hotelContext.propertyId, reservationId: input.hotelContext.reservationId } : {}),
         });
       }
 
@@ -436,7 +344,6 @@ export async function POST(request: NextRequest) {
         }
         transaction.create(movementRefs[index], {
           businessId: actor.businessId,
-          ...(salePropertyId ? { propertyId: salePropertyId } : {}),
           productId: item.productId,
           productName: item.productName,
           delta: -item.quantity,

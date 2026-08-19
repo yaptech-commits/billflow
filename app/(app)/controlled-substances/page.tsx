@@ -14,11 +14,6 @@ import {
 import { ShieldAlert, Search, Download, Printer, FileText, Calendar, User, Stethoscope } from "lucide-react";
 import toast from "react-hot-toast";
 
-function requireClientDb() {
-  if (!db) throw new Error("Firebase database is not configured");
-  return db;
-}
-
 interface ControlledLog {
   id: string;
   propertyId: string;
@@ -34,8 +29,8 @@ interface ControlledLog {
 }
 
 export default function ControlledSubstancesPage() {
-  const { propertyId: activePropertyId } = useAuth();
-  const propertyId = activePropertyId || "default_property";
+  const { currentProperty } = useAuth();
+  const propertyId = currentProperty?.id || "default";
 
   const [logs, setLogs] = useState<ControlledLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,7 +44,7 @@ export default function ControlledSubstancesPage() {
     try {
       setLoading(true);
       const q = query(
-        collection(requireClientDb(), "controlledSubstanceLogs"),
+        collection(db, "controlledSubstanceLogs"),
         where("propertyId", "==", propertyId)
       );
       const snap = await getDocs(q);

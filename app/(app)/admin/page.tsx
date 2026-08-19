@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { 
   getDocs, collection, query, orderBy, doc, getDoc, updateDoc, deleteDoc, where, writeBatch, addDoc, serverTimestamp
@@ -10,22 +10,12 @@ import { BusinessProfile, BusinessModule, Staff, Product, Invoice, deleteBusines
 import { SyncTelemetry } from "@/lib/offline-sync";
 import { formatMoney, cn } from "@/lib/utils";
 import { 
-  Users, Package, FileText, Search, ShieldAlert, AlertTriangle, Activity, Clock3, RefreshCw, LockKeyhole,
+  Users, Package, FileText, Search, ShieldAlert, 
   Trash2, Edit, ExternalLink, ArrowRight, X, Check, Shield, Ban, RotateCcw, UserMinus,
   Truck, CreditCard, Ticket, ShoppingCart, Eye, Plus, ChevronRight
 } from "lucide-react";
 import Modal from "@/components/ui/Modal";
 import toast from "react-hot-toast";
-
-function requireClientDb() {
-  if (!db) throw new Error("Firebase database is not configured");
-  return db;
-}
-
-function requireClientAuth() {
-  if (!auth) throw new Error("Firebase authentication is not configured");
-  return auth;
-}
 
 const DASHBOARD_MODULES: { id: BusinessModule; label: string; description: string }[] = [
   { id: "general", label: "General Business", description: "Sales, invoices, products, clients, and payments" },
@@ -59,7 +49,7 @@ export default function AdminPage() {
   const fetchSyncTelemetry = async () => {
     setSyncLoading(true);
     try {
-      const snapshot = await getDocs(collection(requireClientDb(), "syncTelemetry"));
+      const snapshot = await getDocs(collection(db, "syncTelemetry"));
       const nextTelemetry: Record<string, SyncTelemetry> = {};
       snapshot.docs.forEach(snapshotDoc => {
         const data = snapshotDoc.data() as SyncTelemetry;
@@ -77,7 +67,7 @@ export default function AdminPage() {
   const requestBusinessSync = async (business: BusinessProfile) => {
     const t = toast.loading(`Requesting sync for ${business.businessName}...`);
     try {
-      await addDoc(collection(requireClientDb(), "syncCommands"), {
+      await addDoc(collection(db, "syncCommands"), {
         businessId: business.businessId,
         requestedBy: user?.uid || "super_admin",
         status: "requested",
@@ -93,7 +83,7 @@ export default function AdminPage() {
   const fetchBusinesses = async () => {
     setLoading(true);
     try {
-      const snap = await getDocs(query(collection(requireClientDb(), "businessProfiles"), orderBy("businessName")));
+      const snap = await getDocs(query(collection(db, "businessProfiles"), orderBy("businessName")));
       setBusinesses(snap.docs.map(d => ({ ...d.data(), businessId: d.id } as BusinessProfile)));
     } catch (err) {
       toast.error("Failed to fetch businesses");
@@ -132,7 +122,7 @@ export default function AdminPage() {
   const handleApprove = async (id: string) => {
     const t = toast.loading("Approving account...");
     try {
-      await updateDoc(doc(requireClientDb(), "businessProfiles", id), { status: "active" });
+      await updateDoc(doc(db, "businessProfiles", id), { status: "active" });
       toast.success("Account approved", { id: t });
       fetchBusinesses();
     } catch (e) {
@@ -144,7 +134,7 @@ export default function AdminPage() {
     const newStatus = currentStatus === "suspended" ? "active" : "suspended";
     const t = toast.loading(`${newStatus === "suspended" ? "Suspending" : "Activating"} account...`);
     try {
-      await updateDoc(doc(requireClientDb(), "businessProfiles", id), { status: newStatus });
+      await updateDoc(doc(db, "businessProfiles", id), { status: newStatus });
       toast.success(`Account ${newStatus}`, { id: t });
       fetchBusinesses();
     } catch (e) {
@@ -287,8 +277,6 @@ export default function AdminPage() {
         </div>
       ) : (
         <div className="space-y-6">
-          <SecurityAlertsWidget user={user} />
-
           {pendingUsers.length > 0 && (
             <div className="space-y-4">
               <h2 className="text-lg font-bold text-gold flex items-center gap-2">
@@ -329,190 +317,6 @@ export default function AdminPage() {
         </div>
       )}
     </div>
-  );
-}
-
-type SecurityEvent = {
-  id: string;
-  category: "security_event" | "system_alert";
-  eventType: string;
-  severity: "critical" | "high" | "medium" | "low" | "info";
-  title: string;
-  message: string;
-  actorEmail: string | null;
-  businessId: string | null;
-  route: string | null;
-  createdAt: string | null;
-};
-
-type SecuritySummary = {
-  total: number;
-  securityEvents: number;
-  systemAlerts: number;
-  critical: number;
-  high: number;
-  medium: number;
-};
-
-const EMPTY_SECURITY_SUMMARY: SecuritySummary = {
-  total: 0,
-  securityEvents: 0,
-  systemAlerts: 0,
-  critical: 0,
-  high: 0,
-  medium: 0,
-};
-
-function formatEventTime(value: string | null) {
-  if (!value) return "Time pending";
-  const timestamp = new Date(value).getTime();
-  if (Number.isNaN(timestamp)) return "Unknown time";
-  const difference = Date.now() - timestamp;
-  if (difference < 60_000) return "Just now";
-  if (difference < 3_600_000) return `${Math.floor(difference / 60_000)}m ago`;
-  if (difference < 86_400_000) return `${Math.floor(difference / 3_600_000)}h ago`;
-  return new Date(value).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-}
-
-function securitySeverityClasses(severity: SecurityEvent["severity"]) {
-  if (severity === "critical") return { text: "text-red-300", background: "bg-red-500/15", border: "border-red-500/30" };
-  if (severity === "high") return { text: "text-orange-300", background: "bg-orange-500/15", border: "border-orange-500/30" };
-  if (severity === "medium") return { text: "text-gold", background: "bg-gold/15", border: "border-gold/30" };
-  return { text: "text-blue-300", background: "bg-blue-500/15", border: "border-blue-500/30" };
-}
-
-function SecurityAlertsWidget({ user }: { user: { getIdToken: () => Promise<string> } | null }) {
-  const [events, setEvents] = useState<SecurityEvent[]>([]);
-  const [summary, setSummary] = useState<SecuritySummary>(EMPTY_SECURITY_SUMMARY);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchEvents = useCallback(async () => {
-    if (!user) return;
-    setRefreshing(true);
-    try {
-      const token = await user.getIdToken();
-      const response = await fetch("/api/admin/security-events?limit=12", {
-        headers: { Authorization: `Bearer ${token}` },
-        cache: "no-store",
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || "Unable to load security events");
-      setEvents(Array.isArray(payload.events) ? payload.events : []);
-      setSummary({ ...EMPTY_SECURITY_SUMMARY, ...(payload.summary || {}) });
-      setError(null);
-    } catch (fetchError) {
-      console.error("Failed to fetch security events:", fetchError);
-      setError(fetchError instanceof Error ? fetchError.message : "Unable to load security events");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [user]);
-
-  useEffect(() => {
-    void fetchEvents();
-    const interval = window.setInterval(() => void fetchEvents(), 60_000);
-    return () => window.clearInterval(interval);
-  }, [fetchEvents]);
-
-  const displayedEvents = events.slice(0, 5);
-  const urgentCount = summary.critical + summary.high;
-
-  return (
-    <section className="card border border-border/80 bg-surface/40 overflow-hidden" aria-labelledby="security-alerts-title">
-      <div className="flex flex-col gap-4 border-b border-border/70 px-5 py-5 md:flex-row md:items-start md:justify-between">
-        <div className="flex items-start gap-3">
-          <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gold/15 text-gold">
-            <ShieldAlert size={20} />
-          </div>
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 id="security-alerts-title" className="text-lg font-bold text-white">Security &amp; System Alerts</h2>
-              <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-green-300">
-                <Activity size={11} /> Live
-              </span>
-            </div>
-            <p className="mt-1 text-xs text-muted">Protected activity and delivery health across BillFlow. Refreshes every minute.</p>
-          </div>
-        </div>
-        <button
-          onClick={() => void fetchEvents()}
-          disabled={refreshing}
-          className="btn-ghost inline-flex items-center justify-center gap-2 text-xs"
-          aria-label="Refresh security events"
-        >
-          <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
-          {refreshing ? "Refreshing..." : "Refresh"}
-        </button>
-      </div>
-
-      <div className="grid grid-cols-2 divide-x divide-border/70 border-b border-border/70 md:grid-cols-4">
-        <div className="px-5 py-4">
-          <p className="text-[10px] font-mono uppercase tracking-wider text-muted">Events tracked</p>
-          <p className="mt-1 text-2xl font-bold text-white">{summary.total}</p>
-        </div>
-        <div className="px-5 py-4">
-          <p className="text-[10px] font-mono uppercase tracking-wider text-muted">Security events</p>
-          <p className="mt-1 text-2xl font-bold text-blue-300">{summary.securityEvents}</p>
-        </div>
-        <div className="px-5 py-4">
-          <p className="text-[10px] font-mono uppercase tracking-wider text-muted">System alerts</p>
-          <p className="mt-1 text-2xl font-bold text-gold">{summary.systemAlerts}</p>
-        </div>
-        <div className="px-5 py-4">
-          <p className="text-[10px] font-mono uppercase tracking-wider text-muted">Urgent</p>
-          <p className={`mt-1 text-2xl font-bold ${urgentCount > 0 ? "text-red-300" : "text-green-300"}`}>{urgentCount}</p>
-        </div>
-      </div>
-
-      <div className="px-5 py-4">
-        {loading ? (
-          <div className="flex items-center gap-3 py-5 text-sm text-muted">
-            <RefreshCw size={16} className="animate-spin text-gold" /> Loading monitoring feed...
-          </div>
-        ) : error ? (
-          <div className="flex items-start gap-3 rounded-lg border border-red-500/25 bg-red-500/10 p-4 text-sm text-red-200">
-            <AlertTriangle size={18} className="mt-0.5 shrink-0" />
-            <div>
-              <p className="font-medium">Monitoring feed unavailable</p>
-              <p className="mt-1 text-xs text-red-200/80">{error}</p>
-            </div>
-          </div>
-        ) : displayedEvents.length === 0 ? (
-          <div className="flex items-center gap-3 py-5 text-sm text-muted">
-            <LockKeyhole size={18} className="text-green-300" /> No security events or system alerts have been recorded yet.
-          </div>
-        ) : (
-          <div className="space-y-1">
-            {displayedEvents.map((event) => {
-              const tone = securitySeverityClasses(event.severity);
-              const isSecurity = event.category === "security_event";
-              return (
-                <div key={event.id} className="flex items-start gap-3 rounded-lg px-2 py-3 transition-colors hover:bg-white/[0.03]">
-                  <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${tone.background} ${tone.text}`}>
-                    {isSecurity ? <ShieldAlert size={15} /> : <AlertTriangle size={15} />}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-                      <p className="truncate text-sm font-medium text-white">{event.title}</p>
-                      <span className="inline-flex shrink-0 items-center gap-1 text-[11px] text-muted"><Clock3 size={12} /> {formatEventTime(event.createdAt)}</span>
-                    </div>
-                    <p className="mt-1 line-clamp-2 text-xs text-muted">{event.message}</p>
-                    <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-wide">
-                      <span className={`rounded-full border px-2 py-0.5 ${tone.background} ${tone.border} ${tone.text}`}>{event.severity}</span>
-                      <span className="rounded-full border border-border px-2 py-0.5 text-muted">{isSecurity ? "Security event" : "System alert"}</span>
-                      {event.route && <span className="font-mono normal-case text-muted">{event.route}</span>}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </section>
   );
 }
 
@@ -611,10 +415,10 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
 
     try {
       const [p, i, s, pay] = await Promise.all([
-        getDocs(query(collection(requireClientDb(), "products"), where("businessId", "==", business.businessId))),
-        getDocs(query(collection(requireClientDb(), "invoices"), where("businessId", "==", business.businessId))),
-        getDocs(query(collection(requireClientDb(), "staff"), where("businessId", "==", business.businessId))),
-        getDocs(query(collection(requireClientDb(), "payments"), where("businessId", "==", business.businessId)))
+        getDocs(query(collection(db, "products"), where("businessId", "==", business.businessId))),
+        getDocs(query(collection(db, "invoices"), where("businessId", "==", business.businessId))),
+        getDocs(query(collection(db, "staff"), where("businessId", "==", business.businessId))),
+        getDocs(query(collection(db, "payments"), where("businessId", "==", business.businessId)))
       ]);
       
       const totalRevenue = pay.docs.reduce((acc, doc) => acc + (doc.data().amount || 0), 0);
@@ -657,7 +461,7 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
         po: "purchaseOrders"
       }[tab];
 
-      const snap = await getDocs(query(collection(requireClientDb(), collectionName), where("businessId", "==", business.businessId)));
+      const snap = await getDocs(query(collection(db, collectionName), where("businessId", "==", business.businessId)));
       setListData(snap.docs.map(d => ({ ...d.data(), id: d.id })));
     } catch (e) {
       toast.error("Failed to fetch data");
@@ -683,7 +487,7 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
         payments: "payments",
         po: "purchaseOrders"
       }[activeTab!];
-      await deleteDoc(doc(requireClientDb(), collectionName, id));
+      await deleteDoc(doc(db, collectionName, id));
       toast.success("Permanently deleted", { id: t });
       await fetchTabData(activeTab);
       await fetchStats(true);
@@ -708,9 +512,9 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
       const { id, new: isNew, ...dataToSave } = itemForm;
       
       if (selectedItem?.id && !selectedItem.new) {
-        await updateDoc(doc(requireClientDb(), collectionName, selectedItem.id), dataToSave);
+        await updateDoc(doc(db, collectionName, selectedItem.id), dataToSave);
       } else {
-        await addDoc(collection(requireClientDb(), collectionName), {
+        await addDoc(collection(db, collectionName), {
           ...dataToSave,
           businessId: business.businessId,
           userId: user?.uid, // Link to superadmin who created it or business owner? Let's use current superadmin.
@@ -730,12 +534,12 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
     if (!editingStaff) return;
     const t = toast.loading("Updating permissions...");
     try {
-      await updateDoc(doc(requireClientDb(), "staff", editingStaff.id!), {
+      await updateDoc(doc(db, "staff", editingStaff.id!), {
         permissions: editingStaff.permissions || []
       });
       // Also update staffIndex for real-time rules enforcement
       if (editingStaff.staffUid) {
-        await updateDoc(doc(requireClientDb(), "staffIndex", editingStaff.staffUid), {
+        await updateDoc(doc(db, "staffIndex", editingStaff.staffUid), {
           permissions: editingStaff.permissions || []
         });
       }
@@ -751,10 +555,10 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
     const newStatus = staff.status === "active" ? "pending" : "active";
     const t = toast.loading(`${newStatus === "pending" ? "Suspending" : "Activating"} staff...`);
     try {
-      const batch = writeBatch(requireClientDb());
-      batch.update(doc(requireClientDb(), "staff", staff.id!), { status: newStatus });
+      const batch = writeBatch(db);
+      batch.update(doc(db, "staff", staff.id!), { status: newStatus });
       if (staff.staffUid) {
-        batch.update(doc(requireClientDb(), "staffIndex", staff.staffUid), { status: newStatus });
+        batch.update(doc(db, "staffIndex", staff.staffUid), { status: newStatus });
       }
       await batch.commit();
       toast.success(`Staff ${newStatus === "pending" ? "suspended" : "activated"}`, { id: t });
@@ -768,10 +572,10 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
     if (!confirm(`Are you sure you want to permanently delete staff ${staff.email}? This will revoke all access.`)) return;
     const t = toast.loading("Permanently deleting staff...");
     try {
-      const batch = writeBatch(requireClientDb());
-      batch.delete(doc(requireClientDb(), "staff", staff.id!));
+      const batch = writeBatch(db);
+      batch.delete(doc(db, "staff", staff.id!));
       if (staff.staffUid) {
-        batch.delete(doc(requireClientDb(), "staffIndex", staff.staffUid));
+        batch.delete(doc(db, "staffIndex", staff.staffUid));
       }
       await batch.commit();
       toast.success("Staff permanently deleted", { id: t });
@@ -785,7 +589,7 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
     if (!confirm(`Send password reset email to ${email}?`)) return;
     const t = toast.loading("Sending reset email...");
     try {
-      await sendPasswordResetEmail(requireClientAuth(), email);
+      await sendPasswordResetEmail(auth, email);
       toast.success("Reset email sent", { id: t });
     } catch (e: any) {
       toast.error(e.message || "Failed to send reset email", { id: t });
@@ -795,7 +599,7 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
   const handleUpdateBusiness = async () => {
     const t = toast.loading("Updating business profile...");
     try {
-      await updateDoc(doc(requireClientDb(), "businessProfiles", business.businessId), editForm);
+      await updateDoc(doc(db, "businessProfiles", business.businessId), editForm);
       toast.success("Business profile updated", { id: t });
       setShowEdit(false);
       onUpdate();
@@ -919,7 +723,7 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
                   try {
                     await deleteBusinessData(business.businessId);
                     // Also delete businessProfile doc itself
-                    await deleteDoc(doc(requireClientDb(), "businessProfiles", business.businessId));
+                    await deleteDoc(doc(db, "businessProfiles", business.businessId));
                     toast.success("Business permanently deleted from database", { id: t });
                     onUpdate();
                   } catch (e) {

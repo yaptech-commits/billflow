@@ -14,14 +14,6 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db, auth } from "./firebase";
-import { DEFAULT_SCHOOL_NOTIFICATION_TEMPLATES } from "@/lib/school-notification-templates";
-
-function requireSchoolDb() {
-  if (!db) {
-    throw new Error("Firebase database is unavailable");
-  }
-  return db;
-}
 
 export const DEFAULT_PROPERTY_ID = "default_property";
 
@@ -126,14 +118,9 @@ export interface ParentLink {
   updatedAt?: any;
 }
 
-export type SchoolNotificationChannel = "in_app" | "email" | "sms" | "push" | "whatsapp";
-export type SchoolNotificationType = "attendance_absence" | "fee_assigned" | "fee_payment" | "report_card_published" | "announcement" | "admission_created";
+export type SchoolNotificationChannel = "in_app" | "email" | "sms" | "push";
+export type SchoolNotificationType = "attendance_absence" | "fee_assigned" | "fee_payment" | "report_card_published" | "announcement";
 export type SchoolNotificationStatus = "queued" | "sent" | "failed" | "read";
-
-export interface SchoolNotificationDeliveryResult {
-  status: "delivered" | "queued" | "failed";
-  reason?: string;
-}
 
 export interface SchoolNotification {
   id?: string;
@@ -145,21 +132,11 @@ export interface SchoolNotification {
   recipientPhone?: string;
   title: string;
   message: string;
-  /** Optional rich email content; plain message remains the in-app/SMS fallback. */
-  html?: string;
-  /** Structured context for provider delivery logs and administrative audits. */
-  metadata?: Record<string, string | number | boolean | null>;
   type: SchoolNotificationType;
   channels: SchoolNotificationChannel[];
   status: SchoolNotificationStatus;
   deliveryProvider?: string;
   deliveryError?: string;
-  deliveryStatus?: Record<string, SchoolNotificationDeliveryResult>;
-  retryCount?: number;
-  maxRetries?: number;
-  nextRetryAt?: any;
-  lastRetryError?: string;
-  lastAttemptAt?: any;
   createdAt?: any;
   sentAt?: any;
   readAt?: any;
@@ -173,19 +150,10 @@ export interface SchoolNotificationPreferences {
   feeAssigned: boolean;
   feePayment: boolean;
   reportCardPublished: boolean;
-  /** Optional SMS copy of a newly created admission letter. */
-  admissionLetterSms: boolean;
-  /** Optional WhatsApp copy of a newly created admission letter. */
-  admissionLetterWhatsapp: boolean;
   email: boolean;
   sms: boolean;
   push: boolean;
-  whatsapp: boolean;
   inApp: boolean;
-  feePaymentEmailSubject?: string;
-  feePaymentEmailBody?: string;
-  reportCardEmailSubject?: string;
-  reportCardEmailBody?: string;
   updatedAt?: any;
 }
 
@@ -237,7 +205,7 @@ function parentLinkDocumentId(businessId: string, studentId: string, parentEmail
 export async function createStudent(student: Omit<Student, "id" | "createdAt">) {
   // Allocate the Firestore document ID before writing so the generated Student ID
   // is collision-free without relying on client-side random numbers.
-  const docRef = doc(collection(requireSchoolDb(), "students"));
+  const docRef = doc(collection(db!, "students"));
   const admissionNumber = student.admissionNumber?.trim() || `STU-${docRef.id.slice(0, 8).toUpperCase()}`;
   await setDoc(docRef, {
     ...student,
@@ -249,7 +217,7 @@ export async function createStudent(student: Omit<Student, "id" | "createdAt">) 
 }
 
 export async function getStudents(businessId: string, propertyId?: string) {
-  const snap = await getDocs(query(collection(requireSchoolDb(), "students"), where("businessId", "==", businessId)));
+  const snap = await getDocs(query(collection(db, "students"), where("businessId", "==", businessId)));
   const list = snap.docs.map((d) => ({ ...d.data(), id: d.id } as Student));
   return scopedList(list, propertyId);
 }
@@ -262,7 +230,7 @@ export async function getStudentsByIds(businessId: string, studentIds: string[],
 }
 
 export async function updateStudent(id: string, data: Partial<Student>) {
-  await updateDoc(doc(requireSchoolDb(), "students", id), data);
+  await updateDoc(doc(db, "students", id), data);
 }
 
 function schoolClassDocumentId(businessId: string, propertyId: string, name: string) {
@@ -271,7 +239,7 @@ function schoolClassDocumentId(businessId: string, propertyId: string, name: str
 }
 
 export async function getSchoolClasses(businessId: string, propertyId?: string) {
-  const snap = await getDocs(query(collection(requireSchoolDb(), "schoolClasses"), where("businessId", "==", businessId)));
+  const snap = await getDocs(query(collection(db, "schoolClasses"), where("businessId", "==", businessId)));
   const list = snap.docs.map((item) => ({ ...item.data(), id: item.id } as SchoolClass));
   return scopedList(list, propertyId).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
 }
@@ -279,7 +247,7 @@ export async function getSchoolClasses(businessId: string, propertyId?: string) 
 export async function saveSchoolClass(input: Omit<SchoolClass, "id" | "createdAt" | "updatedAt">) {
   const propertyId = input.propertyId || DEFAULT_PROPERTY_ID;
   const id = schoolClassDocumentId(input.businessId, propertyId, input.name);
-  await setDoc(doc(requireSchoolDb(), "schoolClasses", id), {
+  await setDoc(doc(db, "schoolClasses", id), {
     ...input,
     propertyId,
     name: input.name.trim(),
@@ -317,7 +285,7 @@ export async function updateSchoolClass(
   }
 
   const nextId = schoolClassDocumentId(businessId, property, name);
-  await setDoc(doc(requireSchoolDb(), "schoolClasses", nextId), {
+  await setDoc(doc(db, "schoolClasses", nextId), {
     businessId,
     propertyId: property,
     name,
@@ -327,13 +295,13 @@ export async function updateSchoolClass(
     createdAt: existing.createdAt || serverTimestamp(),
     updatedAt: serverTimestamp(),
   }, { merge: true });
-  if (nextId !== id) await deleteDoc(doc(requireSchoolDb(), "schoolClasses", id));
+  if (nextId !== id) await deleteDoc(doc(db, "schoolClasses", id));
 
   const oldName = previousName.trim();
   if (oldName !== name) {
     const students = await getStudents(businessId, property);
     const toRegroup = students.filter((student) => (student.classGrade?.trim() || "Unassigned") === oldName && student.id);
-    await Promise.all(toRegroup.map((student) => updateDoc(doc(requireSchoolDb(), "students", student.id as string), { classGrade: name })));
+    await Promise.all(toRegroup.map((student) => updateDoc(doc(db, "students", student.id as string), { classGrade: name })));
   }
   return nextId;
 }
@@ -344,7 +312,7 @@ export async function promoteClassStudents(businessId: string, propertyId: strin
   if (!source || !destination || source === destination) throw new Error("Choose a different destination class");
   const students = await getStudents(businessId, propertyId);
   const eligible = students.filter((student) => student.status === "active" && (student.classGrade?.trim() || "Unassigned") === source && student.id);
-  await Promise.all(eligible.map((student) => updateDoc(doc(requireSchoolDb(), "students", student.id as string), {
+  await Promise.all(eligible.map((student) => updateDoc(doc(db, "students", student.id as string), {
     classGrade: destination,
     previousClassGrade: source,
     classPromotedAt: serverTimestamp(),
@@ -353,13 +321,13 @@ export async function promoteClassStudents(businessId: string, propertyId: strin
 }
 
 export async function deleteStudent(id: string) {
-  await deleteDoc(doc(requireSchoolDb(), "students", id));
+  await deleteDoc(doc(db, "students", id));
 }
 
 // ─── FEE STRUCTURES ──────────────────────────────────────────────────────────
 
 export async function createFeeStructure(fee: Omit<FeeStructure, "id" | "createdAt">) {
-  const docRef = await addDoc(collection(requireSchoolDb(), "feeStructures"), {
+  const docRef = await addDoc(collection(db, "feeStructures"), {
     ...fee,
     propertyId: fee.propertyId || DEFAULT_PROPERTY_ID,
     createdAt: serverTimestamp(),
@@ -368,19 +336,19 @@ export async function createFeeStructure(fee: Omit<FeeStructure, "id" | "created
 }
 
 export async function getFeeStructures(businessId: string, propertyId?: string) {
-  const snap = await getDocs(query(collection(requireSchoolDb(), "feeStructures"), where("businessId", "==", businessId)));
+  const snap = await getDocs(query(collection(db, "feeStructures"), where("businessId", "==", businessId)));
   const list = snap.docs.map((d) => ({ ...d.data(), id: d.id } as FeeStructure));
   return scopedList(list, propertyId);
 }
 
 export async function deleteFeeStructure(id: string) {
-  await deleteDoc(doc(requireSchoolDb(), "feeStructures", id));
+  await deleteDoc(doc(db, "feeStructures", id));
 }
 
 // ─── STUDENT FEES / BILLING ──────────────────────────────────────────────────
 
 export async function assignFeeToStudent(fee: Omit<StudentFee, "id" | "createdAt" | "amountPaid" | "status">) {
-  const docRef = await addDoc(collection(requireSchoolDb(), "studentFees"), {
+  const docRef = await addDoc(collection(db, "studentFees"), {
     ...fee,
     propertyId: fee.propertyId || DEFAULT_PROPERTY_ID,
     amountPaid: 0,
@@ -419,10 +387,10 @@ export async function bulkAssignFeeToClass(params: {
   });
 
   for (let start = 0; start < studentsToAssign.length; start += 450) {
-    const batch = writeBatch(requireSchoolDb());
+    const batch = writeBatch(db);
     const chunk = studentsToAssign.slice(start, start + 450);
     chunk.forEach((student) => {
-      const feeRef = doc(collection(requireSchoolDb(), "studentFees"));
+      const feeRef = doc(collection(db, "studentFees"));
       batch.set(feeRef, {
         businessId: params.businessId,
         propertyId,
@@ -451,7 +419,7 @@ export async function bulkAssignFeeToClass(params: {
 }
 
 export async function getStudentFees(businessId: string, propertyId?: string) {
-  const snap = await getDocs(query(collection(requireSchoolDb(), "studentFees"), where("businessId", "==", businessId)));
+  const snap = await getDocs(query(collection(db, "studentFees"), where("businessId", "==", businessId)));
   const list = snap.docs.map((d) => ({ ...d.data(), id: d.id } as StudentFee));
   return scopedList(list, propertyId);
 }
@@ -463,7 +431,7 @@ export async function getStudentFeesByIds(businessId: string, studentIds: string
 }
 
 export async function recordStudentFeePayment(feeId: string, paymentAmount: number) {
-  const ref = doc(requireSchoolDb(), "studentFees", feeId);
+  const ref = doc(db, "studentFees", feeId);
   const snap = await getDoc(ref);
   if (!snap.exists()) throw new Error("Fee record not found");
   const data = snap.data() as StudentFee;
@@ -476,7 +444,7 @@ export async function recordStudentFeePayment(feeId: string, paymentAmount: numb
 // ─── ATTENDANCE TRACKING ─────────────────────────────────────────────────────
 
 export async function recordAttendance(record: Omit<AttendanceRecord, "id" | "createdAt">) {
-  const docRef = await addDoc(collection(requireSchoolDb(), "attendance"), {
+  const docRef = await addDoc(collection(db, "attendance"), {
     ...record,
     propertyId: record.propertyId || DEFAULT_PROPERTY_ID,
     createdAt: serverTimestamp(),
@@ -485,7 +453,7 @@ export async function recordAttendance(record: Omit<AttendanceRecord, "id" | "cr
 }
 
 export async function getAttendance(businessId: string, propertyId?: string, date?: string, term?: string) {
-  const snap = await getDocs(query(collection(requireSchoolDb(), "attendance"), where("businessId", "==", businessId)));
+  const snap = await getDocs(query(collection(db, "attendance"), where("businessId", "==", businessId)));
   let list = snap.docs.map((d) => ({ ...d.data(), id: d.id } as AttendanceRecord));
   list = scopedList(list, propertyId);
   if (date) list = list.filter((a) => a.date === date);
@@ -500,7 +468,7 @@ export async function getAttendanceByStudentIds(businessId: string, studentIds: 
 }
 
 export async function deleteAttendance(id: string) {
-  await deleteDoc(doc(requireSchoolDb(), "attendance", id));
+  await deleteDoc(doc(db, "attendance", id));
 }
 
 // ─── ASSESSMENTS & REPORT CARDS ──────────────────────────────────────────────
@@ -513,7 +481,7 @@ export async function saveAssessment(assessment: Omit<Assessment, "id" | "create
   else if (totalScore >= 60) grade = "C";
   else if (totalScore >= 50) grade = "D";
 
-  const docRef = await addDoc(collection(requireSchoolDb(), "assessments"), {
+  const docRef = await addDoc(collection(db, "assessments"), {
     ...assessment,
     propertyId: assessment.propertyId || DEFAULT_PROPERTY_ID,
     totalScore,
@@ -524,7 +492,7 @@ export async function saveAssessment(assessment: Omit<Assessment, "id" | "create
 }
 
 export async function getAssessments(businessId: string, propertyId?: string, studentId?: string, term?: string) {
-  const snap = await getDocs(query(collection(requireSchoolDb(), "assessments"), where("businessId", "==", businessId)));
+  const snap = await getDocs(query(collection(db, "assessments"), where("businessId", "==", businessId)));
   let list = snap.docs.map((d) => ({ ...d.data(), id: d.id } as Assessment));
   list = scopedList(list, propertyId);
   if (studentId) list = list.filter((a) => a.studentId === studentId);
@@ -539,7 +507,7 @@ export async function getAssessmentsByStudentIds(businessId: string, studentIds:
 }
 
 export async function deleteAssessment(id: string) {
-  await deleteDoc(doc(requireSchoolDb(), "assessments", id));
+  await deleteDoc(doc(db, "assessments", id));
 }
 
 // ─── PARENT ACCESS ───────────────────────────────────────────────────────────
@@ -547,7 +515,7 @@ export async function deleteAssessment(id: string) {
 export async function createParentLink(link: Omit<ParentLink, "id" | "createdAt" | "updatedAt" | "status">) {
   const parentEmail = normalizeEmail(link.parentEmail);
   const existing = await getDocs(
-    query(collection(requireSchoolDb(), "parentLinks"), where("businessId", "==", link.businessId))
+    query(collection(db, "parentLinks"), where("businessId", "==", link.businessId))
   );
   const duplicate = existing.docs.some((item) => {
     const data = item.data() as ParentLink;
@@ -556,7 +524,7 @@ export async function createParentLink(link: Omit<ParentLink, "id" | "createdAt"
   if (duplicate) throw new Error("This parent already has access to this student");
 
   const id = parentLinkDocumentId(link.businessId, link.studentId, parentEmail);
-  await setDoc(doc(requireSchoolDb(), "parentLinks", id), {
+  await setDoc(doc(db, "parentLinks", id), {
     ...link,
     parentEmail,
     propertyId: link.propertyId || DEFAULT_PROPERTY_ID,
@@ -569,8 +537,8 @@ export async function createParentLink(link: Omit<ParentLink, "id" | "createdAt"
 
 export async function getParentLinksForUser(uid: string, email: string) {
   const [uidSnap, emailSnap] = await Promise.all([
-    getDocs(query(collection(requireSchoolDb(), "parentLinks"), where("parentUid", "==", uid))),
-    getDocs(query(collection(requireSchoolDb(), "parentLinks"), where("parentEmail", "==", normalizeEmail(email)))),
+    getDocs(query(collection(db, "parentLinks"), where("parentUid", "==", uid))),
+    getDocs(query(collection(db, "parentLinks"), where("parentEmail", "==", normalizeEmail(email)))),
   ]);
   const byId = new Map<string, ParentLink>();
   [...uidSnap.docs, ...emailSnap.docs].forEach((item) => {
@@ -581,13 +549,13 @@ export async function getParentLinksForUser(uid: string, email: string) {
 }
 
 export async function getParentLinks(businessId: string, propertyId?: string) {
-  const snap = await getDocs(query(collection(requireSchoolDb(), "parentLinks"), where("businessId", "==", businessId)));
+  const snap = await getDocs(query(collection(db, "parentLinks"), where("businessId", "==", businessId)));
   const links = snap.docs.map((item) => ({ ...item.data(), id: item.id } as ParentLink));
   return scopedList(links.filter((link) => link.status !== "revoked"), propertyId);
 }
 
 export async function revokeParentLink(id: string) {
-  await updateDoc(doc(requireSchoolDb(), "parentLinks", id), { status: "revoked", updatedAt: serverTimestamp() });
+  await updateDoc(doc(db, "parentLinks", id), { status: "revoked", updatedAt: serverTimestamp() });
 }
 
 export async function claimParentLinks(uid: string, email: string) {
@@ -595,7 +563,7 @@ export async function claimParentLinks(uid: string, email: string) {
   await Promise.all(
     links
       .filter((link) => link.parentUid !== uid && link.id)
-      .map((link) => updateDoc(doc(requireSchoolDb(), "parentLinks", link.id!), { parentUid: uid, updatedAt: serverTimestamp() }))
+      .map((link) => updateDoc(doc(db, "parentLinks", link.id!), { parentUid: uid, updatedAt: serverTimestamp() }))
   );
   return links;
 }
@@ -603,12 +571,10 @@ export async function claimParentLinks(uid: string, email: string) {
 // ─── SCHOOL NOTIFICATIONS ────────────────────────────────────────────────────
 
 export async function enqueueSchoolNotification(notification: Omit<SchoolNotification, "id" | "createdAt" | "status">) {
-  const docRef = await addDoc(collection(requireSchoolDb(), "schoolNotifications"), {
+  const docRef = await addDoc(collection(db, "schoolNotifications"), {
     ...notification,
     propertyId: notification.propertyId || DEFAULT_PROPERTY_ID,
     status: "queued",
-    retryCount: 0,
-    maxRetries: 5,
     createdAt: serverTimestamp(),
   });
   const notificationId = docRef.id;
@@ -616,7 +582,7 @@ export async function enqueueSchoolNotification(notification: Omit<SchoolNotific
   // Delivery is attempted through the server adapter. If no provider webhook is
   // configured, the notification remains queued and still appears in-app.
   try {
-    const idToken = auth?.currentUser ? await auth.currentUser.getIdToken() : "";
+    const idToken = auth.currentUser ? await auth.currentUser.getIdToken() : "";
     const response = await fetch("/api/school/notifications/dispatch", {
       method: "POST",
       headers: {
@@ -627,31 +593,13 @@ export async function enqueueSchoolNotification(notification: Omit<SchoolNotific
     });
     const result = await response.json();
     const channelStatuses = Object.fromEntries(Object.entries(result.results || {}).map(([channel, value]) => [channel, value]));
-    const retryCount = notification.retryCount || 0;
-    const maxRetries = notification.maxRetries || 5;
-    const queued = result.status === "queued" && retryCount < maxRetries;
     await updateDoc(docRef, {
       status: result.status === "delivered" ? "sent" : result.status === "partial_failure" ? "failed" : "queued",
       deliveryStatus: channelStatuses,
-      retryCount: queued ? retryCount + 1 : retryCount,
-      maxRetries,
-      nextRetryAt: queued ? new Date(Date.now() + Math.min(60 * 60 * 1000, 2 ** retryCount * 5 * 60 * 1000)) : null,
-      lastRetryError: queued ? "One or more delivery channels are not configured yet." : null,
-      lastAttemptAt: serverTimestamp(),
-      ...(result.status === "delivered" ? { sentAt: serverTimestamp() } : {}),
-    });
-  } catch (error) {
-    const retryCount = notification.retryCount || 0;
-    const maxRetries = notification.maxRetries || 5;
-    const queued = retryCount < maxRetries;
-    await updateDoc(docRef, {
-      status: "queued",
-      retryCount: queued ? retryCount + 1 : retryCount,
-      maxRetries,
-      nextRetryAt: queued ? new Date(Date.now() + Math.min(60 * 60 * 1000, 2 ** retryCount * 5 * 60 * 1000)) : null,
-      lastRetryError: queued ? (error instanceof Error ? error.message : "Notification dispatch failed") : "Retry limit reached",
       lastAttemptAt: serverTimestamp(),
     });
+  } catch {
+    await updateDoc(docRef, { status: "queued", lastAttemptAt: serverTimestamp() });
   }
   return notificationId;
 }
@@ -663,7 +611,7 @@ export async function getSchoolNotificationsForStudents(
   recipientEmail?: string,
 ) {
   const allowed = new Set(studentIds);
-  const snap = await getDocs(query(collection(requireSchoolDb(), "schoolNotifications"), where("businessId", "==", businessId)));
+  const snap = await getDocs(query(collection(db, "schoolNotifications"), where("businessId", "==", businessId)));
   let list = snap.docs.map((item) => ({ ...item.data(), id: item.id } as SchoolNotification));
   list = scopedList(list, propertyId).filter((item) => allowed.has(item.studentId));
   if (recipientEmail) {
@@ -674,35 +622,32 @@ export async function getSchoolNotificationsForStudents(
 }
 
 export async function markSchoolNotificationRead(id: string) {
-  await updateDoc(doc(requireSchoolDb(), "schoolNotifications", id), { status: "read", readAt: serverTimestamp() });
+  await updateDoc(doc(db, "schoolNotifications", id), { status: "read", readAt: serverTimestamp() });
 }
 
 export async function getNotificationPreferences(businessId: string, propertyId?: string) {
-  const ref = doc(requireSchoolDb(), "schoolNotificationPreferences", notificationPreferencesId(businessId, propertyId));
+  const ref = doc(db, "schoolNotificationPreferences", notificationPreferencesId(businessId, propertyId));
   const snap = await getDoc(ref);
-  const defaults: SchoolNotificationPreferences = {
-    businessId,
-    propertyId: propertyId || DEFAULT_PROPERTY_ID,
-    enabled: true,
-    attendanceAbsence: true,
-    feeAssigned: true,
-    feePayment: true,
-    reportCardPublished: true,
-    admissionLetterSms: false,
-    admissionLetterWhatsapp: false,
-    email: true,
-    sms: true,
-    push: false,
-    whatsapp: false,
-    inApp: true,
-    ...DEFAULT_SCHOOL_NOTIFICATION_TEMPLATES,
-  };
-  if (!snap.exists()) return defaults;
-  return { ...defaults, ...snap.data(), businessId, propertyId: propertyId || DEFAULT_PROPERTY_ID } as SchoolNotificationPreferences;
+  if (!snap.exists()) {
+    return {
+      businessId,
+      propertyId: propertyId || DEFAULT_PROPERTY_ID,
+      enabled: true,
+      attendanceAbsence: true,
+      feeAssigned: true,
+      feePayment: true,
+      reportCardPublished: true,
+      email: true,
+      sms: true,
+      push: false,
+      inApp: true,
+    } as SchoolNotificationPreferences;
+  }
+  return { ...snap.data(), businessId } as SchoolNotificationPreferences;
 }
 
 export async function saveNotificationPreferences(preferences: SchoolNotificationPreferences) {
-  const ref = doc(requireSchoolDb(), "schoolNotificationPreferences", notificationPreferencesId(preferences.businessId, preferences.propertyId));
+  const ref = doc(db, "schoolNotificationPreferences", notificationPreferencesId(preferences.businessId, preferences.propertyId));
   await setDoc(ref, { ...preferences, updatedAt: serverTimestamp() }, { merge: true });
 }
 
@@ -809,7 +754,7 @@ export async function recordStudentFeePaymentDetailed(
   paymentMethod = "Cash",
   term = "Term 1",
 ) {
-  const ref = doc(requireSchoolDb(), "studentFees", feeId);
+  const ref = doc(db, "studentFees", feeId);
   const snap = await getDoc(ref);
   if (!snap.exists()) throw new Error("Fee record not found");
   const data = snap.data() as StudentFee;
@@ -818,7 +763,7 @@ export async function recordStudentFeePaymentDetailed(
   await updateDoc(ref, { amountPaid: newPaid, status: newStatus });
 
   // Also record in fee payment logs for detailed statement history
-  await addDoc(collection(requireSchoolDb(), "studentFeePayments"), {
+  await addDoc(collection(db, "studentFeePayments"), {
     businessId: data.businessId,
     propertyId: data.propertyId || DEFAULT_PROPERTY_ID,
     studentId: data.studentId,
@@ -836,7 +781,7 @@ export async function recordStudentFeePaymentDetailed(
 }
 
 export async function getStudentFeePayments(businessId: string, propertyId?: string, studentId?: string, term?: string) {
-  const snap = await getDocs(query(collection(requireSchoolDb(), "studentFeePayments"), where("businessId", "==", businessId)));
+  const snap = await getDocs(query(collection(db, "studentFeePayments"), where("businessId", "==", businessId)));
   let list = snap.docs.map((d) => ({ ...d.data(), id: d.id } as FeePaymentLogEntry));
   list = scopedList(list, propertyId);
   if (studentId) list = list.filter((item) => item.studentId === studentId);
@@ -875,7 +820,7 @@ export interface SchoolAnnouncement {
 }
 
 export async function createSchoolAnnouncement(announcement: Omit<SchoolAnnouncement, "id" | "createdAt">) {
-  const docRef = await addDoc(collection(requireSchoolDb(), "schoolAnnouncements"), {
+  const docRef = await addDoc(collection(db, "schoolAnnouncements"), {
     ...announcement,
     propertyId: announcement.propertyId || DEFAULT_PROPERTY_ID,
     createdAt: serverTimestamp(),
@@ -884,11 +829,11 @@ export async function createSchoolAnnouncement(announcement: Omit<SchoolAnnounce
 }
 
 export async function getSchoolAnnouncements(businessId: string, propertyId?: string) {
-  const snap = await getDocs(query(collection(requireSchoolDb(), "schoolAnnouncements"), where("businessId", "==", businessId)));
+  const snap = await getDocs(query(collection(db, "schoolAnnouncements"), where("businessId", "==", businessId)));
   const list = snap.docs.map((d) => ({ ...d.data(), id: d.id } as SchoolAnnouncement));
   return scopedList(list, propertyId).sort((a, b) => String(b.createdAt?.toMillis?.() || b.createdAt || "").localeCompare(String(a.createdAt?.toMillis?.() || a.createdAt || "")));
 }
 
 export async function deleteSchoolAnnouncement(id: string) {
-  await deleteDoc(doc(requireSchoolDb(), "schoolAnnouncements", id));
+  await deleteDoc(doc(db, "schoolAnnouncements", id));
 }

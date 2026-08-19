@@ -72,11 +72,6 @@ export default function DrugsPage() {
   const handleSaveDrug = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!businessId) return;
-    const userId = user?.uid;
-    if (!userId) {
-      toast.error("Your session is still loading. Please try again.");
-      return;
-    }
 
     try {
       if (editingDrug) {
@@ -86,7 +81,7 @@ export default function DrugsPage() {
         await createProduct({ 
           ...formData, 
           businessId, 
-          userId,
+          userId: user?.uid,
           trackBatches: true,
         });
         toast.success("Drug created");

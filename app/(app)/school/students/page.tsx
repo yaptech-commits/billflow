@@ -2,32 +2,17 @@
 
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
-import {
-  Student,
-  ParentLink,
-  getStudents,
-  createStudent,
-  updateStudent,
-  deleteStudent,
-  createParentLink,
-  getParentLinks,
-  getNotificationPreferences,
-  enqueueSchoolNotification,
-  SchoolNotificationPreferences,
-  SchoolNotificationChannel,
-} from "@/lib/school-db";
+import { Student, ParentLink, getStudents, createStudent, updateStudent, deleteStudent, createParentLink, getParentLinks } from "@/lib/school-db";
 import { BusinessProfile, getBusinessProfile } from "@/lib/db";
-import { AdmissionLetterContent, buildAdmissionLetterContent } from "@/lib/school-admission-letter";
 import { toast } from "react-hot-toast";
-import { Users, UserPlus, Search, Edit, Trash2, GraduationCap, ShieldCheck, X, Check, Eye, Send, AlertCircle } from "lucide-react";
+import { Users, UserPlus, Search, Edit, Trash2, GraduationCap, ShieldCheck, X, Check } from "lucide-react";
 import Modal from "@/components/ui/Modal";
 
 export default function StudentsPage() {
-  const { businessId, role, propertyId: authPropertyId } = useAuth();
-  const propertyId = authPropertyId || "default_property";
+  const { businessId, role } = useAuth();
+  const propertyId = "default_property";
   const [students, setStudents] = useState<Student[]>([]);
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
-  const [notificationPreferences, setNotificationPreferences] = useState<SchoolNotificationPreferences | null>(null);
   const [parentLinks, setParentLinks] = useState<ParentLink[]>([]);
   const [selectedParentStudent, setSelectedParentStudent] = useState<Student | null>(null);
   const [isParentModalOpen, setIsParentModalOpen] = useState(false);
@@ -35,15 +20,6 @@ export default function StudentsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
-  const [isAdmissionPreviewOpen, setIsAdmissionPreviewOpen] = useState(false);
-  const [pendingAdmissionDelivery, setPendingAdmissionDelivery] = useState<{
-    student: Pick<Student, "id" | "admissionNumber" | "fullName" | "classGrade" | "guardianName" | "guardianEmail" | "guardianPhone">;
-    letter: AdmissionLetterContent;
-    guardianEmail: string;
-    guardianPhone: string;
-    channels: SchoolNotificationChannel[];
-  } | null>(null);
-  const [deliverySubmitting, setDeliverySubmitting] = useState(false);
 
   const [form, setForm] = useState({
     admissionNumber: "",
@@ -57,62 +33,19 @@ export default function StudentsPage() {
 
   const loadData = async () => {
     if (!businessId) return;
-    const [stList, prof, links, preferences] = await Promise.all([
+    const [stList, prof, links] = await Promise.all([
       getStudents(businessId, propertyId),
       getBusinessProfile(businessId),
       getParentLinks(businessId, propertyId),
-      getNotificationPreferences(businessId, propertyId),
     ]);
     setStudents(stList);
     setBusinessProfile(prof);
-    setNotificationPreferences(preferences);
     setParentLinks(links);
   };
 
   useEffect(() => {
     loadData();
   }, [businessId, propertyId]);
-
-  const sendPendingAdmissionLetter = async () => {
-    if (!pendingAdmissionDelivery || !businessId) return;
-    setDeliverySubmitting(true);
-    try {
-      await enqueueSchoolNotification({
-        businessId,
-        propertyId,
-        studentId: pendingAdmissionDelivery.student.id!,
-        studentName: pendingAdmissionDelivery.student.fullName,
-        recipientEmail: pendingAdmissionDelivery.guardianEmail || undefined,
-        recipientPhone: pendingAdmissionDelivery.guardianPhone || undefined,
-        title: pendingAdmissionDelivery.letter.subject,
-        message: pendingAdmissionDelivery.letter.message,
-        html: pendingAdmissionDelivery.letter.html,
-        metadata: {
-          admissionNumber: pendingAdmissionDelivery.student.admissionNumber,
-          classGrade: pendingAdmissionDelivery.student.classGrade,
-          deliveryPurpose: "admission_letter",
-          documentTitle: pendingAdmissionDelivery.letter.title,
-        },
-        type: "admission_created",
-        channels: pendingAdmissionDelivery.channels,
-      });
-      toast.success(`Admission letter queued via ${pendingAdmissionDelivery.channels.filter((channel) => channel !== "in_app").map((channel) => channel.toUpperCase()).join(" + ")}. Delivery status is tracked in Admissions.`);
-      setIsAdmissionPreviewOpen(false);
-      setPendingAdmissionDelivery(null);
-      loadData();
-    } catch (error) {
-      console.error("Admission letter delivery warning:", error);
-      toast.error("Student registration was saved, but the admission letter could not be queued. Check notification delivery settings.");
-    } finally {
-      setDeliverySubmitting(false);
-    }
-  };
-
-  const skipPendingAdmissionLetter = () => {
-    setIsAdmissionPreviewOpen(false);
-    setPendingAdmissionDelivery(null);
-    toast("Student registered. Admission-letter delivery was skipped; you can review the record in Admissions.");
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -121,29 +54,21 @@ export default function StudentsPage() {
       if (editingStudent && editingStudent.id) {
         await updateStudent(editingStudent.id, form);
         toast.success("Student updated successfully.");
-        setIsAddOpen(false);
-        setEditingStudent(null);
       } else {
         const createdStudent = await createStudent({
           businessId,
           propertyId: propertyId || "default_property",
           ...form,
         });
-        const guardianEmail = form.guardianEmail.trim();
-        const guardianPhone = form.guardianPhone.trim();
-        const channels: SchoolNotificationChannel[] = ["in_app"];
-        if (guardianEmail) channels.push("email");
-        if (guardianPhone && notificationPreferences?.admissionLetterSms === true) channels.push("sms");
-        if (guardianPhone && notificationPreferences?.admissionLetterWhatsapp === true && notificationPreferences?.whatsapp === true) channels.push("whatsapp");
-
-        if (guardianEmail) {
+        // Automatically save parent details and create parent portal link if guardian email is present
+        if (form.guardianEmail && form.guardianEmail.trim()) {
           try {
             await createParentLink({
               businessId,
-              propertyId,
+              propertyId: propertyId || "default_property",
               studentId: createdStudent.id,
               studentName: form.fullName,
-              parentEmail: guardianEmail,
+              parentEmail: form.guardianEmail,
               parentName: form.guardianName,
               parentPhone: form.guardianPhone,
             });
@@ -151,38 +76,10 @@ export default function StudentsPage() {
             console.error("Auto-parent link warning:", linkErr);
           }
         }
-
-        const profileForLetter = businessProfile || await getBusinessProfile(businessId);
-        const letter = buildAdmissionLetterContent(
-          {
-            fullName: form.fullName,
-            admissionNumber: createdStudent.admissionNumber,
-            classGrade: form.classGrade,
-            guardianName: form.guardianName,
-            status: form.status,
-          },
-          profileForLetter,
-        );
-
-        setPendingAdmissionDelivery({
-          student: {
-            ...createdStudent,
-            fullName: form.fullName,
-            classGrade: form.classGrade,
-            guardianName: form.guardianName,
-            guardianEmail: guardianEmail || undefined,
-            guardianPhone,
-          },
-          letter,
-          guardianEmail,
-          guardianPhone,
-          channels,
-        });
-        setIsAddOpen(false);
-        setIsAdmissionPreviewOpen(true);
         toast.success(`Student registered. Automatic Student ID: ${createdStudent.admissionNumber}`);
       }
-
+      setIsAddOpen(false);
+      setEditingStudent(null);
       setForm({
         admissionNumber: "",
         fullName: "",
@@ -497,51 +394,6 @@ export default function StudentsPage() {
             </button>
           </div>
         </form>
-      </Modal>
-
-      <Modal open={isAdmissionPreviewOpen} onClose={skipPendingAdmissionLetter} title="Preview admission letter">
-        {pendingAdmissionDelivery && (
-          <div className="space-y-4">
-            <div className="rounded-lg border border-gold/30 bg-gold/5 p-3 text-sm text-white">
-              <div className="flex items-start gap-2">
-                <Eye className="mt-0.5 text-gold" size={16} />
-                <div>
-                  <p className="font-semibold">Review before sending</p>
-                  <p className="mt-1 text-xs text-muted">This preview uses the saved school name, logo, contact details, and accent color. The same content will be sent to the selected guardian channels.</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <span className="text-muted">Delivery channels:</span>
-              {pendingAdmissionDelivery.channels.filter((channel) => channel !== "in_app").map((channel) => (
-                <span key={channel} className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-emerald-300">{channel.toUpperCase()}</span>
-              ))}
-              {pendingAdmissionDelivery.channels.length === 1 && (
-                <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-amber-300">PARENT PORTAL ONLY</span>
-              )}
-            </div>
-
-            {pendingAdmissionDelivery.channels.length === 1 && (
-              <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
-                <AlertCircle className="mt-0.5 shrink-0" size={15} />
-                <span>No guardian email is available and admission SMS is not enabled for this property. Confirming will save the letter in the Parent Portal; add a guardian email or enable SMS in Settings to deliver it externally.</span>
-              </div>
-            )}
-
-            <div className="max-h-[52vh] overflow-y-auto rounded-lg border border-border bg-white">
-              <div dangerouslySetInnerHTML={{ __html: pendingAdmissionDelivery.letter.html }} />
-            </div>
-
-            <div className="flex justify-end gap-3 border-t border-border pt-4">
-              <button type="button" onClick={skipPendingAdmissionLetter} className="btn-ghost" disabled={deliverySubmitting}>Skip for now</button>
-              <button type="button" onClick={sendPendingAdmissionLetter} className="btn-primary flex items-center gap-2" disabled={deliverySubmitting}>
-                <Send size={15} />
-                {deliverySubmitting ? "Queuing..." : pendingAdmissionDelivery.channels.length === 1 ? "Save in Parent Portal" : "Confirm & send"}
-              </button>
-            </div>
-          </div>
-        )}
       </Modal>
 
       <Modal open={isParentModalOpen} onClose={() => setIsParentModalOpen(false)} title={`Parent access · ${selectedParentStudent?.fullName || "Student"}`}>

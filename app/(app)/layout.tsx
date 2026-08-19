@@ -23,7 +23,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   // Check page-level permissions for salespersons
   useEffect(() => {
-    if (!pathname) return;
     if (!loading && user && role === "salesperson" && permissions && permissions.length > 0) {
       const hasAccess = permissions.some(p => pathname.startsWith(p));
       if (!hasAccess && !pathname.includes("/settings")) {
@@ -80,7 +79,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   // Determine if current page is accessible
   const isPageAccessible = () => {
-    if (!pathname) return true;
     if (role === "super_admin") return true;
     if (role === "owner") return true;
     if (role === "salesperson" && (!permissions || permissions.length === 0)) return true;
@@ -129,7 +127,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         "flex-1 flex flex-col transition-all duration-300",
         sidebarCollapsed ? "ml-[70px]" : "ml-[240px]"
       )}>
-        <Topbar title={pageTitle[pathname ?? ""] ?? "BillFlow"} />
+        <Topbar title={pageTitle[pathname] ?? "BillFlow"} />
         <main className="flex-1 p-7">{children}</main>
       </div>
     </div>

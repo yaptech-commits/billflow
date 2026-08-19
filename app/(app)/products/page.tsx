@@ -68,18 +68,13 @@ export default function ProductsPage() {
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!businessId) return;
-    const userId = user?.uid;
-    if (!userId) {
-      toast.error("Your session is still loading. Please try again.");
-      return;
-    }
 
     try {
       if (editingProduct) {
         await updateProduct(editingProduct.id!, formData);
         toast.success("Product updated");
       } else {
-        await createProduct({ ...formData, businessId, userId });
+        await createProduct({ ...formData, businessId, userId: user?.uid });
         toast.success("Product created");
       }
       setShowProductModal(false);

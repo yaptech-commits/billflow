@@ -41,7 +41,10 @@ type PortalCandidate = {
   status: string;
 };
 
-type PortalStudent = PortalCandidate;
+type PortalStudent = PortalCandidate & {
+  businessId: string;
+  propertyId: string;
+};
 
 type PortalAttendance = {
   id: string;
@@ -148,7 +151,6 @@ export default function SchoolParentPortal() {
   const [lookup, setLookup] = useState("");
   const [candidates, setCandidates] = useState<PortalCandidate[]>([]);
   const [dashboard, setDashboard] = useState<PortalDashboard | null>(null);
-  const [portalSession, setPortalSession] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [reportCard, setReportCard] = useState<PortalReportCard | null>(null);
   const [paymentFee, setPaymentFee] = useState<PortalFee | null>(null);
@@ -185,7 +187,6 @@ export default function SchoolParentPortal() {
 
     setLoading(true);
     setCandidates([]);
-    setPortalSession(null);
     try {
       const response = await fetch("/api/school/portal", {
         method: "POST",
@@ -202,7 +203,6 @@ export default function SchoolParentPortal() {
       }
 
       setDashboard(payload.dashboard);
-      setPortalSession(typeof payload.portalSession === "string" ? payload.portalSession : null);
       setLookup(payload.dashboard.student.fullName);
     } catch (error: any) {
       setDashboard(null);
@@ -230,10 +230,7 @@ export default function SchoolParentPortal() {
 
   async function startFeePayment(event: FormEvent) {
     event.preventDefault();
-    if (!dashboard || !paymentFee || !portalSession) {
-      toast.error("Your Parent Portal session has expired. Please look up the ward again.");
-      return;
-    }
+    if (!dashboard || !paymentFee) return;
     const currentDashboard = dashboard;
     const feeToPay = paymentFee;
 
@@ -270,9 +267,10 @@ export default function SchoolParentPortal() {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
-              portalSession,
               feeId: feeToPay.id,
               studentId: currentDashboard.student.id,
+              businessId: currentDashboard.student.businessId,
+              propertyId: currentDashboard.student.propertyId,
               amount,
               paymentMethod,
               reference: response.reference,

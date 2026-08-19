@@ -6,17 +6,13 @@ import { auth } from "@/lib/firebase";
 import {
   getBusinessProfile, upsertBusinessProfile, BusinessProfile,
   DEFAULT_ACCENT_COLOR, MAX_LOGO_BYTES, CURRENCIES, DEFAULT_CURRENCY,
-  DEFAULT_TAX_RATE, DEFAULT_TAX_LABEL, deleteBusinessData, getActiveShift,
+  DEFAULT_TAX_RATE, DEFAULT_TAX_LABEL, deleteBusinessData,
 } from "@/lib/db";
 import { checkAndEnforceThreeDayOnlineAutoSwitch, getOfflineSummary, syncAllOfflineData } from "@/lib/offline-sync";
 import { getDocs, collection, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { getNotificationPreferences, saveNotificationPreferences, SchoolNotificationPreferences } from "@/lib/school-db";
-import { DEFAULT_SCHOOL_NOTIFICATION_TEMPLATES } from "@/lib/school-notification-templates";
-import { createPosSale } from "@/lib/pos-api";
-import { createSafeId } from "@/lib/safe-id";
 import toast from "react-hot-toast";
-import { AlertCircle, CheckCircle2, MailCheck, MessageSquareText, Upload, X } from "lucide-react";
+import { Upload, X } from "lucide-react";
 
 function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
   return (
@@ -30,9 +26,8 @@ function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
 }
 
 export default function SettingsPage() {
-  const { user, businessId, role, propertyId: authPropertyId } = useAuth();
+  const { user, businessId, role } = useAuth();
   const effectiveRole = role as string;
-  const schoolPropertyId = authPropertyId || "default_property";
   const [name, setName] = useState(user?.displayName ?? "");
   const [saving, setSaving] = useState(false);
 
@@ -52,10 +47,6 @@ export default function SettingsPage() {
   const [exportEndDate, setExportEndDate] = useState("");
   const [offlineSummary, setOfflineSummary] = useState({ sales: 0, invoices: 0, payments: 0, folios: 0, total: 0 });
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [schoolNotificationPreferences, setSchoolNotificationPreferences] = useState<SchoolNotificationPreferences | null>(null);
-  const [schoolNotificationSaving, setSchoolNotificationSaving] = useState(false);
-  const [providerReadiness, setProviderReadiness] = useState<{ email: { configured: boolean; envVar: string; description: string; validationMessage?: string }; sms: { configured: boolean; envVar: string; description: string; validationMessage?: string }; whatsapp?: { configured: boolean; envVar: string; description: string; validationMessage?: string }; webhookAuth?: { configured: boolean; envVar: string; description: string }; retryScheduler?: { configured: boolean; envVar: string; schedule: string; description: string } } | null>(null);
-  const [providerReadinessLoading, setProviderReadinessLoading] = useState(false);
 
   useEffect(() => {
     if (!businessId) return;
@@ -84,32 +75,6 @@ export default function SettingsPage() {
       setBrandLoading(false);
     });
   }, [businessId]);
-
-  useEffect(() => {
-    if (!businessId) return;
-    let cancelled = false;
-    const loadSchoolCommunicationSettings = async () => {
-      setProviderReadinessLoading(true);
-      try {
-        const preferences = await getNotificationPreferences(businessId, schoolPropertyId);
-        if (!cancelled) setSchoolNotificationPreferences(preferences);
-        const token = auth ? await auth.currentUser?.getIdToken() : null;
-        if (!token) return;
-        const response = await fetch("/api/school/notifications/config", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!response.ok) throw new Error("Could not read delivery configuration");
-        const config = await response.json();
-        if (!cancelled) setProviderReadiness(config);
-      } catch (error) {
-        console.error("School communication settings warning:", error);
-      } finally {
-        if (!cancelled) setProviderReadinessLoading(false);
-      }
-    };
-    loadSchoolCommunicationSettings();
-    return () => { cancelled = true; };
-  }, [businessId, schoolPropertyId, user?.uid]);
 
   const handleLogoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -148,33 +113,6 @@ export default function SettingsPage() {
       toast.error(err.message ?? "Could not save branding");
     } finally {
       setBrandSaving(false);
-    }
-  };
-
-  const handleSaveSchoolNotifications = async () => {
-    if (!businessId) return;
-    setSchoolNotificationSaving(true);
-    try {
-      const current = schoolNotificationPreferences || await getNotificationPreferences(businessId, schoolPropertyId);
-      const next = {
-        ...current,
-        businessId,
-        propertyId: schoolPropertyId,
-        admissionLetterSms: current.admissionLetterSms === true,
-        admissionLetterWhatsapp: current.admissionLetterWhatsapp === true,
-        whatsapp: current.whatsapp === true,
-        feePaymentEmailSubject: current.feePaymentEmailSubject || DEFAULT_SCHOOL_NOTIFICATION_TEMPLATES.feePaymentEmailSubject,
-        feePaymentEmailBody: current.feePaymentEmailBody || DEFAULT_SCHOOL_NOTIFICATION_TEMPLATES.feePaymentEmailBody,
-        reportCardEmailSubject: current.reportCardEmailSubject || DEFAULT_SCHOOL_NOTIFICATION_TEMPLATES.reportCardEmailSubject,
-        reportCardEmailBody: current.reportCardEmailBody || DEFAULT_SCHOOL_NOTIFICATION_TEMPLATES.reportCardEmailBody,
-      };
-      await saveNotificationPreferences(next);
-      setSchoolNotificationPreferences(next);
-      toast.success("School communication preferences saved");
-    } catch (error: any) {
-      toast.error(error?.message || "Could not save school communication preferences");
-    } finally {
-      setSchoolNotificationSaving(false);
     }
   };
 
@@ -230,10 +168,9 @@ export default function SettingsPage() {
   };
 
   const handleSave = async () => {
-    const currentUser = auth?.currentUser;
-    if (!currentUser) return;
+    if (!auth.currentUser) return;
     setSaving(true);
-    await updateProfile(currentUser, { displayName: name });
+    await updateProfile(auth.currentUser, { displayName: name });
     toast.success("Profile updated ✅");
     setSaving(false);
   };
@@ -255,7 +192,7 @@ export default function SettingsPage() {
       toast.success("All business data has been deleted.");
       // Redirect or logout
       setTimeout(() => {
-        void auth?.signOut();
+        auth.signOut();
         window.location.href = "/auth/login";
       }, 2000);
     } catch (err: any) {
@@ -468,112 +405,6 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* School Communications */}
-      {brand.businessType === "school" && (effectiveRole === "owner" || effectiveRole === "super_admin") && (
-        <div className="card">
-          <div className="flex items-start justify-between gap-4 mb-5">
-            <div>
-              <h2 className="font-grotesk font-semibold text-white mb-1">School Communications</h2>
-              <p className="text-xs text-muted">Admission letters use your saved school branding and are delivered through the configured server webhooks.</p>
-            </div>
-            <MailCheck size={20} className="text-gold shrink-0" />
-          </div>
-
-          <div className="space-y-3 mb-5">
-            {[
-              { key: "email" as const, label: "Email delivery", icon: MailCheck },
-              { key: "sms" as const, label: "SMS delivery", icon: MessageSquareText },
-              { key: "whatsapp" as const, label: "WhatsApp delivery", icon: MessageSquareText },
-            ].map(({ key, label, icon: Icon }) => {
-              const channel = providerReadiness?.[key];
-              const configured = channel?.configured === true;
-              return (
-                <div key={key} className={`flex items-start gap-3 p-3 rounded-xl border ${configured ? "border-green/30 bg-green/5" : "border-gold/30 bg-gold/5"}`}>
-                  {configured ? <CheckCircle2 size={16} className="text-green mt-0.5 shrink-0" /> : <AlertCircle size={16} className="text-gold mt-0.5 shrink-0" />}
-                  <Icon size={16} className={configured ? "text-green mt-0.5 shrink-0" : "text-gold mt-0.5 shrink-0"} />
-                  <div className="min-w-0">
-                    <p className="text-sm text-surface">{label}: {providerReadinessLoading ? "Checking..." : configured ? "Ready" : "Not configured"}</p>
-                    <p className="text-[11px] text-muted mt-0.5">{channel?.description || "Delivery status is checked server-side."}</p>
-                    {!configured && channel?.validationMessage && <p className="text-[11px] text-gold mt-1">{channel.validationMessage}</p>}
-                    {!configured && channel?.envVar && <p className="text-[11px] text-gold mt-1">Set <code className="font-mono">{channel.envVar}</code> in the Vercel server environment settings, then redeploy.</p>}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="rounded-lg border border-border bg-background/40 p-3 mb-5">
-            <p className="text-xs font-semibold text-foreground">Webhook security</p>
-            <p className="text-[11px] text-muted mt-1">{providerReadiness?.webhookAuth?.configured ? "Shared-secret authentication is enabled for outbound delivery." : "For production, configure a shared secret on both BillFlow and your provider adapter."}</p>
-            {!providerReadiness?.webhookAuth?.configured && <p className="text-[11px] text-gold mt-1">Set <code className="font-mono">{providerReadiness?.webhookAuth?.envVar || "SCHOOL_NOTIFICATION_WEBHOOK_SECRET"}</code> in Vercel and validate the x-billflow-webhook-secret header on the receiving adapter.</p>}
-          </div>
-
-          <div className={`flex items-start gap-3 rounded-lg border p-3 mb-5 ${providerReadiness?.retryScheduler?.configured ? "border-green/30 bg-green/5" : "border-gold/30 bg-gold/5"}`}>
-            {providerReadiness?.retryScheduler?.configured ? <CheckCircle2 size={16} className="text-green mt-0.5 shrink-0" /> : <AlertCircle size={16} className="text-gold mt-0.5 shrink-0" />}
-            <div>
-              <p className="text-xs font-semibold text-foreground">Automatic queued-notification retries: {providerReadinessLoading ? "Checking..." : providerReadiness?.retryScheduler?.configured ? "Ready" : "Needs configuration"}</p>
-              <p className="text-[11px] text-muted mt-1">{providerReadiness?.retryScheduler?.description || "Queued school notifications are retried in the background."} Schedule: {providerReadiness?.retryScheduler?.schedule || "Every 15 minutes"}.</p>
-              {!providerReadiness?.retryScheduler?.configured && <p className="text-[11px] text-gold mt-1">Set <code className="font-mono">{providerReadiness?.retryScheduler?.envVar || "CRON_SECRET"}</code> in Vercel. The retry endpoint is protected and stops after five attempts per notification.</p>}
-            </div>
-          </div>
-
-          <div className="space-y-3 border-y border-border py-3.5">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-sm text-surface">Send admission letters by SMS</p>
-                <p className="text-[11px] text-muted mt-1">When enabled, a guardian phone number receives an SMS copy.</p>
-              </div>
-              <Toggle
-                on={schoolNotificationPreferences?.admissionLetterSms === true}
-                onToggle={() => setSchoolNotificationPreferences((current) => current ? { ...current, admissionLetterSms: !current.admissionLetterSms } : current)}
-              />
-            </div>
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-sm text-surface">Send admission letters by WhatsApp</p>
-                <p className="text-[11px] text-muted mt-1">Uses the guardian phone number and your configured WhatsApp provider adapter.</p>
-              </div>
-              <Toggle
-                on={schoolNotificationPreferences?.admissionLetterWhatsapp === true}
-                onToggle={() => setSchoolNotificationPreferences((current) => current ? { ...current, admissionLetterWhatsapp: !current.admissionLetterWhatsapp, whatsapp: true } : current)}
-              />
-            </div>
-          </div>
-
-          <div className="mt-5 space-y-4">
-            <div>
-              <h3 className="text-sm font-semibold text-surface">Branded school notification templates</h3>
-              <p className="text-[11px] text-muted mt-1">Use placeholders such as {'{{studentName}}'}, {'{{amount}}'}, {'{{feeTitle}}'}, {'{{receiptNumber}}'}, {'{{term}}'}, and {'{{schoolName}}'}. These templates apply to email and the plain-text WhatsApp fallback.</p>
-            </div>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <label className="label">Fee receipt email subject</label>
-                <input className="input" value={schoolNotificationPreferences?.feePaymentEmailSubject || ""} onChange={(event) => setSchoolNotificationPreferences((current) => current ? { ...current, feePaymentEmailSubject: event.target.value } : current)} />
-              </div>
-              <div>
-                <label className="label">Report card email subject</label>
-                <input className="input" value={schoolNotificationPreferences?.reportCardEmailSubject || ""} onChange={(event) => setSchoolNotificationPreferences((current) => current ? { ...current, reportCardEmailSubject: event.target.value } : current)} />
-              </div>
-              <div>
-                <label className="label">Fee receipt email body</label>
-                <textarea className="input min-h-[96px] resize-y" value={schoolNotificationPreferences?.feePaymentEmailBody || ""} onChange={(event) => setSchoolNotificationPreferences((current) => current ? { ...current, feePaymentEmailBody: event.target.value } : current)} />
-              </div>
-              <div>
-                <label className="label">Report card email body</label>
-                <textarea className="input min-h-[96px] resize-y" value={schoolNotificationPreferences?.reportCardEmailBody || ""} onChange={(event) => setSchoolNotificationPreferences((current) => current ? { ...current, reportCardEmailBody: event.target.value } : current)} />
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between gap-3 mt-4">
-            <p className="text-[11px] text-muted">Provider secrets are never stored in Firestore or exposed to the browser.</p>
-            <button className="btn-primary text-xs" onClick={handleSaveSchoolNotifications} disabled={schoolNotificationSaving || !schoolNotificationPreferences}>
-              {schoolNotificationSaving ? "Saving..." : "Save Communication Settings"}
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Payment Gateways */}
       <div className="card">
         <h2 className="font-grotesk font-semibold text-white mb-5">Payment Gateways</h2>
@@ -650,23 +481,38 @@ export default function SettingsPage() {
             onClick={async () => {
               const t = toast.loading("Syncing offline queue...");
               try {
-                const activeShift = user && businessId ? await getActiveShift(businessId, user.uid) : null;
-                if (!activeShift?.id) throw new Error("Open your POS shift to replay queued sales securely.");
                 const res = await syncAllOfflineData({
-                  sale: async (data: any) => createPosSale({
-                    ...data,
-                    shiftId: data.shiftId || activeShift.id,
-                    propertyId: data.propertyId || brand.propertyId || schoolPropertyId,
-                    idempotencyKey: data.idempotencyKey || createSafeId("pos"),
-                  }),
+                  sale: async (data: any) => {
+                    const r = await fetch("/api/pos/sales", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify(data),
+                    });
+                    if (!r.ok) throw new Error("Sync failed");
+                    return r.json();
+                  },
+                  invoice: async (data: any) => {
+                    const r = await fetch("/api/invoices", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify(data),
+                    });
+                    if (!r.ok) throw new Error("Sync failed");
+                    return r.json();
+                  },
+                  payment: async (data: any) => {
+                    const r = await fetch("/api/payments", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify(data),
+                    });
+                    if (!r.ok) throw new Error("Sync failed");
+                    return r.json();
+                  }
                 });
                 setOfflineSummary(getOfflineSummary());
-                if (res.synced > 0 && res.failed === 0) {
+                if (res.synced > 0) {
                   toast.success(`Successfully synced ${res.synced} items!`, { id: t });
-                } else if (res.synced > 0) {
-                  toast.success(`Synced ${res.synced} items; ${res.failed} unsupported or failed items remain queued.`, { id: t });
-                } else if (res.failed > 0) {
-                  toast.error(`${res.failed} queued item(s) need the original POS flow or a supported sync handler.`, { id: t });
                 } else {
                   toast.success("Queue checked. No items ready or already synced.", { id: t });
                 }
@@ -739,10 +585,6 @@ export default function SettingsPage() {
             onClick={async () => {
               if (!businessId) {
                 toast.error("No active business selected");
-                return;
-              }
-              if (!db) {
-                toast.error("Database is unavailable. Please try again.");
                 return;
               }
               const t = toast.loading("Generating Excel workbook...");
@@ -863,10 +705,6 @@ export default function SettingsPage() {
                 toast.error("No active business selected");
                 return;
               }
-              if (!db) {
-                toast.error("Database is unavailable. Please try again.");
-                return;
-              }
               const t = toast.loading("Exporting invoices CSV...");
               try {
                 const snap = await getDocs(query(collection(db, "invoices"), where("businessId", "==", businessId)));
@@ -918,10 +756,6 @@ export default function SettingsPage() {
             onClick={async () => {
               if (!businessId) {
                 toast.error("No active business selected");
-                return;
-              }
-              if (!db) {
-                toast.error("Database is unavailable. Please try again.");
                 return;
               }
               const t = toast.loading("Exporting transactions CSV...");

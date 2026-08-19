@@ -141,10 +141,27 @@ export default function PosPage() {
           return createPosSale({
             ...data,
             shiftId: activeShift.id,
-            propertyId: data.propertyId || profile?.propertyId || "default_property",
             idempotencyKey: data.idempotencyKey || createSafeId("pos"),
           });
         },
+        invoice: async (data: any) => {
+          const res = await fetch("/api/invoices", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data),
+          });
+          if (!res.ok) throw new Error("Failed to sync offline invoice");
+          return res.json();
+        },
+        payment: async (data: any) => {
+          const res = await fetch("/api/payments", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data),
+          });
+          if (!res.ok) throw new Error("Failed to sync offline payment");
+          return res.json();
+        }
       }).then(({ synced, failed }) => {
         if (synced > 0) {
           toast.success(`Synced ${synced} offline transactions!`);
@@ -428,7 +445,6 @@ export default function PosPage() {
       items,
       paymentMethod: payMethod,
       discountAmount: discountVal,
-      propertyId: profile?.propertyId || "default_property",
     };
 
     if (isOnline && !isForcedOffline && (payMethod === "card" || payMethod === "momo") && profile?.paystackPublicKey) {
@@ -441,11 +457,11 @@ export default function PosPage() {
           callback: async (response: any) => {
             setCharging(true);
             try {
-                const result = await createPosSale({
-                ...saleData,
+              const result = await createPosSale({ 
+                ...saleData, 
                 reference: response.reference,
                 shiftId: activeShift!.id!,
-                idempotencyKey: createSafeId("pos")
+                idempotencyKey: response.reference
               });
               setReceipt({
                 invoiceId: result.invoiceId,
@@ -497,10 +513,6 @@ export default function PosPage() {
     try {
       if (!isOnline || isForcedOffline) {
         const offlineSale = queueOfflineSale(saleData);
-        if (!offlineSale) {
-          toast.error("Offline storage is unavailable. Please reconnect before completing this sale.");
-          return;
-        }
         toast.success(isForcedOffline ? "Sale saved in Offline Mode!" : "Sale saved offline! Will sync when online.");
         setReceipt({
           invoiceId: `OFFLINE-${offlineSale.id.slice(0, 5)}`,

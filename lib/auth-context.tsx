@@ -98,9 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } catch (err: any) {
           // If it's an approval error, log out and let the login page show the message
           if (err.message?.includes("Contact BillFlow Official")) {
-            if (auth) {
-              await signOut(auth);
-            }
+            await signOut(auth);
             router.push(`/auth/login?error=${encodeURIComponent(err.message)}`);
           } else {
             // Fall back to treating them as an independent owner if resolution fails for other reasons.
@@ -135,9 +133,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
-    if (auth) {
-      await signOut(auth);
-    }
+    await signOut(auth);
     localStorage.removeItem("superadmin_selected_business");
     router.push("/auth/login");
   };

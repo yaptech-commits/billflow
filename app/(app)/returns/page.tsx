@@ -171,11 +171,7 @@ export default function ReturnsPage() {
 
       {/* New Return Modal */}
       <Modal open={showNewReturnModal} onClose={() => setShowNewReturnModal(false)} title="Create Return">
-        {businessId ? (
-          <NewReturnForm businessId={businessId} onSuccess={() => { setShowNewReturnModal(false); fetchReturns(); }} />
-        ) : (
-          <p className="text-sm text-muted">Your business context is still loading. Please try again in a moment.</p>
-        )}
+        <NewReturnForm businessId={businessId} onSuccess={() => { setShowNewReturnModal(false); fetchReturns(); }} />
       </Modal>
 
       {/* Return Details Modal */}

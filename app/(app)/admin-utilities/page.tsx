@@ -5,7 +5,7 @@ import { ShieldAlert, RefreshCw, CheckCircle, AlertCircle } from "lucide-react";
 import toast from "react-hot-toast";
 
 export default function AdminUtilitiesPage() {
-  const { role, user } = useAuth();
+  const { role } = useAuth();
   const [loading, setLoading] = useState(false);
   const [migrationResult, setMigrationResult] = useState<{ updated: number; skipped: number } | null>(null);
 
@@ -23,11 +23,8 @@ export default function AdminUtilitiesPage() {
     setLoading(true);
     const t = toast.loading("Running migration...");
     try {
-      if (!user) throw new Error("Your session has expired. Please sign in again.");
-      const token = await user.getIdToken();
       const response = await fetch("/api/admin/migrate-business-pages", {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
       });
 
       if (!response.ok) {

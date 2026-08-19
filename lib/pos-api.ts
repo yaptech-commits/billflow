@@ -2,7 +2,6 @@ import { auth } from "@/lib/firebase";
 import type { BusinessProfile, InvoiceLineItem, PaymentMethod, Product } from "@/lib/db";
 
 async function authorizedRequest<T>(url: string, init?: RequestInit): Promise<T> {
-  if (!auth) throw new Error("Firebase Auth is unavailable");
   const user = auth.currentUser;
   if (!user) throw new Error("You must be signed in");
 
@@ -42,8 +41,6 @@ export type HotelRoomPosContext = {
 export type PosSaleRequest = {
   idempotencyKey: string;
   shiftId: string;
-  /** Active property context; the server verifies this against the authenticated actor and shift. */
-  propertyId?: string;
   customerName: string;
   items: Array<{ productId: string; quantity: number; folioType?: "food_beverage" | "service" }>;
   paymentMethod: PaymentMethod;

@@ -19,12 +19,9 @@ import {
   getStudentFeePayments,
   recordStudentFeePaymentDetailed,
   enqueueSchoolNotification,
-  getNotificationPreferences,
   DEFAULT_PROPERTY_ID,
-  SchoolNotificationChannel,
 } from "@/lib/school-db";
 import { BusinessProfile, getBusinessProfile } from "@/lib/db";
-import { buildFeePaymentNotificationContent } from "@/lib/school-notification-templates";
 import { printReceipt, downloadReceipt } from "@/lib/print-receipt";
 import { toast } from "react-hot-toast";
 import { DollarSign, Plus, FileText, CheckCircle2, Clock, AlertCircle, CreditCard, X, Users } from "lucide-react";
@@ -38,7 +35,6 @@ export default function FeesPage() {
   const [feeStructures, setFeeStructures] = useState<FeeStructure[]>([]);
   const [studentFees, setStudentFees] = useState<StudentFee[]>([]);
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
-  const [notificationPreferences, setNotificationPreferences] = useState<Awaited<ReturnType<typeof getNotificationPreferences>> | null>(null);
   const [isStatementOpen, setIsStatementOpen] = useState(false);
   const [statementStudentId, setStatementStudentId] = useState("");
   const [statementTerm, setStatementTerm] = useState("Term 1");
@@ -91,20 +87,18 @@ export default function FeesPage() {
 
   const loadData = async () => {
     if (!businessId) return;
-    const [stList, classList, fsList, sfList, prof, prefs] = await Promise.all([
+    const [stList, classList, fsList, sfList, prof] = await Promise.all([
       getStudents(businessId, propertyId),
       getSchoolClasses(businessId, propertyId),
       getFeeStructures(businessId, propertyId),
       getStudentFees(businessId, propertyId),
       getBusinessProfile(businessId),
-      getNotificationPreferences(businessId, propertyId),
     ]);
     setStudents(stList);
     setClasses(classList);
     setFeeStructures(fsList);
     setStudentFees(sfList);
     setBusinessProfile(prof);
-    setNotificationPreferences(prefs);
   };
 
   useEffect(() => {
@@ -246,24 +240,6 @@ export default function FeesPage() {
         balance: Math.max(0, updatedFee.amount - (updatedFee.amountPaid || 0)),
       });
       if (student && (student.guardianEmail || student.guardianPhone)) {
-        const prefs = notificationPreferences || await getNotificationPreferences(businessId || "", propertyId);
-        const content = buildFeePaymentNotificationContent({
-          profile: businessProfile,
-          studentName: student.fullName,
-          classGrade: student.classGrade || selectedFee.classGrade || "Not assigned",
-          feeTitle: selectedFee.feeTitle,
-          paymentAmount: payAmount,
-          balance: Math.max(0, updatedFee.amount - (updatedFee.amountPaid || 0)),
-          receiptNumber: `FEE-${issuedAt.getTime().toString(36).toUpperCase()}`,
-          issuedAt,
-          amount: updatedFee.amount,
-          templateSubject: prefs.feePaymentEmailSubject,
-          templateBody: prefs.feePaymentEmailBody,
-        });
-        const channels: SchoolNotificationChannel[] = ["in_app"];
-        if (student.guardianEmail && prefs.email !== false) channels.push("email");
-        if (student.guardianPhone && prefs.sms !== false) channels.push("sms");
-        if (student.guardianPhone && prefs.whatsapp === true) channels.push("whatsapp");
         await enqueueSchoolNotification({
           businessId: businessId || "",
           propertyId,
@@ -271,12 +247,10 @@ export default function FeesPage() {
           studentName: student.fullName,
           recipientEmail: student.guardianEmail,
           recipientPhone: student.guardianPhone,
-          title: content.title,
-          message: content.message,
-          html: content.html,
-          metadata: { deliveryPurpose: "fee_payment_receipt", receiptNumber: `FEE-${issuedAt.getTime().toString(36).toUpperCase()}`, feeTitle: selectedFee.feeTitle },
+          title: "School fee payment received",
+          message: `A payment of ${payAmount.toFixed(2)} was recorded for ${selectedFee.feeTitle}.`,
           type: "fee_payment",
-          channels,
+          channels: ["in_app", "email", "sms"],
         });
       }
       toast.success("Fee payment recorded successfully.");

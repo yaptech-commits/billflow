@@ -16,8 +16,8 @@ import { Users, Mail, Phone, UserCheck, ShieldCheck, Plus, Trash2, Search, X } f
 import Modal from "@/components/ui/Modal";
 
 export default function SchoolParentsPage() {
-  const { businessId, role, propertyId: authPropertyId } = useAuth();
-  const propertyId = authPropertyId || "default_property";
+  const { businessId, role } = useAuth();
+  const propertyId = "default_property";
   const [students, setStudents] = useState<Student[]>([]);
   const [parents, setParents] = useState<ParentLink[]>([]);
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
@@ -36,14 +36,12 @@ export default function SchoolParentsPage() {
   }, [businessId]);
 
   const loadData = async () => {
-    if (!businessId) return;
-    const currentBusinessId = businessId;
     try {
       setLoading(true);
       const [fetchedStudents, fetchedParents, profile] = await Promise.all([
-        getStudents(currentBusinessId, propertyId),
-        getParentLinks(currentBusinessId, propertyId),
-        getBusinessProfile(currentBusinessId),
+        getStudents(businessId, propertyId),
+        getParentLinks(businessId, propertyId),
+        getBusinessProfile(businessId),
       ]);
       setStudents(fetchedStudents);
       setParents(fetchedParents);
@@ -267,7 +265,7 @@ export default function SchoolParentsPage() {
       </div>
 
       {/* Grant Portal Access Modal */}
-      <Modal open={isModalOpen} onClose={() => setIsModalOpen(false)} title="Grant Parent Portal Access">
+      <Modal open={isModalOpen} onClose={() => setIsModalOpen(false)}>
         <div className="p-6 space-y-6 max-w-lg w-full">
           <div className="flex items-center justify-between border-b border-border pb-4">
             <h2 className="text-lg font-bold text-white flex items-center gap-2">
