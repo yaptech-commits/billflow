@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { BusinessProfile, getBusinessProfile } from "@/lib/db";
-import { DEFAULT_PROPERTY_ID, getStudents, Student } from "@/lib/school-db";
-import { FileCheck2, Printer, Search, Users, RefreshCw, Phone, Mail } from "lucide-react";
+import { DEFAULT_PROPERTY_ID, getSchoolNotificationsForStudents, getStudents, SchoolNotification, Student } from "@/lib/school-db";
+import { AlertCircle, CheckCircle2, Clock3, FileCheck2, History, Mail, MessageSquareText, Phone, Printer, RefreshCw, Search, Users } from "lucide-react";
 import toast from "react-hot-toast";
 import { formatAdmissionDate, initials } from "@/lib/school-admission-letter";
 
@@ -13,6 +13,7 @@ export default function SchoolAdmissionsPage() {
   const propertyId = authPropertyId || DEFAULT_PROPERTY_ID;
   const [students, setStudents] = useState<Student[]>([]);
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
+  const [admissionNotifications, setAdmissionNotifications] = useState<SchoolNotification[]>([]);
   const [selectedStudentId, setSelectedStudentId] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
@@ -28,8 +29,12 @@ export default function SchoolAdmissionsPage() {
         getBusinessProfile(businessId),
       ]);
       const ordered = [...studentList].sort((a, b) => a.fullName.localeCompare(b.fullName));
+      const notifications = studentList.length
+        ? await getSchoolNotificationsForStudents(businessId, studentList.map((student) => student.id!).filter(Boolean), propertyId)
+        : [];
       setStudents(ordered);
       setBusinessProfile(profile);
+      setAdmissionNotifications(notifications.filter((notification) => notification.type === "admission_created"));
       setSelectedStudentId((current) => current && ordered.some((student) => student.id === current) ? current : ordered[0]?.id || "");
     } catch (error) {
       console.error(error);
@@ -53,6 +58,14 @@ export default function SchoolAdmissionsPage() {
 
   const selectedStudent = students.find((student) => student.id === selectedStudentId) || filteredStudents[0];
   const schoolName = businessProfile?.businessName || "School";
+  const notificationForSelectedStudent = admissionNotifications.find((notification) => notification.studentId === selectedStudent?.id);
+  const notificationChannelStatus = (notification: SchoolNotification, channel: string) => notification.deliveryStatus?.[channel]?.status || ((notification.status === "sent" || notification.status === "read") ? "delivered" : notification.status);
+  const notificationStatusLabel = (notification: SchoolNotification) => {
+    const statuses = notification.channels.filter((channel) => channel !== "in_app").map((channel) => notificationChannelStatus(notification, channel));
+    if (statuses.some((status) => status === "failed")) return "Partial failure";
+    if (statuses.some((status) => status === "delivered")) return "Delivered";
+    return "Queued";
+  };
   const logoDataUrl = typeof businessProfile?.logoDataUrl === "string" && /^(data:image\/|https?:\/\/)/i.test(businessProfile.logoDataUrl)
     ? businessProfile.logoDataUrl
     : "";
@@ -162,12 +175,88 @@ export default function SchoolAdmissionsPage() {
               <div className="bg-gold/10 border border-gold/30 rounded-lg p-4 text-sm text-foreground">
                 The admission letter uses the saved school name, address, contact details, and logo from Settings. Select **Print Admission Letter** to give the parent a printable copy.
               </div>
+              {notificationForSelectedStudent && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-background/50 p-4 text-sm">
+                  <div>
+                    <p className="font-semibold text-foreground">Latest delivery: {notificationStatusLabel(notificationForSelectedStudent)}</p>
+                    <p className="text-xs text-muted mt-1">Queued {formatAdmissionDate(notificationForSelectedStudent.createdAt)} via {notificationForSelectedStudent.channels.filter((channel) => channel !== "in_app").join(" + ").toUpperCase() || "in-app"}.</p>
+                  </div>
+                  <span className="text-xs text-muted">Tracked per property</span>
+                </div>
+              )}
             </div>
           ) : (
             <div className="h-full min-h-[320px] flex items-center justify-center text-muted text-sm text-center">Register a student to create the first admission record.</div>
           )}
         </section>
       </div>
+
+      <section className="no-print bg-card border border-border rounded-xl p-6">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+          <div>
+            <h2 className="text-sm font-semibold text-foreground flex items-center gap-2"><History size={16} className="text-gold" /> Admission Letter Delivery History</h2>
+            <p className="text-xs text-muted mt-1">Email and SMS delivery records for this school property. Provider secrets never appear here.</p>
+          </div>
+          <span className="text-[11px] text-muted">{admissionNotifications.length} notification{admissionNotifications.length === 1 ? "" : "s"}</span>
+        </div>
+        {admissionNotifications.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted">No admission-letter notifications have been queued yet.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-border text-[10px] uppercase tracking-wider text-muted">
+                  <th className="py-3 pr-4 font-medium">Student</th>
+                  <th className="py-3 pr-4 font-medium">Recipient</th>
+                  <th className="py-3 pr-4 font-medium">Channels</th>
+                  <th className="py-3 pr-4 font-medium">Status</th>
+                  <th className="py-3 font-medium">Queued</th>
+                </tr>
+              </thead>
+              <tbody>
+                {admissionNotifications.map((notification) => {
+                  const status = notificationStatusLabel(notification);
+                  const statusClass = status === "Delivered" ? "text-green" : status === "Partial failure" ? "text-red" : "text-gold";
+                  return (
+                    <tr key={notification.id} className="border-b border-border/60 last:border-0">
+                      <td className="py-3 pr-4">
+                        <p className="font-semibold text-foreground">{notification.studentName}</p>
+                        <p className="text-[11px] text-muted mt-0.5">{String(notification.metadata?.admissionNumber || "Student record")}</p>
+                      </td>
+                      <td className="py-3 pr-4 text-muted">
+                        <p>{notification.recipientEmail || "No email"}</p>
+                        {notification.recipientPhone && <p className="text-[11px] mt-0.5">{notification.recipientPhone}</p>}
+                      </td>
+                      <td className="py-3 pr-4">
+                        <div className="flex flex-wrap gap-1.5">
+                          {notification.channels.filter((channel) => channel !== "in_app").map((channel) => {
+                            const channelStatus = notificationChannelStatus(notification, channel);
+                            const delivered = channelStatus === "delivered";
+                            const failed = channelStatus === "failed";
+                            return (
+                              <span key={channel} className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] uppercase font-semibold ${delivered ? "bg-green/10 text-green" : failed ? "bg-red/10 text-red" : "bg-gold/10 text-gold"}`}>
+                                {channel === "email" ? <Mail size={11} /> : <MessageSquareText size={11} />}
+                                {channel} · {channelStatus}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </td>
+                      <td className={`py-3 pr-4 font-semibold ${statusClass}`}>
+                        <span className="inline-flex items-center gap-1.5">
+                          {status === "Delivered" ? <CheckCircle2 size={14} /> : status === "Partial failure" ? <AlertCircle size={14} /> : <Clock3 size={14} />}
+                          {status}
+                        </span>
+                      </td>
+                      <td className="py-3 text-muted whitespace-nowrap">{formatAdmissionDate(notification.createdAt)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
       {selectedStudent && (
         <section className="admission-letter-print hidden print:block bg-white text-slate-900 rounded-none border border-slate-200 p-10 max-w-4xl mx-auto">

@@ -7,6 +7,12 @@
 - [x] Show an administrator-visible fallback when no valid guardian email is available.
 - [x] Build, verify, promote, commit, and push the automated admission email implementation with author email `ayindenabawisdom@gmail.com`.
 
+## Admission Communication Enhancements
+- [x] Add secure provider/webhook configuration guidance and validation for school email delivery.
+- [x] Add an administrator admission-letter history view with property-scoped delivery statuses and timestamps.
+- [x] Add optional guardian SMS delivery alongside admission email with channel-level tracking and fallback messaging.
+- [x] Build, verify, commit, and push the communication enhancements with author email `ayindenabawisdom@gmail.com`.
+
 ## School Admissions Page
 - [x] Create an Admissions page inside the grouped School Management features.
 - [x] Automatically list students from the existing property-scoped student records after registration.

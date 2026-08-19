@@ -11,8 +11,9 @@ import {
 import { checkAndEnforceThreeDayOnlineAutoSwitch, getOfflineSummary, syncAllOfflineData } from "@/lib/offline-sync";
 import { getDocs, collection, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { getNotificationPreferences, saveNotificationPreferences, SchoolNotificationPreferences } from "@/lib/school-db";
 import toast from "react-hot-toast";
-import { Upload, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, MailCheck, MessageSquareText, Upload, X } from "lucide-react";
 
 function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
   return (
@@ -26,8 +27,9 @@ function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
 }
 
 export default function SettingsPage() {
-  const { user, businessId, role } = useAuth();
+  const { user, businessId, role, propertyId: authPropertyId } = useAuth();
   const effectiveRole = role as string;
+  const schoolPropertyId = authPropertyId || "default_property";
   const [name, setName] = useState(user?.displayName ?? "");
   const [saving, setSaving] = useState(false);
 
@@ -47,6 +49,10 @@ export default function SettingsPage() {
   const [exportEndDate, setExportEndDate] = useState("");
   const [offlineSummary, setOfflineSummary] = useState({ sales: 0, invoices: 0, payments: 0, folios: 0, total: 0 });
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [schoolNotificationPreferences, setSchoolNotificationPreferences] = useState<SchoolNotificationPreferences | null>(null);
+  const [schoolNotificationSaving, setSchoolNotificationSaving] = useState(false);
+  const [providerReadiness, setProviderReadiness] = useState<{ email: { configured: boolean; envVar: string; description: string; validationMessage?: string }; sms: { configured: boolean; envVar: string; description: string; validationMessage?: string }; webhookAuth?: { configured: boolean; envVar: string; description: string } } | null>(null);
+  const [providerReadinessLoading, setProviderReadinessLoading] = useState(false);
 
   useEffect(() => {
     if (!businessId) return;
@@ -75,6 +81,34 @@ export default function SettingsPage() {
       setBrandLoading(false);
     });
   }, [businessId]);
+
+  useEffect(() => {
+    if (!businessId) return;
+    let cancelled = false;
+    const loadSchoolCommunicationSettings = async () => {
+      setProviderReadinessLoading(true);
+      try {
+        const [preferences, token] = await Promise.all([
+          getNotificationPreferences(businessId, schoolPropertyId),
+          auth.currentUser?.getIdToken(),
+        ]);
+        if (!cancelled) setSchoolNotificationPreferences(preferences);
+        if (!token) return;
+        const response = await fetch("/api/school/notifications/config", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error("Could not read delivery configuration");
+        const config = await response.json();
+        if (!cancelled) setProviderReadiness(config);
+      } catch (error) {
+        console.error("School communication settings warning:", error);
+      } finally {
+        if (!cancelled) setProviderReadinessLoading(false);
+      }
+    };
+    loadSchoolCommunicationSettings();
+    return () => { cancelled = true; };
+  }, [businessId, schoolPropertyId, user?.uid]);
 
   const handleLogoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -113,6 +147,27 @@ export default function SettingsPage() {
       toast.error(err.message ?? "Could not save branding");
     } finally {
       setBrandSaving(false);
+    }
+  };
+
+  const handleSaveSchoolNotifications = async () => {
+    if (!businessId) return;
+    setSchoolNotificationSaving(true);
+    try {
+      const current = schoolNotificationPreferences || await getNotificationPreferences(businessId, schoolPropertyId);
+      const next = {
+        ...current,
+        businessId,
+        propertyId: schoolPropertyId,
+        admissionLetterSms: current.admissionLetterSms === true,
+      };
+      await saveNotificationPreferences(next);
+      setSchoolNotificationPreferences(next);
+      toast.success("School communication preferences saved");
+    } catch (error: any) {
+      toast.error(error?.message || "Could not save school communication preferences");
+    } finally {
+      setSchoolNotificationSaving(false);
     }
   };
 
@@ -402,6 +457,65 @@ export default function SettingsPage() {
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* School Communications */}
+      {brand.businessType === "school" && (effectiveRole === "owner" || effectiveRole === "super_admin") && (
+        <div className="card">
+          <div className="flex items-start justify-between gap-4 mb-5">
+            <div>
+              <h2 className="font-grotesk font-semibold text-white mb-1">School Communications</h2>
+              <p className="text-xs text-muted">Admission letters use your saved school branding and are delivered through the configured server webhooks.</p>
+            </div>
+            <MailCheck size={20} className="text-gold shrink-0" />
+          </div>
+
+          <div className="space-y-3 mb-5">
+            {[
+              { key: "email" as const, label: "Email delivery", icon: MailCheck },
+              { key: "sms" as const, label: "SMS delivery", icon: MessageSquareText },
+            ].map(({ key, label, icon: Icon }) => {
+              const channel = providerReadiness?.[key];
+              const configured = channel?.configured === true;
+              return (
+                <div key={key} className={`flex items-start gap-3 p-3 rounded-xl border ${configured ? "border-green/30 bg-green/5" : "border-gold/30 bg-gold/5"}`}>
+                  {configured ? <CheckCircle2 size={16} className="text-green mt-0.5 shrink-0" /> : <AlertCircle size={16} className="text-gold mt-0.5 shrink-0" />}
+                  <Icon size={16} className={configured ? "text-green mt-0.5 shrink-0" : "text-gold mt-0.5 shrink-0"} />
+                  <div className="min-w-0">
+                    <p className="text-sm text-surface">{label}: {providerReadinessLoading ? "Checking..." : configured ? "Ready" : "Not configured"}</p>
+                    <p className="text-[11px] text-muted mt-0.5">{channel?.description || "Delivery status is checked server-side."}</p>
+                    {!configured && channel?.validationMessage && <p className="text-[11px] text-gold mt-1">{channel.validationMessage}</p>}
+                    {!configured && channel?.envVar && <p className="text-[11px] text-gold mt-1">Set <code className="font-mono">{channel.envVar}</code> in the Vercel server environment settings, then redeploy.</p>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="rounded-lg border border-border bg-background/40 p-3 mb-5">
+            <p className="text-xs font-semibold text-foreground">Webhook security</p>
+            <p className="text-[11px] text-muted mt-1">{providerReadiness?.webhookAuth?.configured ? "Shared-secret authentication is enabled for outbound delivery." : "For production, configure a shared secret on both BillFlow and your provider adapter."}</p>
+            {!providerReadiness?.webhookAuth?.configured && <p className="text-[11px] text-gold mt-1">Set <code className="font-mono">{providerReadiness?.webhookAuth?.envVar || "SCHOOL_NOTIFICATION_WEBHOOK_SECRET"}</code> in Vercel and validate the x-billflow-webhook-secret header on the receiving adapter.</p>}
+          </div>
+
+          <div className="flex items-center justify-between gap-4 py-3.5 border-y border-border">
+            <div>
+              <p className="text-sm text-surface">Send admission letters by SMS</p>
+              <p className="text-[11px] text-muted mt-1">When enabled, a guardian phone number receives an SMS copy. Email remains the primary channel when available.</p>
+            </div>
+            <Toggle
+              on={schoolNotificationPreferences?.admissionLetterSms === true}
+              onToggle={() => setSchoolNotificationPreferences((current) => current ? { ...current, admissionLetterSms: !current.admissionLetterSms } : current)}
+            />
+          </div>
+
+          <div className="flex items-center justify-between gap-3 mt-4">
+            <p className="text-[11px] text-muted">Provider secrets are never stored in Firestore or exposed to the browser.</p>
+            <button className="btn-primary text-xs" onClick={handleSaveSchoolNotifications} disabled={schoolNotificationSaving || !schoolNotificationPreferences}>
+              {schoolNotificationSaving ? "Saving..." : "Save Communication Settings"}
+            </button>
+          </div>
         </div>
       )}
 

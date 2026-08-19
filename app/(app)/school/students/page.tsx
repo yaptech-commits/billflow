@@ -11,7 +11,10 @@ import {
   deleteStudent,
   createParentLink,
   getParentLinks,
+  getNotificationPreferences,
   enqueueSchoolNotification,
+  SchoolNotificationPreferences,
+  SchoolNotificationChannel,
 } from "@/lib/school-db";
 import { BusinessProfile, getBusinessProfile } from "@/lib/db";
 import { buildAdmissionLetterContent } from "@/lib/school-admission-letter";
@@ -24,6 +27,7 @@ export default function StudentsPage() {
   const propertyId = authPropertyId || "default_property";
   const [students, setStudents] = useState<Student[]>([]);
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
+  const [notificationPreferences, setNotificationPreferences] = useState<SchoolNotificationPreferences | null>(null);
   const [parentLinks, setParentLinks] = useState<ParentLink[]>([]);
   const [selectedParentStudent, setSelectedParentStudent] = useState<Student | null>(null);
   const [isParentModalOpen, setIsParentModalOpen] = useState(false);
@@ -44,13 +48,15 @@ export default function StudentsPage() {
 
   const loadData = async () => {
     if (!businessId) return;
-    const [stList, prof, links] = await Promise.all([
+    const [stList, prof, links, preferences] = await Promise.all([
       getStudents(businessId, propertyId),
       getBusinessProfile(businessId),
       getParentLinks(businessId, propertyId),
+      getNotificationPreferences(businessId, propertyId),
     ]);
     setStudents(stList);
     setBusinessProfile(prof);
+    setNotificationPreferences(preferences);
     setParentLinks(links);
   };
 
@@ -72,7 +78,11 @@ export default function StudentsPage() {
           ...form,
         });
         const guardianEmail = form.guardianEmail.trim();
-        let admissionEmailStatus: "queued" | "missing" | "failed" = "missing";
+        const guardianPhone = form.guardianPhone.trim();
+        const channels: SchoolNotificationChannel[] = ["in_app"];
+        if (guardianEmail) channels.push("email");
+        if (guardianPhone && notificationPreferences?.admissionLetterSms === true) channels.push("sms");
+        let admissionDeliveryStatus: "queued" | "missing" | "failed" = "missing";
 
         // Automatically save parent details and create parent portal link if guardian email is present.
         if (guardianEmail) {
@@ -111,7 +121,7 @@ export default function StudentsPage() {
               studentId: createdStudent.id,
               studentName: form.fullName,
               recipientEmail: guardianEmail,
-              recipientPhone: form.guardianPhone || undefined,
+              recipientPhone: guardianPhone || undefined,
               title: letter.subject,
               message: letter.message,
               html: letter.html,
@@ -122,20 +132,61 @@ export default function StudentsPage() {
                 documentTitle: letter.title,
               },
               type: "admission_created",
-              channels: ["in_app", "email"],
+              channels,
             });
-            admissionEmailStatus = "queued";
+            admissionDeliveryStatus = "queued";
           } catch (emailErr) {
-            admissionEmailStatus = "failed";
+            admissionDeliveryStatus = "failed";
             console.error("Admission letter email queue warning:", emailErr);
           }
         }
 
+        // If email is missing, an opted-in guardian phone can still receive the letter by SMS.
+        if (!guardianEmail && guardianPhone && notificationPreferences?.admissionLetterSms === true) {
+          try {
+            const profileForLetter = businessProfile || await getBusinessProfile(businessId);
+            const letter = buildAdmissionLetterContent(
+              {
+                fullName: form.fullName,
+                admissionNumber: createdStudent.admissionNumber,
+                classGrade: form.classGrade,
+                guardianName: form.guardianName,
+                status: form.status,
+              },
+              profileForLetter,
+            );
+            await enqueueSchoolNotification({
+              businessId,
+              propertyId,
+              studentId: createdStudent.id,
+              studentName: form.fullName,
+              recipientPhone: guardianPhone,
+              title: letter.subject,
+              message: letter.message,
+              metadata: {
+                admissionNumber: createdStudent.admissionNumber,
+                classGrade: form.classGrade,
+                deliveryPurpose: "admission_letter",
+                documentTitle: letter.title,
+              },
+              type: "admission_created",
+              channels: ["in_app", "sms"],
+            });
+            admissionDeliveryStatus = "queued";
+          } catch (smsErr) {
+            admissionDeliveryStatus = "failed";
+            console.error("Admission letter SMS queue warning:", smsErr);
+          }
+        }
+
         toast.success(`Student registered. Automatic Student ID: ${createdStudent.admissionNumber}`);
-        if (admissionEmailStatus === "queued") {
-          toast.success(`Admission letter queued for ${guardianEmail}. Delivery status is tracked in school notifications.`);
-        } else if (admissionEmailStatus === "failed") {
-          toast.error("Student registered, but the admission letter email could not be queued. Check notification delivery settings.");
+        if (admissionDeliveryStatus === "queued") {
+          const deliveryLabels = channels.filter((channel) => channel !== "in_app").map((channel) => channel.toUpperCase()).join(" + ");
+          toast.success(`Admission letter queued via ${deliveryLabels || "in-app"}. Delivery status is tracked in school notifications.`);
+        } else if (admissionDeliveryStatus === "failed") {
+          toast.error("Student registered, but the admission letter notification could not be queued. Check notification delivery settings.");
+        } else if (guardianPhone && notificationPreferences?.admissionLetterSms !== true) {
+          toast(`Student registered. Add a guardian email or enable admission SMS in Settings to send the letter.`);
         } else {
           toast("Student registered without an admission-letter email. Add a guardian email to send it later.");
         }

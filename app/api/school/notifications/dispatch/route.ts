@@ -65,9 +65,13 @@ export async function POST(request: NextRequest) {
       continue;
     }
     try {
+      const webhookSecret = process.env.SCHOOL_NOTIFICATION_WEBHOOK_SECRET;
       const response = await fetch(webhookUrl, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          ...(webhookSecret ? { "x-billflow-webhook-secret": webhookSecret } : {}),
+        },
         body: JSON.stringify({
           event: "billflow.school.notification",
           notificationId: payload.notificationId,

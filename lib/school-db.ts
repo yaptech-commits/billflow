@@ -122,6 +122,11 @@ export type SchoolNotificationChannel = "in_app" | "email" | "sms" | "push";
 export type SchoolNotificationType = "attendance_absence" | "fee_assigned" | "fee_payment" | "report_card_published" | "announcement" | "admission_created";
 export type SchoolNotificationStatus = "queued" | "sent" | "failed" | "read";
 
+export interface SchoolNotificationDeliveryResult {
+  status: "delivered" | "queued" | "failed";
+  reason?: string;
+}
+
 export interface SchoolNotification {
   id?: string;
   businessId: string;
@@ -141,6 +146,8 @@ export interface SchoolNotification {
   status: SchoolNotificationStatus;
   deliveryProvider?: string;
   deliveryError?: string;
+  deliveryStatus?: Record<string, SchoolNotificationDeliveryResult>;
+  lastAttemptAt?: any;
   createdAt?: any;
   sentAt?: any;
   readAt?: any;
@@ -154,6 +161,8 @@ export interface SchoolNotificationPreferences {
   feeAssigned: boolean;
   feePayment: boolean;
   reportCardPublished: boolean;
+  /** Optional SMS copy of a newly created admission letter. */
+  admissionLetterSms: boolean;
   email: boolean;
   sms: boolean;
   push: boolean;
@@ -601,6 +610,7 @@ export async function enqueueSchoolNotification(notification: Omit<SchoolNotific
       status: result.status === "delivered" ? "sent" : result.status === "partial_failure" ? "failed" : "queued",
       deliveryStatus: channelStatuses,
       lastAttemptAt: serverTimestamp(),
+      ...(result.status === "delivered" ? { sentAt: serverTimestamp() } : {}),
     });
   } catch {
     await updateDoc(docRef, { status: "queued", lastAttemptAt: serverTimestamp() });
@@ -641,6 +651,7 @@ export async function getNotificationPreferences(businessId: string, propertyId?
       feeAssigned: true,
       feePayment: true,
       reportCardPublished: true,
+      admissionLetterSms: false,
       email: true,
       sms: true,
       push: false,
