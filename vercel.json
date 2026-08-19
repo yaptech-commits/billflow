@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/school/notifications/retry",
+      "schedule": "0 0 * * *"
+    }
+  ]
+}

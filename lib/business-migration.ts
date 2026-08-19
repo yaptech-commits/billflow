@@ -5,10 +5,19 @@
 
 import { collection, getDocs, updateDoc, doc } from "firebase/firestore";
 import { db } from "./firebase";
-import { getPagesForBusinessType } from "./business-type-config";
+import { BusinessType, getPagesForBusinessType } from "./business-type-config";
+
+const BUSINESS_TYPES = new Set<BusinessType>(["general", "pharmacy", "hotel", "coldstore", "school"]);
+
+function isBusinessType(value: unknown): value is BusinessType {
+  return typeof value === "string" && BUSINESS_TYPES.has(value as BusinessType);
+}
 
 export async function migrateBusinessesToAutoPages() {
   try {
+    if (!db) {
+      throw new Error("Firebase database is unavailable");
+    }
     const businessesRef = collection(db, "businesses");
     const snapshot = await getDocs(businessesRef);
     
@@ -25,7 +34,7 @@ export async function migrateBusinessesToAutoPages() {
       }
 
       // Get pages for business type
-      const businessType = business.businessType || "general";
+      const businessType = isBusinessType(business.businessType) ? business.businessType : "general";
       const allowedPages = getPagesForBusinessType(businessType);
 
       // Update business with allowedPages

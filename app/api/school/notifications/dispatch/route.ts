@@ -1,100 +1,71 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyServerFirebaseToken } from "@/lib/firebase-admin";
+import { getAdminDb } from "@/lib/firebase-admin";
+import { errorResponseDetails, requireServerActor } from "@/lib/server-auth";
+import { dispatchSchoolNotification, SchoolNotificationDispatchPayload } from "@/lib/school-notification-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Channel = "email" | "sms" | "push" | "in_app";
+const DEFAULT_PROPERTY_ID = "default_property";
 
-type NotificationPayload = {
-  notificationId: string;
-  businessId: string;
-  propertyId: string;
-  studentId: string;
-  studentName: string;
-  recipientEmail?: string;
-  recipientPhone?: string;
-  title: string;
-  message: string;
-  type: string;
-  channels: Channel[];
-};
+function normalizePropertyId(value: unknown) {
+  return String(value || DEFAULT_PROPERTY_ID).trim() || DEFAULT_PROPERTY_ID;
+}
 
-const webhookFor = (channel: Channel) => {
-  if (channel === "email") return process.env.SCHOOL_EMAIL_WEBHOOK_URL;
-  if (channel === "sms") return process.env.SCHOOL_SMS_WEBHOOK_URL;
-  if (channel === "push") return process.env.SCHOOL_PUSH_WEBHOOK_URL;
-  return undefined;
-};
+function canManageNotification(actor: Awaited<ReturnType<typeof requireServerActor>>, data: Record<string, any>) {
+  if (actor.role === "super_admin") return true;
+  if (actor.role !== "owner") return false;
+  if (String(data.businessId || "") !== actor.businessId) return false;
+  return !actor.propertyId || normalizePropertyId(data.propertyId) === actor.propertyId;
+}
 
 export async function POST(request: NextRequest) {
-  const authorization = request.headers.get("authorization");
-  if (!authorization?.startsWith("Bearer ")) {
-    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
-  }
   try {
-    await verifyServerFirebaseToken(authorization.slice("Bearer ".length));
-  } catch {
-    return NextResponse.json({ error: "Invalid Firebase session or missing server credentials" }, { status: 401 });
-  }
-
-  let payload: NotificationPayload;
-  try {
-    payload = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid notification payload" }, { status: 400 });
-  }
-
-  if (!payload?.notificationId || !payload.businessId || !payload.propertyId || !payload.studentId || !payload.title || !payload.message) {
-    return NextResponse.json({ error: "Missing required notification fields" }, { status: 400 });
-  }
-
-  const requestedChannels = Array.from(new Set(payload.channels || []));
-  const results: Record<string, { status: "delivered" | "queued" | "failed"; reason?: string }> = {};
-
-  for (const channel of requestedChannels) {
-    if (channel === "in_app") {
-      results[channel] = { status: "delivered", reason: "Available in the BillFlow parent portal" };
-      continue;
+    const actor = await requireServerActor(request);
+    if (actor.role !== "owner" && actor.role !== "super_admin") {
+      return NextResponse.json({ error: "Owner or super-admin access required" }, { status: 403 });
     }
-    const webhookUrl = webhookFor(channel);
-    if (!webhookUrl) {
-      results[channel] = { status: "queued", reason: `No ${channel} webhook is configured on the server` };
-      continue;
+
+    const body = await request.json().catch(() => ({}));
+    const notificationId = String(body.notificationId || "").trim();
+    if (!notificationId) {
+      return NextResponse.json({ error: "notificationId is required" }, { status: 400 });
     }
-    try {
-      const response = await fetch(webhookUrl, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          event: "billflow.school.notification",
-          notificationId: payload.notificationId,
-          businessId: payload.businessId,
-          propertyId: payload.propertyId,
-          studentId: payload.studentId,
-          studentName: payload.studentName,
-          recipientEmail: payload.recipientEmail,
-          recipientPhone: payload.recipientPhone,
-          title: payload.title,
-          message: payload.message,
-          type: payload.type,
-          channel,
-        }),
-      });
-      results[channel] = response.ok
-        ? { status: "delivered" }
-        : { status: "failed", reason: `Webhook returned HTTP ${response.status}` };
-    } catch (error) {
-      results[channel] = { status: "failed", reason: error instanceof Error ? error.message : "Webhook request failed" };
+
+    const notificationDoc = await getAdminDb().collection("schoolNotifications").doc(notificationId).get();
+    if (!notificationDoc.exists) {
+      return NextResponse.json({ error: "Notification not found" }, { status: 404 });
     }
+
+    const data = notificationDoc.data() as Record<string, any>;
+    if (!canManageNotification(actor, data)) {
+      return NextResponse.json({ error: "You are not authorized to dispatch this notification" }, { status: 403 });
+    }
+
+    const payload: SchoolNotificationDispatchPayload = {
+      notificationId,
+      businessId: String(data.businessId || ""),
+      propertyId: normalizePropertyId(data.propertyId),
+      studentId: String(data.studentId || ""),
+      studentName: String(data.studentName || ""),
+      recipientEmail: data.recipientEmail || undefined,
+      recipientPhone: data.recipientPhone || undefined,
+      title: String(data.title || "School notification"),
+      message: String(data.message || ""),
+      html: data.html || undefined,
+      metadata: data.metadata || undefined,
+      type: String(data.type || "announcement"),
+      channels: Array.isArray(data.channels) ? data.channels : ["in_app"],
+    };
+
+    if (!payload.businessId || !payload.studentId || !payload.title || !payload.message) {
+      return NextResponse.json({ error: "Stored notification is incomplete" }, { status: 422 });
+    }
+
+    const result = await dispatchSchoolNotification(payload);
+    return NextResponse.json(result);
+  } catch (error) {
+    const details = errorResponseDetails(error);
+    return NextResponse.json({ error: details.message }, { status: details.status });
   }
-
-  const values = Object.values(results);
-  const status = values.some((result) => result.status === "failed")
-    ? "partial_failure"
-    : values.some((result) => result.status === "delivered")
-      ? "delivered"
-      : "queued";
-
-  return NextResponse.json({ status, results });
 }

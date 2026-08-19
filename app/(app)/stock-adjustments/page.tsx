@@ -145,14 +145,16 @@ export default function StockAdjustmentsPage() {
       </div>
 
       {/* New Adjustment Modal */}
-      <Modal open={showNewAdjustmentModal} onClose={() => setShowNewAdjustmentModal(false)} title="Create Stock Adjustment">
-        <NewAdjustmentForm 
-          businessId={businessId} 
-          staffName={user?.displayName || "Unknown"} 
-          staffId={user?.uid || ""} 
-          onSuccess={() => { setShowNewAdjustmentModal(false); fetchAdjustments(); }} 
-        />
-      </Modal>
+      {businessId && (
+        <Modal open={showNewAdjustmentModal} onClose={() => setShowNewAdjustmentModal(false)} title="Create Stock Adjustment">
+          <NewAdjustmentForm 
+            businessId={businessId} 
+            staffName={user?.displayName || "Unknown"} 
+            staffId={user?.uid || ""} 
+            onSuccess={() => { setShowNewAdjustmentModal(false); fetchAdjustments(); }} 
+          />
+        </Modal>
+      )}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebase-admin";
+import { verifyPortalSession } from "@/lib/portal-session";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -13,26 +14,38 @@ function normalizePropertyId(value: unknown) {
   return String(value || DEFAULT_PROPERTY_ID).trim() || DEFAULT_PROPERTY_ID;
 }
 
-function paymentDocumentId(reference: string) {
-  return `paystack_${reference.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 120)}`;
+function paymentDocumentId(businessId: string, reference: string) {
+  const scope = `${businessId}_${reference}`.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 140);
+  return `paystack_${scope}`;
 }
 
 function jsonError(error: string, status: number) {
   return NextResponse.json({ error }, { status });
 }
 
+function metadataValue(transaction: any, key: string) {
+  const direct = transaction?.metadata?.[key];
+  if (direct !== undefined && direct !== null) return String(direct);
+  const customField = Array.isArray(transaction?.metadata?.custom_fields)
+    ? transaction.metadata.custom_fields.find((field: any) => field?.variable_name === key)
+    : undefined;
+  return customField?.value === undefined || customField?.value === null ? "" : String(customField.value);
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
+    const portalSession = String(body.portalSession || "").trim();
     const feeId = String(body.feeId || "").trim();
-    const studentId = String(body.studentId || "").trim();
-    const businessId = String(body.businessId || "").trim();
-    const propertyId = normalizePropertyId(body.propertyId);
     const reference = String(body.reference || "").trim();
     const paymentMethod = body.paymentMethod as PaymentMethod;
     const requestedAmount = Number(body.amount || 0);
+    const session = verifyPortalSession(portalSession);
+    const studentId = session.studentId;
+    const businessId = session.businessId;
+    const propertyId = normalizePropertyId(session.propertyId);
 
-    if (!feeId || !studentId || !businessId || !reference) {
+    if (!portalSession || !feeId || !reference) {
       return jsonError("The fee payment request is incomplete.", 400);
     }
     if (paymentMethod !== "card" && paymentMethod !== "momo") {
@@ -61,20 +74,29 @@ export async function POST(request: NextRequest) {
       return jsonError("The payment provider has not confirmed this payment.", 402);
     }
 
+    const providerStudentId = metadataValue(transaction, "student_id");
+    const providerFeeId = metadataValue(transaction, "fee_id");
+    if (providerStudentId !== studentId || providerFeeId !== feeId) {
+      return jsonError("The confirmed payment is not linked to this student fee.", 409);
+    }
+
     const verifiedAmount = Number(transaction.amount || 0) / 100;
     if (!Number.isFinite(verifiedAmount) || Math.abs(verifiedAmount - requestedAmount) > 0.01) {
-      return jsonError("The confirmed payment amount does not match the fee amount.", 409);
+      return jsonError("The confirmed payment amount does not match the requested amount.", 409);
     }
 
     const db = getAdminDb();
     const feeRef = db.collection("studentFees").doc(feeId);
-    const paymentRef = db.collection("studentFeePayments").doc(paymentDocumentId(reference));
+    const paymentRef = db.collection("studentFeePayments").doc(paymentDocumentId(businessId, reference));
     const result = await db.runTransaction(async (transactionRunner) => {
       const feeSnap = await transactionRunner.get(feeRef);
       const paymentSnap = await transactionRunner.get(paymentRef);
 
       if (paymentSnap.exists) {
         const existing = paymentSnap.data() as Record<string, any>;
+        if (String(existing.businessId || "") !== businessId || String(existing.studentId || "") !== studentId) {
+          throw new Error("This payment reference is already linked to another record.");
+        }
         return {
           alreadyProcessed: true,
           fee: {
@@ -156,6 +178,3 @@ export async function POST(request: NextRequest) {
 export async function GET() {
   return jsonError("Use POST to confirm a Parent Portal fee payment.", 405);
 }
-
-// Parent Portal payment style reminder: never mark a fee paid from the browser alone;
-// provider confirmation and the property-scoped Firestore transaction are authoritative.

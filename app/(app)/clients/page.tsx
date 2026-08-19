@@ -48,6 +48,11 @@ export default function ClientsPage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!businessId) return;
+    const userId = user?.uid;
+    if (!userId) {
+      toast.error("Your session is still loading. Please try again.");
+      return;
+    }
     if (businessId === "SUPER_ADMIN") {
       toast.error("Please select a specific business to manage clients.");
       return;
@@ -58,7 +63,7 @@ export default function ClientsPage() {
         await updateClient(editingClient.id!, formData);
         toast.success("Client updated");
       } else {
-        await createClient({ ...formData, businessId, userId: user?.uid });
+        await createClient({ ...formData, businessId, userId });
         toast.success("Client created");
       }
       setShowModal(false);

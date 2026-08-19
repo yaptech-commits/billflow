@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { Firestore, QueryDocumentSnapshot } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebase-admin";
+import { createPortalSession } from "@/lib/portal-session";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,9 @@ function serialize(value: any): any {
 }
 
 function inPropertyScope(item: any, propertyId: string) {
-  return !item.propertyId || item.propertyId === propertyId;
+  return item.propertyId
+    ? item.propertyId === propertyId
+    : propertyId === DEFAULT_PROPERTY_ID;
 }
 
 function gradeForScore(score: number) {
@@ -51,7 +54,7 @@ function makeCandidate(student: any, id: string) {
 function matchesLookup(student: any, lookup: string) {
   const name = normalize(student.fullName);
   const admissionNumber = normalize(student.admissionNumber);
-  return admissionNumber === lookup || name === lookup || (lookup.length >= 3 && name.includes(lookup));
+  return admissionNumber === lookup || name === lookup;
 }
 
 async function readDashboard(db: Firestore, student: any, studentId: string) {
@@ -143,8 +146,6 @@ async function readDashboard(db: Firestore, student: any, studentId: string) {
   return serialize({
     student: {
       id: studentId,
-      businessId,
-      propertyId,
       admissionNumber: student.admissionNumber || "",
       fullName: student.fullName || "Unnamed student",
       classGrade: student.classGrade || "Unassigned",
@@ -199,6 +200,7 @@ export async function POST(request: NextRequest) {
       const snapshot = await db.collection("students").get();
       const candidates = snapshot.docs
         .filter((item) => item.data()?.status !== "withdrawn" && matchesLookup(item.data(), lookup))
+        .slice(0, 5)
         .map((item) => makeCandidate(item.data(), item.id));
 
       if (!candidates.length) {
@@ -211,7 +213,15 @@ export async function POST(request: NextRequest) {
     }
 
     if (!selected) return NextResponse.json({ error: "Student record not found." }, { status: 404 });
-    return NextResponse.json({ dashboard: await readDashboard(db, selected.data(), selected.id) });
+    const student = selected.data() as Record<string, any>;
+    const propertyId = String(student.propertyId || DEFAULT_PROPERTY_ID);
+    const dashboard = await readDashboard(db, student, selected.id);
+    const portalSession = createPortalSession({
+      studentId: selected.id,
+      businessId: String(student.businessId || ""),
+      propertyId,
+    });
+    return NextResponse.json({ dashboard, portalSession });
   } catch (error) {
     console.error("Parent Portal lookup failed:", error);
     return NextResponse.json({ error: "The Parent Portal is temporarily unavailable. Please try again." }, { status: 500 });
