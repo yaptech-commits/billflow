@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { BusinessProfile, getBusinessProfile } from "@/lib/db";
+import { auth } from "@/lib/firebase";
 import { DEFAULT_PROPERTY_ID, getSchoolNotificationsForStudents, getStudents, SchoolNotification, Student } from "@/lib/school-db";
 import { AlertCircle, CheckCircle2, Clock3, Download, FileCheck2, History, Mail, MessageSquareText, Phone, Printer, RefreshCw, Search, Users } from "lucide-react";
 import toast from "react-hot-toast";
@@ -18,6 +19,7 @@ export default function SchoolAdmissionsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [retryingNotificationId, setRetryingNotificationId] = useState<string | null>(null);
 
   const loadData = async (silent = false) => {
     if (!businessId) return;
@@ -118,6 +120,28 @@ export default function SchoolAdmissionsPage() {
       return;
     }
     window.print();
+  };
+
+  const retryAdmissionNotification = async (notification: SchoolNotification) => {
+    if (!notification.id || retryingNotificationId) return;
+    setRetryingNotificationId(notification.id);
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) throw new Error("Your session has expired. Please sign in again.");
+      const response = await fetch("/api/school/notifications/manual-retry", {
+        method: "POST",
+        headers: { "content-type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ notificationId: notification.id }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Could not retry this notification.");
+      toast.success(result.message || "Admission letter delivery retried.");
+      await loadData(true);
+    } catch (error: any) {
+      toast.error(error?.message || "Could not retry this admission letter.");
+    } finally {
+      setRetryingNotificationId(null);
+    }
   };
 
   return (
@@ -258,6 +282,7 @@ export default function SchoolAdmissionsPage() {
                   <th className="py-3 pr-4 font-medium">Channels</th>
                   <th className="py-3 pr-4 font-medium">Status</th>
                   <th className="py-3 font-medium">Queued</th>
+                  <th className="py-3 font-medium text-right">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -296,6 +321,19 @@ export default function SchoolAdmissionsPage() {
                         </span>
                       </td>
                       <td className="py-3 text-muted whitespace-nowrap">{formatAdmissionDate(notification.createdAt)}</td>
+                      <td className="py-3 text-right">
+                        {status !== "Delivered" && notification.id && (
+                          <button
+                            onClick={() => retryAdmissionNotification(notification)}
+                            className="btn-ghost border border-border text-foreground text-[11px] px-2.5 py-1.5 rounded-lg inline-flex items-center gap-1.5"
+                            disabled={retryingNotificationId === notification.id}
+                            title="Attempt delivery again"
+                          >
+                            <RefreshCw size={12} className={retryingNotificationId === notification.id ? "animate-spin" : ""} />
+                            {retryingNotificationId === notification.id ? "Retrying..." : "Retry"}
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}

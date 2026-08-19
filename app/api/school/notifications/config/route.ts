@@ -38,6 +38,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     email: inspectWebhook("SCHOOL_EMAIL_WEBHOOK_URL", "Receives branded admission letters and school email notifications."),
     sms: inspectWebhook("SCHOOL_SMS_WEBHOOK_URL", "Receives optional admission SMS and school SMS notifications."),
+    whatsapp: inspectWebhook("SCHOOL_WHATSAPP_WEBHOOK_URL", "Receives optional WhatsApp admission letters and school notifications."),
     webhookAuth: {
       configured: Boolean(process.env.SCHOOL_NOTIFICATION_WEBHOOK_SECRET),
       envVar: "SCHOOL_NOTIFICATION_WEBHOOK_SECRET",

@@ -14,6 +14,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db, auth } from "./firebase";
+import { DEFAULT_SCHOOL_NOTIFICATION_TEMPLATES } from "@/lib/school-notification-templates";
 
 export const DEFAULT_PROPERTY_ID = "default_property";
 
@@ -118,7 +119,7 @@ export interface ParentLink {
   updatedAt?: any;
 }
 
-export type SchoolNotificationChannel = "in_app" | "email" | "sms" | "push";
+export type SchoolNotificationChannel = "in_app" | "email" | "sms" | "push" | "whatsapp";
 export type SchoolNotificationType = "attendance_absence" | "fee_assigned" | "fee_payment" | "report_card_published" | "announcement" | "admission_created";
 export type SchoolNotificationStatus = "queued" | "sent" | "failed" | "read";
 
@@ -167,10 +168,17 @@ export interface SchoolNotificationPreferences {
   reportCardPublished: boolean;
   /** Optional SMS copy of a newly created admission letter. */
   admissionLetterSms: boolean;
+  /** Optional WhatsApp copy of a newly created admission letter. */
+  admissionLetterWhatsapp: boolean;
   email: boolean;
   sms: boolean;
   push: boolean;
+  whatsapp: boolean;
   inApp: boolean;
+  feePaymentEmailSubject?: string;
+  feePaymentEmailBody?: string;
+  reportCardEmailSubject?: string;
+  reportCardEmailBody?: string;
   updatedAt?: any;
 }
 
@@ -665,23 +673,25 @@ export async function markSchoolNotificationRead(id: string) {
 export async function getNotificationPreferences(businessId: string, propertyId?: string) {
   const ref = doc(db, "schoolNotificationPreferences", notificationPreferencesId(businessId, propertyId));
   const snap = await getDoc(ref);
-  if (!snap.exists()) {
-    return {
-      businessId,
-      propertyId: propertyId || DEFAULT_PROPERTY_ID,
-      enabled: true,
-      attendanceAbsence: true,
-      feeAssigned: true,
-      feePayment: true,
-      reportCardPublished: true,
-      admissionLetterSms: false,
-      email: true,
-      sms: true,
-      push: false,
-      inApp: true,
-    } as SchoolNotificationPreferences;
-  }
-  return { ...snap.data(), businessId } as SchoolNotificationPreferences;
+  const defaults: SchoolNotificationPreferences = {
+    businessId,
+    propertyId: propertyId || DEFAULT_PROPERTY_ID,
+    enabled: true,
+    attendanceAbsence: true,
+    feeAssigned: true,
+    feePayment: true,
+    reportCardPublished: true,
+    admissionLetterSms: false,
+    admissionLetterWhatsapp: false,
+    email: true,
+    sms: true,
+    push: false,
+    whatsapp: false,
+    inApp: true,
+    ...DEFAULT_SCHOOL_NOTIFICATION_TEMPLATES,
+  };
+  if (!snap.exists()) return defaults;
+  return { ...defaults, ...snap.data(), businessId, propertyId: propertyId || DEFAULT_PROPERTY_ID } as SchoolNotificationPreferences;
 }
 
 export async function saveNotificationPreferences(preferences: SchoolNotificationPreferences) {

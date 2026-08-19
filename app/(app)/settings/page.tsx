@@ -12,6 +12,7 @@ import { checkAndEnforceThreeDayOnlineAutoSwitch, getOfflineSummary, syncAllOffl
 import { getDocs, collection, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { getNotificationPreferences, saveNotificationPreferences, SchoolNotificationPreferences } from "@/lib/school-db";
+import { DEFAULT_SCHOOL_NOTIFICATION_TEMPLATES } from "@/lib/school-notification-templates";
 import toast from "react-hot-toast";
 import { AlertCircle, CheckCircle2, MailCheck, MessageSquareText, Upload, X } from "lucide-react";
 
@@ -51,7 +52,7 @@ export default function SettingsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [schoolNotificationPreferences, setSchoolNotificationPreferences] = useState<SchoolNotificationPreferences | null>(null);
   const [schoolNotificationSaving, setSchoolNotificationSaving] = useState(false);
-  const [providerReadiness, setProviderReadiness] = useState<{ email: { configured: boolean; envVar: string; description: string; validationMessage?: string }; sms: { configured: boolean; envVar: string; description: string; validationMessage?: string }; webhookAuth?: { configured: boolean; envVar: string; description: string }; retryScheduler?: { configured: boolean; envVar: string; schedule: string; description: string } } | null>(null);
+  const [providerReadiness, setProviderReadiness] = useState<{ email: { configured: boolean; envVar: string; description: string; validationMessage?: string }; sms: { configured: boolean; envVar: string; description: string; validationMessage?: string }; whatsapp?: { configured: boolean; envVar: string; description: string; validationMessage?: string }; webhookAuth?: { configured: boolean; envVar: string; description: string }; retryScheduler?: { configured: boolean; envVar: string; schedule: string; description: string } } | null>(null);
   const [providerReadinessLoading, setProviderReadinessLoading] = useState(false);
 
   useEffect(() => {
@@ -160,6 +161,12 @@ export default function SettingsPage() {
         businessId,
         propertyId: schoolPropertyId,
         admissionLetterSms: current.admissionLetterSms === true,
+        admissionLetterWhatsapp: current.admissionLetterWhatsapp === true,
+        whatsapp: current.whatsapp === true,
+        feePaymentEmailSubject: current.feePaymentEmailSubject || DEFAULT_SCHOOL_NOTIFICATION_TEMPLATES.feePaymentEmailSubject,
+        feePaymentEmailBody: current.feePaymentEmailBody || DEFAULT_SCHOOL_NOTIFICATION_TEMPLATES.feePaymentEmailBody,
+        reportCardEmailSubject: current.reportCardEmailSubject || DEFAULT_SCHOOL_NOTIFICATION_TEMPLATES.reportCardEmailSubject,
+        reportCardEmailBody: current.reportCardEmailBody || DEFAULT_SCHOOL_NOTIFICATION_TEMPLATES.reportCardEmailBody,
       };
       await saveNotificationPreferences(next);
       setSchoolNotificationPreferences(next);
@@ -475,6 +482,7 @@ export default function SettingsPage() {
             {[
               { key: "email" as const, label: "Email delivery", icon: MailCheck },
               { key: "sms" as const, label: "SMS delivery", icon: MessageSquareText },
+              { key: "whatsapp" as const, label: "WhatsApp delivery", icon: MessageSquareText },
             ].map(({ key, label, icon: Icon }) => {
               const channel = providerReadiness?.[key];
               const configured = channel?.configured === true;
@@ -508,15 +516,52 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <div className="flex items-center justify-between gap-4 py-3.5 border-y border-border">
-            <div>
-              <p className="text-sm text-surface">Send admission letters by SMS</p>
-              <p className="text-[11px] text-muted mt-1">When enabled, a guardian phone number receives an SMS copy. Email remains the primary channel when available.</p>
+          <div className="space-y-3 border-y border-border py-3.5">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm text-surface">Send admission letters by SMS</p>
+                <p className="text-[11px] text-muted mt-1">When enabled, a guardian phone number receives an SMS copy.</p>
+              </div>
+              <Toggle
+                on={schoolNotificationPreferences?.admissionLetterSms === true}
+                onToggle={() => setSchoolNotificationPreferences((current) => current ? { ...current, admissionLetterSms: !current.admissionLetterSms } : current)}
+              />
             </div>
-            <Toggle
-              on={schoolNotificationPreferences?.admissionLetterSms === true}
-              onToggle={() => setSchoolNotificationPreferences((current) => current ? { ...current, admissionLetterSms: !current.admissionLetterSms } : current)}
-            />
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm text-surface">Send admission letters by WhatsApp</p>
+                <p className="text-[11px] text-muted mt-1">Uses the guardian phone number and your configured WhatsApp provider adapter.</p>
+              </div>
+              <Toggle
+                on={schoolNotificationPreferences?.admissionLetterWhatsapp === true}
+                onToggle={() => setSchoolNotificationPreferences((current) => current ? { ...current, admissionLetterWhatsapp: !current.admissionLetterWhatsapp, whatsapp: true } : current)}
+              />
+            </div>
+          </div>
+
+          <div className="mt-5 space-y-4">
+            <div>
+              <h3 className="text-sm font-semibold text-surface">Branded school notification templates</h3>
+              <p className="text-[11px] text-muted mt-1">Use placeholders such as {{studentName}}, {{amount}}, {{feeTitle}}, {{receiptNumber}}, {{term}}, and {{schoolName}}. These templates apply to email and the plain-text WhatsApp fallback.</p>
+            </div>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <label className="label">Fee receipt email subject</label>
+                <input className="input" value={schoolNotificationPreferences?.feePaymentEmailSubject || ""} onChange={(event) => setSchoolNotificationPreferences((current) => current ? { ...current, feePaymentEmailSubject: event.target.value } : current)} />
+              </div>
+              <div>
+                <label className="label">Report card email subject</label>
+                <input className="input" value={schoolNotificationPreferences?.reportCardEmailSubject || ""} onChange={(event) => setSchoolNotificationPreferences((current) => current ? { ...current, reportCardEmailSubject: event.target.value } : current)} />
+              </div>
+              <div>
+                <label className="label">Fee receipt email body</label>
+                <textarea className="input min-h-[96px] resize-y" value={schoolNotificationPreferences?.feePaymentEmailBody || ""} onChange={(event) => setSchoolNotificationPreferences((current) => current ? { ...current, feePaymentEmailBody: event.target.value } : current)} />
+              </div>
+              <div>
+                <label className="label">Report card email body</label>
+                <textarea className="input min-h-[96px] resize-y" value={schoolNotificationPreferences?.reportCardEmailBody || ""} onChange={(event) => setSchoolNotificationPreferences((current) => current ? { ...current, reportCardEmailBody: event.target.value } : current)} />
+              </div>
+            </div>
           </div>
 
           <div className="flex items-center justify-between gap-3 mt-4">

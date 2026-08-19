@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 
-export type SchoolNotificationServerChannel = "in_app" | "email" | "sms" | "push";
+export type SchoolNotificationServerChannel = "in_app" | "email" | "sms" | "push" | "whatsapp";
 
 export type SchoolNotificationDispatchPayload = {
   notificationId: string;
@@ -26,6 +26,7 @@ export type SchoolNotificationDispatchResult = {
 function webhookFor(channel: SchoolNotificationServerChannel) {
   if (channel === "email") return process.env.SCHOOL_EMAIL_WEBHOOK_URL;
   if (channel === "sms") return process.env.SCHOOL_SMS_WEBHOOK_URL;
+  if (channel === "whatsapp") return process.env.SCHOOL_WHATSAPP_WEBHOOK_URL;
   if (channel === "push") return process.env.SCHOOL_PUSH_WEBHOOK_URL;
   return undefined;
 }

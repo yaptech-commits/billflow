@@ -134,6 +134,7 @@ export default function StudentsPage() {
         const channels: SchoolNotificationChannel[] = ["in_app"];
         if (guardianEmail) channels.push("email");
         if (guardianPhone && notificationPreferences?.admissionLetterSms === true) channels.push("sms");
+        if (guardianPhone && notificationPreferences?.admissionLetterWhatsapp === true && notificationPreferences?.whatsapp === true) channels.push("whatsapp");
 
         if (guardianEmail) {
           try {

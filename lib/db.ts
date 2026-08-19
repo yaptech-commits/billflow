@@ -302,6 +302,11 @@ export interface BusinessProfile {
   allowedPages?: string[];
   /** Whether staff/salesperson accounts are allowed to offer checkout discounts. */
   allowStaffDiscounts?: boolean;
+  /** Optional branded school notification templates. Supports {{studentName}}, {{classGrade}}, {{feeTitle}}, {{amount}}, {{balance}}, {{receiptNumber}}, {{term}}, {{averageScore}}, {{presentDays}}, {{absentDays}}, and {{schoolName}}. */
+  feePaymentEmailSubject?: string;
+  feePaymentEmailBody?: string;
+  reportCardEmailSubject?: string;
+  reportCardEmailBody?: string;
   createdAt?: Timestamp | null;
   updatedAt?: Timestamp | null;
 }

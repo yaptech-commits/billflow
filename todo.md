@@ -19,6 +19,12 @@
 - [x] Add a property-scoped CSV export for admission communication logs.
 - [x] Build, verify, commit, and push the follow-up improvements with author email `ayindenabawisdom@gmail.com`.
 
+## School Communication Extensions
+- [x] Add manual re-triggering for failed admission-letter deliveries with audit tracking.
+- [x] Add configurable branded templates for fee receipts and report-card notifications.
+- [x] Add optional WhatsApp delivery configuration and channel-level tracking.
+- [x] Build, verify, commit, and push the communication additions with author email `ayindenabawisdom@gmail.com`.
+
 ## School Admissions Page
 - [x] Create an Admissions page inside the grouped School Management features.
 - [x] Automatically list students from the existing property-scoped student records after registration.
