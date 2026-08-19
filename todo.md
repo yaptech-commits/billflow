@@ -1,5 +1,12 @@
 # Suggested Upgrades Implementation
 
+## School Admissions Page
+- [x] Create an Admissions page inside the grouped School Management features.
+- [x] Automatically list students from the existing property-scoped student records after registration.
+- [x] Add a printable admission letter for each student with school branding and admission details.
+- [x] Add Admissions to the School sidebar group and preserve existing student registration behavior.
+- [x] Build, verify, promote, commit, and push the Admissions implementation with author email `ayindenabawisdom@gmail.com`.
+
 ## Automatic Student ID on Registration
 - [x] Generate a Student ID automatically when a student is registered.
 - [x] Guarantee uniqueness within the business/property and preserve existing IDs for current students.
