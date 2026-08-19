@@ -1,44 +1,53 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase-admin";
-import { getPagesForBusinessType } from "@/lib/business-type-config";
+import { BusinessType, getPagesForBusinessType } from "@/lib/business-type-config";
+import { errorResponseDetails, requireServerSuperAdmin } from "@/lib/server-auth";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+const BATCH_SIZE = 400;
+const BUSINESS_TYPES = new Set<BusinessType>(["general", "pharmacy", "hotel", "coldstore", "school"]);
+
+function isBusinessType(value: unknown): value is BusinessType {
+  return typeof value === "string" && BUSINESS_TYPES.has(value as BusinessType);
+}
 
 export async function POST(request: NextRequest) {
   try {
+    await requireServerSuperAdmin(request);
     const db = getAdminDb();
-    // Get all businesses
     const snapshot = await db.collection("businesses").get();
 
     let updated = 0;
     let skipped = 0;
+    let batch = db.batch();
+    let pendingWrites = 0;
 
-    // Update each business
     for (const docSnap of snapshot.docs) {
-      const business = docSnap.data();
-
-      // Skip if already has allowedPages
-      if (business.allowedPages && business.allowedPages.length > 0) {
+      const business = docSnap.data() as Record<string, any>;
+      if (Array.isArray(business.allowedPages) && business.allowedPages.length > 0) {
         skipped++;
         continue;
       }
 
-      // Get pages for business type
-      const businessType = business.businessType || "general";
-      const allowedPages = getPagesForBusinessType(businessType);
-
-      // Update business with allowedPages
-      await db.collection("businesses").doc(docSnap.id).update({
-        allowedPages,
-      });
-
+      const businessType = isBusinessType(business.businessType) ? business.businessType : "general";
+      batch.update(docSnap.ref, { allowedPages: getPagesForBusinessType(businessType) });
+      pendingWrites++;
       updated++;
+
+      if (pendingWrites >= BATCH_SIZE) {
+        await batch.commit();
+        batch = db.batch();
+        pendingWrites = 0;
+      }
     }
 
+    if (pendingWrites > 0) await batch.commit();
     return NextResponse.json({ updated, skipped, success: true });
   } catch (error) {
-    console.error("Migration error:", error);
-    return NextResponse.json(
-      { error: "Migration failed", success: false },
-      { status: 500 }
-    );
+    const { status, message } = errorResponseDetails(error);
+    if (status >= 500) console.error("Business-pages migration failed:", error);
+    return NextResponse.json({ error: message, success: false }, { status });
   }
 }

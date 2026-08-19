@@ -1,5 +1,12 @@
 # Suggested Upgrades Implementation
 
+## General BillFlow Audit
+- [ ] Inventory routes, build state, API handlers, roles, and data-access boundaries.
+- [ ] Audit authentication, authorization, property/business scoping, secrets, and protected API routes.
+- [ ] Audit payments, notifications, destructive operations, input validation, and client error handling.
+- [ ] Fix verified defects without changing intended business behavior.
+- [ ] Rebuild, run focused checks, document residual risks, commit, and push with author email `ayindenabawisdom@gmail.com`.
+
 ## Automatic Admission Letter Email
 - [x] Trigger an admission-letter email after a student is successfully registered.
 - [x] Use the existing guardian email/contact fields and property-scoped school branding.

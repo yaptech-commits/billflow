@@ -37,7 +37,7 @@ export default function StudentsPage() {
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [isAdmissionPreviewOpen, setIsAdmissionPreviewOpen] = useState(false);
   const [pendingAdmissionDelivery, setPendingAdmissionDelivery] = useState<{
-    student: Student;
+    student: Pick<Student, "id" | "admissionNumber" | "fullName" | "classGrade" | "guardianName" | "guardianEmail" | "guardianPhone">;
     letter: AdmissionLetterContent;
     guardianEmail: string;
     guardianPhone: string;
@@ -165,7 +165,14 @@ export default function StudentsPage() {
         );
 
         setPendingAdmissionDelivery({
-          student: createdStudent,
+          student: {
+            ...createdStudent,
+            fullName: form.fullName,
+            classGrade: form.classGrade,
+            guardianName: form.guardianName,
+            guardianEmail: guardianEmail || undefined,
+            guardianPhone,
+          },
           letter,
           guardianEmail,
           guardianPhone,

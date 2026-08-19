@@ -16,6 +16,7 @@ import {
   runTransaction,
   Transaction,
   writeBatch,
+  DocumentReference,
 } from "firebase/firestore";
 import { db } from "./firebase";
 
@@ -374,7 +375,12 @@ export interface Shift {
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
-const col = (name: string) => collection(db, name);
+const col = (name: string) => {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
+  return collection(db, name);
+};
 
 /** Writes a stock movement record as part of an in-flight transaction. Call this alongside every tx.update() that changes a product's stockQty. */
 function logStockMovement(
@@ -412,7 +418,11 @@ const businessQuery = (colName: string, businessId: string) => {
  * over-sell the same stock.
  * Throws if any line item would take a product's stock below zero.
  */
-export async function createInvoice(data: Omit<Invoice, "id" | "invoiceNumber">) {
+export async function createInvoice(data: Omit<Invoice, "id" | "invoiceNumber">): Promise<DocumentReference> {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
+  const firestore = db;
   const items = data.items ?? [];
 
   if (items.length === 0) {
@@ -420,14 +430,14 @@ export async function createInvoice(data: Omit<Invoice, "id" | "invoiceNumber">)
     return addDoc(col("invoices"), { ...data, createdAt: serverTimestamp() });
   }
 
-  return runTransaction(db, async (tx) => {
-    const businessProfileRef = doc(db, "businessProfiles", data.businessId);
+  return runTransaction(firestore, async (tx) => {
+    const businessProfileRef = doc(firestore, "businessProfiles", data.businessId);
     const businessProfileSnap = await tx.get(businessProfileRef);
     const currentProfile = businessProfileSnap.data() as BusinessProfile;
     const invoiceNumber = (currentProfile.nextInvoiceNumber || 0) + 1;
 
     tx.update(businessProfileRef, { nextInvoiceNumber: invoiceNumber });
-    const productRefs = items.map((li) => doc(db, "products", li.productId));
+    const productRefs = items.map((li) => doc(firestore, "products", li.productId));
     const productSnaps = await Promise.all(productRefs.map((ref) => tx.get(ref)));
 
     productSnaps.forEach((snap, i) => {
@@ -488,6 +498,9 @@ export async function getInvoices(businessId: string, opts?: { onlyUserId?: stri
 }
 
 export async function updateInvoice(id: string, data: Partial<Invoice>) {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   return updateDoc(doc(db, "invoices", id), data);
 }
 
@@ -516,6 +529,10 @@ export interface SaleInput {
  */
 export async function createSale(sale: SaleInput) {
   if (sale.items.length === 0) throw new Error("Cart is empty");
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
+  const firestore = db;
   const lineTotal = sale.items.reduce((sum, li) => sum + li.quantity * li.unitPrice, 0);
   const discountAmount = sale.discountAmount ?? 0;
   const taxRate = sale.taxRate ?? 0;
@@ -535,8 +552,8 @@ export async function createSale(sale: SaleInput) {
     amount = subtotal + taxAmount;
   }
 
-  return runTransaction(db, async (tx) => {
-    const productRefs = sale.items.map((li) => doc(db, "products", li.productId));
+  return runTransaction(firestore, async (tx) => {
+    const productRefs = sale.items.map((li) => doc(firestore, "products", li.productId));
     const productSnaps = await Promise.all(productRefs.map((ref) => tx.get(ref)));
 
     productSnaps.forEach((snap, i) => {
@@ -589,7 +606,7 @@ export async function createSale(sale: SaleInput) {
       createdAt: now,
     });
 
-    const profileRef = doc(db, "businessProfiles", sale.businessId);
+    const profileRef = doc(firestore, "businessProfiles", sale.businessId);
     const profileSnap = await tx.get(profileRef);
     const profile = profileSnap.data() as BusinessProfile;
 
@@ -634,6 +651,10 @@ export async function recordPayment(
   reference: string
 ) {
   if (amount <= 0) throw new Error("Payment amount must be greater than zero");
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
+  const firestore = db;
   const alreadyPaid = invoice.amountPaid ?? 0;
   const newAmountPaid = alreadyPaid + amount;
   if (newAmountPaid > invoice.amount + 0.01) {
@@ -643,8 +664,8 @@ export async function recordPayment(
   }
   const isFullyPaid = newAmountPaid >= invoice.amount - 0.01;
 
-  return runTransaction(db, async (tx) => {
-    const invoiceRef = doc(db, "invoices", invoice.id!);
+  return runTransaction(firestore, async (tx) => {
+    const invoiceRef = doc(firestore, "invoices", invoice.id!);
     tx.update(invoiceRef, {
       amountPaid: newAmountPaid,
       status: isFullyPaid ? "paid" : "pending",
@@ -668,6 +689,9 @@ export async function recordPayment(
 }
 
 export async function deleteInvoice(id: string) {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   return deleteDoc(doc(db, "invoices", id));
 }
 
@@ -683,10 +707,16 @@ export async function getClients(businessId: string): Promise<Client[]> {
 }
 
 export async function deleteClient(id: string) {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   return deleteDoc(doc(db, "clients", id));
 }
 
 export async function updateClient(id: string, data: Partial<Client>) {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   return updateDoc(doc(db, "clients", id), data);
 }
 
@@ -716,6 +746,9 @@ export async function closeShift(
   actualCash: number,
   reconciliation?: { cashCountByDenomination?: Record<string, number>; reconciliationNote?: string }
 ) {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   const shiftRef = doc(db, "shifts", shiftId);
   const shiftSnap = await getDoc(shiftRef);
   if (!shiftSnap.exists()) throw new Error("Shift not found");
@@ -771,6 +804,9 @@ export async function getVouchers(businessId: string): Promise<Voucher[]> {
 }
 
 export async function markVoucherUsed(id: string) {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   return updateDoc(doc(db, "vouchers", id), { used: true });
 }
 
@@ -781,6 +817,9 @@ export async function createPayment(data: Omit<Payment, "id">) {
 }
 
 export async function deletePayment(id: string) {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   return deleteDoc(doc(db, "payments", id));
 }
 
@@ -792,6 +831,10 @@ export async function getPayments(businessId: string): Promise<Payment[]> {
 // ─── PRODUCTS ─────────────────────────────────────────────────────────────────
 
 export async function createProduct(data: Omit<Product, "id">) {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
+  const firestore = db;
   // Check if a product with the same name already exists for this business
   const existingSnap = await getDocs(
     query(
@@ -819,7 +862,7 @@ export async function createProduct(data: Omit<Product, "id">) {
     // Note: logStockMovement requires a Transaction object. Since we are not in a transaction here,
     // we should either use a separate non-transactional function or use runTransaction.
     // For simplicity and consistency with the stock management design, let's wrap this in a transaction.
-    await runTransaction(db, async (tx) => {
+    await runTransaction(firestore, async (tx) => {
       logStockMovement(tx, {
         productId: existingDoc.id,
         businessId: data.businessId,
@@ -836,13 +879,13 @@ export async function createProduct(data: Omit<Product, "id">) {
       // Check if productBarcodes entry exists, otherwise create
       const barcodeSnap = await getDocs(
         query(
-          collection(db, "productBarcodes"),
+          collection(firestore, "productBarcodes"),
           where("businessId", "==", data.businessId),
           where("barcode", "==", data.barcode)
         )
       );
       if (barcodeSnap.empty) {
-        await addDoc(collection(db, "productBarcodes"), {
+        await addDoc(collection(firestore, "productBarcodes"), {
           businessId: data.businessId,
           productId: existingDoc.id,
           barcode: data.barcode,
@@ -873,17 +916,21 @@ export async function getProducts(businessId: string): Promise<Product[]> {
 }
 
 export async function updateProduct(id: string, data: Partial<Product>) {
-  await updateDoc(doc(db, "products", id), data);
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
+  const firestore = db;
+  await updateDoc(doc(firestore, "products", id), data);
   if (data.barcode && data.businessId) {
     const barcodeSnap = await getDocs(
       query(
-        collection(db, "productBarcodes"),
+        collection(firestore, "productBarcodes"),
         where("businessId", "==", data.businessId),
         where("productId", "==", id)
       )
     );
     if (barcodeSnap.empty) {
-      await addDoc(collection(db, "productBarcodes"), {
+      await addDoc(collection(firestore, "productBarcodes"), {
         businessId: data.businessId,
         productId: id,
         barcode: data.barcode,
@@ -897,6 +944,9 @@ export async function updateProduct(id: string, data: Partial<Product>) {
 }
 
 export async function deleteProduct(id: string) {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   return deleteDoc(doc(db, "products", id));
 }
 
@@ -912,10 +962,16 @@ export async function getCategories(businessId: string): Promise<Category[]> {
 }
 
 export async function updateCategory(id: string, data: Partial<Category>) {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   return updateDoc(doc(db, "categories", id), data);
 }
 
 export async function deleteCategory(id: string) {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   return deleteDoc(doc(db, "categories", id));
 }
 
@@ -924,6 +980,10 @@ export async function deleteCategory(id: string) {
  * This includes products, invoices, clients, payments, categories, stock movements, and staff.
  */
 export async function deleteBusinessData(businessId: string) {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
+  const firestore = db;
   const collections = [
     "products", "invoices", "clients", "payments", "categories", 
     "stockMovements", "staffIndex", "businessProfiles", "purchaseOrders", 
@@ -933,7 +993,7 @@ export async function deleteBusinessData(businessId: string) {
   ];
 
   for (const colName of collections) {
-    const q = query(collection(db, colName), where("businessId", "==", businessId));
+    const q = query(collection(firestore, colName), where("businessId", "==", businessId));
     const snap = await getDocs(q);
     const deletePromises = snap.docs.map(d => deleteDoc(d.ref));
     await Promise.all(deletePromises);
@@ -946,8 +1006,12 @@ export async function adjustProductStock(
   delta: number,
   ctx: { businessId: string; userId: string; note?: string }
 ) {
-  return runTransaction(db, async (tx) => {
-    const ref = doc(db, "products", id);
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
+  const firestore = db;
+  return runTransaction(firestore, async (tx) => {
+    const ref = doc(firestore, "products", id);
     const snap = await tx.get(ref);
     if (!snap.exists()) throw new Error("Product not found");
     const product = snap.data() as Product;
@@ -988,10 +1052,16 @@ export async function getSuppliers(businessId: string): Promise<Supplier[]> {
 }
 
 export async function updateSupplier(id: string, data: Partial<Supplier>) {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   return updateDoc(doc(db, "suppliers", id), data);
 }
 
 export async function deleteSupplier(id: string) {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   return deleteDoc(doc(db, "suppliers", id));
 }
 
@@ -1016,10 +1086,16 @@ export async function getPurchaseOrders(businessId: string): Promise<PurchaseOrd
 }
 
 export async function updatePurchaseOrder(id: string, data: Partial<PurchaseOrder>) {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   return updateDoc(doc(db, "purchaseOrders", id), data);
 }
 
 export async function deletePurchaseOrder(id: string) {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   return deleteDoc(doc(db, "purchaseOrders", id));
 }
 
@@ -1030,14 +1106,18 @@ export async function deletePurchaseOrder(id: string) {
  * reporting stays current with what you actually paid most recently.
  */
 export async function receivePurchaseOrder(id: string) {
-  return runTransaction(db, async (tx) => {
-    const poRef = doc(db, "purchaseOrders", id);
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
+  const firestore = db;
+  return runTransaction(firestore, async (tx) => {
+    const poRef = doc(firestore, "purchaseOrders", id);
     const poSnap = await tx.get(poRef);
     if (!poSnap.exists()) throw new Error("Purchase order not found");
     const po = poSnap.data() as PurchaseOrder;
     if (po.status === "received") throw new Error("This purchase order was already received");
 
-    const productRefs = po.items.map((li) => doc(db, "products", li.productId));
+    const productRefs = po.items.map((li) => doc(firestore, "products", li.productId));
     const productSnaps = await Promise.all(productRefs.map((ref) => tx.get(ref)));
 
     productSnaps.forEach((snap, i) => {
@@ -1080,10 +1160,21 @@ export async function resolveBusinessContext(
   uid: string,
   email: string
 ): Promise<{ businessId: string; role: StaffRole; staffId?: string; permissions?: string[] }> {
-  // Super Admin Check
-  if (email === "wisdomasaare41@gmail.com") {
+  // Super-admin identity is deployment-managed; never embed a personal email in source.
+  const configuredSuperAdminEmails = String(
+    process.env.NEXT_PUBLIC_SUPER_ADMIN_EMAILS || process.env.SUPER_ADMIN_EMAILS || "",
+  )
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+  if (configuredSuperAdminEmails.includes(email.trim().toLowerCase())) {
     return { businessId: "SUPER_ADMIN", role: "super_admin" };
   }
+
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
+  const firestore = db;
 
   // Already-claimed staff record for this uid takes priority.
   const claimedSnap = await getDocs(
@@ -1092,7 +1183,7 @@ export async function resolveBusinessContext(
   if (!claimedSnap.empty) {
     const s = claimedSnap.docs[0].data() as Staff;
     // Self-heal in case staffIndex is missing/stale (e.g. records created before this field existed).
-    await setDoc(doc(db, "staffIndex", uid), { businessId: s.businessId, role: s.role, status: s.status });
+    await setDoc(doc(firestore, "staffIndex", uid), { businessId: s.businessId, role: s.role, status: s.status });
     return { businessId: s.businessId, role: s.role, staffId: claimedSnap.docs[0].id, permissions: s.permissions };
   }
 
@@ -1102,12 +1193,12 @@ export async function resolveBusinessContext(
   );
   if (!pendingSnap.empty) {
     const staffDoc = pendingSnap.docs[0];
-    await updateDoc(doc(db, "staff", staffDoc.id), { staffUid: uid, status: "active" });
+    await updateDoc(doc(firestore, "staff", staffDoc.id), { staffUid: uid, status: "active" });
     const s = staffDoc.data() as Staff;
     // Keep /staffIndex/{uid} in sync — Firestore security rules can't run
     // where() queries, so this per-uid doc is how rules check "is this uid
     // an active staff member of businessId X" in O(1).
-    await setDoc(doc(db, "staffIndex", uid), {
+    await setDoc(doc(firestore, "staffIndex", uid), {
       businessId: s.businessId,
       role: s.role,
       status: "active",
@@ -1118,7 +1209,7 @@ export async function resolveBusinessContext(
 
   // No invite found — this user is a business owner in their own right.
   // Check for owner approval
-  const profileRef = doc(db, "businessProfiles", uid);
+  const profileRef = doc(firestore, "businessProfiles", uid);
   const profileSnap = await getDoc(profileRef);
   
   if (profileSnap.exists()) {
@@ -1181,17 +1272,25 @@ export async function getStaff(businessId: string): Promise<Staff[]> {
 }
 
 export async function removeStaff(id: string) {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
+  const firestore = db;
   const snap = await getDocs(query(col("staff"), where("__name__", "==", id)));
   const staffDoc = snap.docs[0]?.data() as Staff | undefined;
-  await deleteDoc(doc(db, "staff", id));
+  await deleteDoc(doc(firestore, "staff", id));
   // Revoke Firestore access immediately by removing their index entry too.
   if (staffDoc?.staffUid) {
-    await deleteDoc(doc(db, "staffIndex", staffDoc.staffUid));
+    await deleteDoc(doc(firestore, "staffIndex", staffDoc.staffUid));
   }
 }
 
 export async function updateStaff(id: string, data: Partial<Staff>) {
-  const staffRef = doc(db, "staff", id);
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
+  const firestore = db;
+  const staffRef = doc(firestore, "staff", id);
   await updateDoc(staffRef, data);
 
   // If permissions or businessId changed, update the staffIndex for real-time rule enforcement
@@ -1238,10 +1337,14 @@ export async function createCreditNote(
   if (data.amount > invoice.amount + 0.01) {
     throw new Error(`Credit note of ${data.amount} exceeds the invoice total of ${invoice.amount}`);
   }
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
+  const firestore = db;
 
-  return runTransaction(db, async (tx) => {
+  return runTransaction(firestore, async (tx) => {
     const productRefs = data.restock
-      ? data.items.map((li) => doc(db, "products", li.productId))
+      ? data.items.map((li) => doc(firestore, "products", li.productId))
       : [];
     const productSnaps = data.restock
       ? await Promise.all(productRefs.map((ref) => tx.get(ref)))
@@ -1275,7 +1378,7 @@ export async function createCreditNote(
     const newInvoiceAmount = invoice.amount - data.amount;
     const alreadyPaid = invoice.amountPaid ?? 0;
     const isFullyCovered = alreadyPaid >= newInvoiceAmount - 0.01;
-    tx.update(doc(db, "invoices", invoice.id!), {
+    tx.update(doc(firestore, "invoices", invoice.id!), {
       amount: newInvoiceAmount,
       status: isFullyCovered ? "paid" : invoice.status,
     });
@@ -1296,7 +1399,7 @@ export async function createCreditNote(
         status: "success" as const,
         createdAt: serverTimestamp(),
       });
-      tx.update(doc(db, "invoices", invoice.id!), {
+      tx.update(doc(firestore, "invoices", invoice.id!), {
         amountPaid: alreadyPaid - refundAmount,
       });
     }
@@ -1352,6 +1455,9 @@ export async function getStockMovements(businessId: string, opts?: { productId?:
 
 /** businessId doubles as the document ID here — one profile per business, fetched directly by key. */
 export async function getBusinessProfile(businessId: string): Promise<BusinessProfile | null> {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   const snap = await getDoc(doc(db, "businessProfiles", businessId));
   return snap.exists() ? (snap.data() as BusinessProfile) : null;
 }
@@ -1371,10 +1477,16 @@ export async function getNotifications(businessId: string): Promise<Notification
 }
 
 export async function markNotificationAsRead(id: string) {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   return updateDoc(doc(db, "notifications", id), { read: true });
 }
 
 export async function clearOldNotifications(businessId: string) {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   const oneWeekAgo = new Date();
   oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
@@ -1390,6 +1502,9 @@ export async function clearOldNotifications(businessId: string) {
 
 export async function checkLowStockAndNotify(businessId: string) {
   if (typeof window === "undefined") return;
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   // Throttle this check to run at most once every 6 hours per session to save quota
   const lastCheckKey = `last_low_stock_check_${businessId}`;
   const lastCheck = localStorage.getItem(lastCheckKey);
@@ -1446,6 +1561,9 @@ export async function checkLowStockAndNotify(businessId: string) {
 }
 
 export async function upsertBusinessProfile(profile: Omit<BusinessProfile, "updatedAt">) {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   return setDoc(doc(db, "businessProfiles", profile.businessId), {
     ...profile,
     updatedAt: serverTimestamp(),
@@ -1524,10 +1642,15 @@ export async function deductStockFEFO(
   quantityNeeded: number,
   product: Product
 ): Promise<{ batchId?: string; expiryDate?: Timestamp }> {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
+  const firestore = db;
+
   // If batch tracking is not enabled, use legacy stockQty logic
   if (!product.trackBatches) {
     const newQty = Math.max(0, product.stockQty - quantityNeeded);
-    tx.update(doc(db, "products", productId), { stockQty: newQty });
+    tx.update(doc(firestore, "products", productId), { stockQty: newQty });
     logStockMovement(tx, {
       businessId,
       productId,
@@ -1556,7 +1679,7 @@ export async function deductStockFEFO(
     const deductFromBatch = Math.min(remaining, batch.quantity);
     const newBatchQty = batch.quantity - deductFromBatch;
 
-    tx.update(doc(db, "productBatches", batch.id!), {
+    tx.update(doc(firestore, "productBatches", batch.id!), {
       quantity: newBatchQty,
     });
 
@@ -1674,6 +1797,9 @@ export async function getBatchesExpiringWithin(
   businessId: string,
   daysFromNow: number = 30
 ): Promise<(ProductBatch & { productName: string })[]> {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   const now = new Date();
   const expiryThreshold = new Date(now.getTime() + daysFromNow * 24 * 60 * 60 * 1000);
 
@@ -1778,6 +1904,9 @@ export async function updatePrescriptionRefills(
   prescriptionId: string,
   quantitySold: number
 ): Promise<void> {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   const prescriptionRef = doc(db, "prescriptions", prescriptionId);
   const prescriptionSnap = await getDoc(prescriptionRef);
 
@@ -1826,6 +1955,9 @@ export async function getPrescriptionsByBusiness(
  * Mark a prescription as expired (e.g., after expiry date).
  */
 export async function expirePrescription(prescriptionId: string): Promise<void> {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   const prescriptionRef = doc(db, "prescriptions", prescriptionId);
   await updateDoc(prescriptionRef, {
     status: "expired" as PrescriptionStatus,
@@ -2042,6 +2174,9 @@ export async function getHotelRooms(businessId: string, propertyId = "default_pr
 }
 
 export async function saveHotelRoom(room: Omit<HotelRoom, "id" | "createdAt">, id?: string) {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   if (id) {
     await updateDoc(doc(db, "hotelRooms", id), { ...room });
     return id;
@@ -2051,6 +2186,9 @@ export async function saveHotelRoom(room: Omit<HotelRoom, "id" | "createdAt">, i
 }
 
 export async function deleteHotelRoom(id: string) {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   await deleteDoc(doc(db, "hotelRooms", id));
 }
 
@@ -2063,6 +2201,9 @@ export async function getReservations(businessId: string, propertyId = "default_
 }
 
 export async function saveReservation(reservation: Omit<Reservation, "id" | "createdAt">, id?: string) {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   if (id) {
     await updateDoc(doc(db, "hotelReservations", id), { ...reservation });
     return id;
@@ -2080,6 +2221,9 @@ export async function getHotelGuests(businessId: string, propertyId = "default_p
 }
 
 export async function saveHotelGuest(guest: Omit<HotelGuest, "id" | "createdAt">, id?: string) {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   if (id) {
     await updateDoc(doc(db, "hotelGuests", id), { ...guest });
     return id;
@@ -2098,6 +2242,9 @@ export async function getSeasonalRatePlans(businessId: string, propertyId = "def
 }
 
 export async function saveSeasonalRatePlan(ratePlan: Omit<SeasonalRatePlan, "id" | "createdAt">, id?: string) {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   if (id) {
     await updateDoc(doc(db, "hotelRatePlans", id), { ...ratePlan });
     return id;
@@ -2115,6 +2262,9 @@ export async function getHotelTaxRules(businessId: string, propertyId = "default
 }
 
 export async function saveHotelTaxRule(rule: Omit<TaxRule, "id" | "createdAt">, id?: string) {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   if (id) {
     await updateDoc(doc(db, "hotelTaxRules", id), { ...rule });
     return id;
@@ -2132,6 +2282,9 @@ export async function getGroupBlockBookings(businessId: string, propertyId = "de
 }
 
 export async function saveGroupBlockBooking(group: Omit<GroupBlockBooking, "id" | "createdAt">, id?: string) {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   if (id) {
     await updateDoc(doc(db, "hotelGroupBookings", id), { ...group });
     return id;
@@ -2141,6 +2294,9 @@ export async function saveGroupBlockBooking(group: Omit<GroupBlockBooking, "id" 
 }
 
 export async function updateHotelRoomStatus(id: string, status: RoomStatus, occupancyStatus?: RoomOccupancyStatus) {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   await updateDoc(doc(db, "hotelRooms", id), {
     status,
     ...(occupancyStatus ? { occupancyStatus } : {}),
@@ -2148,6 +2304,9 @@ export async function updateHotelRoomStatus(id: string, status: RoomStatus, occu
 }
 
 export async function updateReservationStatus(id: string, status: ReservationStatus, roomId?: string, roomNumber?: string) {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   await updateDoc(doc(db, "hotelReservations", id), {
     status,
     ...(roomId ? { roomId } : {}),
@@ -2222,6 +2381,9 @@ export async function getHotelWaitlist(businessId: string, propertyId = "default
 }
 
 export async function saveHotelWaitlistEntry(entry: Omit<HotelWaitlistEntry, "id" | "createdAt">, id?: string) {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   if (id) {
     await updateDoc(doc(db, "hotelWaitlist", id), { ...entry });
     return id;
@@ -2269,6 +2431,9 @@ export interface GuestFolio {
 }
 
 export async function getGuestFolio(businessId: string, reservationId: string): Promise<GuestFolio | null> {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   const q = query(
     col("hotelFolioItems"),
     where("businessId", "==", businessId),
@@ -2338,6 +2503,9 @@ export async function getGuestFolio(businessId: string, reservationId: string): 
 }
 
 export async function addFolioItem(data: Omit<FolioItem, "id" | "postedAt">) {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   return addDoc(col("hotelFolioItems"), {
     ...data,
     postedAt: serverTimestamp(),
@@ -2346,6 +2514,9 @@ export async function addFolioItem(data: Omit<FolioItem, "id" | "postedAt">) {
 }
 
 export async function voidFolioItem(itemId: string, reason: string) {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   const ref = doc(db, "hotelFolioItems", itemId);
   return updateDoc(ref, {
     isVoided: true,
@@ -2355,6 +2526,9 @@ export async function voidFolioItem(itemId: string, reason: string) {
 
 /** Night Audit: Automatically posts nightly room rate & taxes for all checked-in reservations */
 export async function runNightAudit(businessId: string, propertyId: string, userId: string) {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   const q = query(
     col("hotelReservations"),
     where("businessId", "==", businessId),
@@ -2458,6 +2632,9 @@ export async function getHousekeepingTasks(businessId: string, propertyId = "def
 }
 
 export async function createHousekeepingTask(data: Omit<HousekeepingTask, "id" | "createdAt">) {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   return addDoc(col("hotelHousekeeping"), {
     ...data,
     createdAt: serverTimestamp(),
@@ -2465,6 +2642,9 @@ export async function createHousekeepingTask(data: Omit<HousekeepingTask, "id" |
 }
 
 export async function updateHousekeepingTask(id: string, data: Partial<HousekeepingTask>) {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   const ref = doc(db, "hotelHousekeeping", id);
   if (data.status === "completed") {
     (data as any).completedAt = serverTimestamp();
@@ -2481,6 +2661,9 @@ export async function getMaintenanceWorkOrders(businessId: string, propertyId = 
 }
 
 export async function createMaintenanceWorkOrder(data: Omit<MaintenanceWorkOrder, "id" | "createdAt">) {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   return addDoc(col("hotelMaintenance"), {
     ...data,
     createdAt: serverTimestamp(),
@@ -2488,6 +2671,9 @@ export async function createMaintenanceWorkOrder(data: Omit<MaintenanceWorkOrder
 }
 
 export async function updateMaintenanceWorkOrder(id: string, data: Partial<MaintenanceWorkOrder>) {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
   const ref = doc(db, "hotelMaintenance", id);
   if (data.status === "resolved") {
     (data as any).resolvedAt = serverTimestamp();
@@ -2620,8 +2806,12 @@ export interface ExternalBookingRequest {
   specialRequests?: string;
 }
 
-export async function createExternalChannelReservation(req: ExternalBookingRequest) {
-  return runTransaction(db, async (tx) => {
+export async function createExternalChannelReservation(req: ExternalBookingRequest): Promise<{ reservationId: string; roomNumber: string }> {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
+  const firestore = db;
+  return runTransaction(firestore, async (tx) => {
     // 1. Check date availability for the requested room type
     const roomsSnap = await getDocs(
       query(
@@ -2668,7 +2858,7 @@ export async function createExternalChannelReservation(req: ExternalBookingReque
     }
 
     // 2. Create reservation record
-    const resRef = doc(collection(db, "hotelReservations"));
+    const resRef = doc(collection(firestore, "hotelReservations"));
     const newRes = {
       businessId: req.businessId,
       propertyId: req.propertyId,

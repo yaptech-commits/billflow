@@ -165,7 +165,11 @@ export default function BarcodeManagementPage() {
 
       {/* New Barcode Modal */}
       <Modal open={showNewBarcodeModal} onClose={() => setShowNewBarcodeModal(false)} title="Add Product Barcode">
-        <NewBarcodeForm businessId={businessId} onSuccess={() => { setShowNewBarcodeModal(false); fetchBarcodes(); }} />
+        {businessId ? (
+          <NewBarcodeForm businessId={businessId} onSuccess={() => { setShowNewBarcodeModal(false); fetchBarcodes(); }} />
+        ) : (
+          <p className="text-sm text-muted">Your business context is still loading. Please try again in a moment.</p>
+        )}
       </Modal>
     </div>
   );

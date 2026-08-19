@@ -126,6 +126,7 @@ export default function SchoolAdmissionsPage() {
     if (!notification.id || retryingNotificationId) return;
     setRetryingNotificationId(notification.id);
     try {
+      if (!auth) throw new Error("Authentication is unavailable. Please reload and try again.");
       const token = await auth.currentUser?.getIdToken();
       if (!token) throw new Error("Your session has expired. Please sign in again.");
       const response = await fetch("/api/school/notifications/manual-retry", {

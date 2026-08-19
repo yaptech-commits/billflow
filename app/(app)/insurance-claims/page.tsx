@@ -172,7 +172,11 @@ export default function InsuranceClaimsPage() {
 
       {/* New Claim Modal */}
       <Modal open={showNewClaimModal} onClose={() => setShowNewClaimModal(false)} title="Create New Insurance Claim">
-        <NewClaimForm businessId={businessId} onSuccess={() => { setShowNewClaimModal(false); fetchClaims(); }} />
+        {businessId ? (
+          <NewClaimForm businessId={businessId} onSuccess={() => { setShowNewClaimModal(false); fetchClaims(); }} />
+        ) : (
+          <p className="text-sm text-muted">Your business context is still loading. Please try again in a moment.</p>
+        )}
       </Modal>
 
       {/* Claim Details Modal */}

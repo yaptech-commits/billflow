@@ -45,6 +45,10 @@ export default function PurchaseOrdersPage() {
   };
 
   const handleUpdateStatus = async (id: string, status: POStatus) => {
+    if (!db) {
+      toast.error("Database is unavailable. Please try again.");
+      return;
+    }
     try {
       await updateDoc(doc(db, "purchaseOrders", id), { status });
       toast.success(`Order marked as ${status}`);
@@ -56,6 +60,10 @@ export default function PurchaseOrdersPage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this order?")) return;
+    if (!db) {
+      toast.error("Database is unavailable. Please try again.");
+      return;
+    }
     try {
       await deleteDoc(doc(db, "purchaseOrders", id));
       toast.success("Order deleted");

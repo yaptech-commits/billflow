@@ -6,13 +6,15 @@ import { auth } from "@/lib/firebase";
 import {
   getBusinessProfile, upsertBusinessProfile, BusinessProfile,
   DEFAULT_ACCENT_COLOR, MAX_LOGO_BYTES, CURRENCIES, DEFAULT_CURRENCY,
-  DEFAULT_TAX_RATE, DEFAULT_TAX_LABEL, deleteBusinessData,
+  DEFAULT_TAX_RATE, DEFAULT_TAX_LABEL, deleteBusinessData, getActiveShift,
 } from "@/lib/db";
 import { checkAndEnforceThreeDayOnlineAutoSwitch, getOfflineSummary, syncAllOfflineData } from "@/lib/offline-sync";
 import { getDocs, collection, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { getNotificationPreferences, saveNotificationPreferences, SchoolNotificationPreferences } from "@/lib/school-db";
 import { DEFAULT_SCHOOL_NOTIFICATION_TEMPLATES } from "@/lib/school-notification-templates";
+import { createPosSale } from "@/lib/pos-api";
+import { createSafeId } from "@/lib/safe-id";
 import toast from "react-hot-toast";
 import { AlertCircle, CheckCircle2, MailCheck, MessageSquareText, Upload, X } from "lucide-react";
 
@@ -89,11 +91,9 @@ export default function SettingsPage() {
     const loadSchoolCommunicationSettings = async () => {
       setProviderReadinessLoading(true);
       try {
-        const [preferences, token] = await Promise.all([
-          getNotificationPreferences(businessId, schoolPropertyId),
-          auth.currentUser?.getIdToken(),
-        ]);
+        const preferences = await getNotificationPreferences(businessId, schoolPropertyId);
         if (!cancelled) setSchoolNotificationPreferences(preferences);
+        const token = auth ? await auth.currentUser?.getIdToken() : null;
         if (!token) return;
         const response = await fetch("/api/school/notifications/config", {
           headers: { Authorization: `Bearer ${token}` },
@@ -230,9 +230,10 @@ export default function SettingsPage() {
   };
 
   const handleSave = async () => {
-    if (!auth.currentUser) return;
+    const currentUser = auth?.currentUser;
+    if (!currentUser) return;
     setSaving(true);
-    await updateProfile(auth.currentUser, { displayName: name });
+    await updateProfile(currentUser, { displayName: name });
     toast.success("Profile updated ✅");
     setSaving(false);
   };
@@ -254,7 +255,7 @@ export default function SettingsPage() {
       toast.success("All business data has been deleted.");
       // Redirect or logout
       setTimeout(() => {
-        auth.signOut();
+        void auth?.signOut();
         window.location.href = "/auth/login";
       }, 2000);
     } catch (err: any) {
@@ -542,7 +543,7 @@ export default function SettingsPage() {
           <div className="mt-5 space-y-4">
             <div>
               <h3 className="text-sm font-semibold text-surface">Branded school notification templates</h3>
-              <p className="text-[11px] text-muted mt-1">Use placeholders such as {{studentName}}, {{amount}}, {{feeTitle}}, {{receiptNumber}}, {{term}}, and {{schoolName}}. These templates apply to email and the plain-text WhatsApp fallback.</p>
+              <p className="text-[11px] text-muted mt-1">Use placeholders such as {'{{studentName}}'}, {'{{amount}}'}, {'{{feeTitle}}'}, {'{{receiptNumber}}'}, {'{{term}}'}, and {'{{schoolName}}'}. These templates apply to email and the plain-text WhatsApp fallback.</p>
             </div>
             <div className="grid md:grid-cols-2 gap-4">
               <div>
@@ -649,38 +650,23 @@ export default function SettingsPage() {
             onClick={async () => {
               const t = toast.loading("Syncing offline queue...");
               try {
+                const activeShift = user && businessId ? await getActiveShift(businessId, user.uid) : null;
+                if (!activeShift?.id) throw new Error("Open your POS shift to replay queued sales securely.");
                 const res = await syncAllOfflineData({
-                  sale: async (data: any) => {
-                    const r = await fetch("/api/pos/sales", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify(data),
-                    });
-                    if (!r.ok) throw new Error("Sync failed");
-                    return r.json();
-                  },
-                  invoice: async (data: any) => {
-                    const r = await fetch("/api/invoices", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify(data),
-                    });
-                    if (!r.ok) throw new Error("Sync failed");
-                    return r.json();
-                  },
-                  payment: async (data: any) => {
-                    const r = await fetch("/api/payments", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify(data),
-                    });
-                    if (!r.ok) throw new Error("Sync failed");
-                    return r.json();
-                  }
+                  sale: async (data: any) => createPosSale({
+                    ...data,
+                    shiftId: data.shiftId || activeShift.id,
+                    propertyId: data.propertyId || brand.propertyId || schoolPropertyId,
+                    idempotencyKey: data.idempotencyKey || createSafeId("pos"),
+                  }),
                 });
                 setOfflineSummary(getOfflineSummary());
-                if (res.synced > 0) {
+                if (res.synced > 0 && res.failed === 0) {
                   toast.success(`Successfully synced ${res.synced} items!`, { id: t });
+                } else if (res.synced > 0) {
+                  toast.success(`Synced ${res.synced} items; ${res.failed} unsupported or failed items remain queued.`, { id: t });
+                } else if (res.failed > 0) {
+                  toast.error(`${res.failed} queued item(s) need the original POS flow or a supported sync handler.`, { id: t });
                 } else {
                   toast.success("Queue checked. No items ready or already synced.", { id: t });
                 }
@@ -753,6 +739,10 @@ export default function SettingsPage() {
             onClick={async () => {
               if (!businessId) {
                 toast.error("No active business selected");
+                return;
+              }
+              if (!db) {
+                toast.error("Database is unavailable. Please try again.");
                 return;
               }
               const t = toast.loading("Generating Excel workbook...");
@@ -873,6 +863,10 @@ export default function SettingsPage() {
                 toast.error("No active business selected");
                 return;
               }
+              if (!db) {
+                toast.error("Database is unavailable. Please try again.");
+                return;
+              }
               const t = toast.loading("Exporting invoices CSV...");
               try {
                 const snap = await getDocs(query(collection(db, "invoices"), where("businessId", "==", businessId)));
@@ -924,6 +918,10 @@ export default function SettingsPage() {
             onClick={async () => {
               if (!businessId) {
                 toast.error("No active business selected");
+                return;
+              }
+              if (!db) {
+                toast.error("Database is unavailable. Please try again.");
                 return;
               }
               const t = toast.loading("Exporting transactions CSV...");

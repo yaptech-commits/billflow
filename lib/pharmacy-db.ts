@@ -24,10 +24,17 @@ import {
   ProductBarcode,
 } from "./db";
 
+function requirePharmacyDb() {
+  if (!db) {
+    throw new Error("Firebase database is unavailable");
+  }
+  return db;
+}
+
 // ─── BATCH MANAGEMENT ────────────────────────────────────────────────────────
 
 export async function createBatch(batch: Omit<ProductBatch, "id" | "createdAt">) {
-  const docRef = await addDoc(collection(db, "productBatches"), {
+  const docRef = await addDoc(collection(requirePharmacyDb(), "productBatches"), {
     ...batch,
     createdAt: serverTimestamp(),
   });
@@ -37,7 +44,7 @@ export async function createBatch(batch: Omit<ProductBatch, "id" | "createdAt">)
 export async function getBatchesForProduct(businessId: string, productId: string) {
   const snap = await getDocs(
     query(
-      collection(db, "productBatches"),
+      collection(requirePharmacyDb(), "productBatches"),
       where("businessId", "==", businessId),
       where("productId", "==", productId),
       orderBy("expiryDate", "asc")
@@ -47,17 +54,17 @@ export async function getBatchesForProduct(businessId: string, productId: string
 }
 
 export async function updateBatchQuantity(batchId: string, newQuantity: number) {
-  await updateDoc(doc(db, "productBatches", batchId), { quantity: newQuantity });
+  await updateDoc(doc(requirePharmacyDb(), "productBatches", batchId), { quantity: newQuantity });
 }
 
 export async function deleteBatch(batchId: string) {
-  await deleteDoc(doc(db, "productBatches", batchId));
+  await deleteDoc(doc(requirePharmacyDb(), "productBatches", batchId));
 }
 
 // ─── INSURANCE CLAIMS ────────────────────────────────────────────────────────
 
 export async function createInsuranceClaim(claim: Omit<InsuranceClaim, "id" | "createdAt">) {
-  const docRef = await addDoc(collection(db, "insuranceClaims"), {
+  const docRef = await addDoc(collection(requirePharmacyDb(), "insuranceClaims"), {
     ...claim,
     createdAt: serverTimestamp(),
   });
@@ -67,7 +74,7 @@ export async function createInsuranceClaim(claim: Omit<InsuranceClaim, "id" | "c
 export async function getInsuranceClaimsForBusiness(businessId: string) {
   const snap = await getDocs(
     query(
-      collection(db, "insuranceClaims"),
+      collection(requirePharmacyDb(), "insuranceClaims"),
       where("businessId", "==", businessId)
     )
   );
@@ -82,13 +89,13 @@ export async function getInsuranceClaimsForBusiness(businessId: string) {
 export async function updateClaimStatus(claimId: string, status: string, approvedAt?: Timestamp) {
   const updates: any = { status };
   if (approvedAt) updates.approvedAt = approvedAt;
-  await updateDoc(doc(db, "insuranceClaims", claimId), updates);
+  await updateDoc(doc(requirePharmacyDb(), "insuranceClaims", claimId), updates);
 }
 
 // ─── STOCK ADJUSTMENTS ────────────────────────────────────────────────────────
 
 export async function createStockAdjustment(adjustment: Omit<StockAdjustment, "id" | "createdAt">) {
-  const docRef = await addDoc(collection(db, "stockAdjustments"), {
+  const docRef = await addDoc(collection(requirePharmacyDb(), "stockAdjustments"), {
     ...adjustment,
     createdAt: serverTimestamp(),
   });
@@ -98,7 +105,7 @@ export async function createStockAdjustment(adjustment: Omit<StockAdjustment, "i
 export async function getStockAdjustmentsForBusiness(businessId: string) {
   const snap = await getDocs(
     query(
-      collection(db, "stockAdjustments"),
+      collection(requirePharmacyDb(), "stockAdjustments"),
       where("businessId", "==", businessId)
     )
   );
@@ -113,7 +120,7 @@ export async function getStockAdjustmentsForBusiness(businessId: string) {
 // ─── RETURNS & REFUNDS ────────────────────────────────────────────────────────
 
 export async function createReturn(returnData: Omit<Return, "id" | "createdAt">) {
-  const docRef = await addDoc(collection(db, "returns"), {
+  const docRef = await addDoc(collection(requirePharmacyDb(), "returns"), {
     ...returnData,
     createdAt: serverTimestamp(),
   });
@@ -123,7 +130,7 @@ export async function createReturn(returnData: Omit<Return, "id" | "createdAt">)
 export async function getReturnsForBusiness(businessId: string) {
   const snap = await getDocs(
     query(
-      collection(db, "returns"),
+      collection(requirePharmacyDb(), "returns"),
       where("businessId", "==", businessId)
     )
   );
@@ -138,13 +145,13 @@ export async function getReturnsForBusiness(businessId: string) {
 export async function updateReturnStatus(returnId: string, status: string, refundedAt?: Timestamp) {
   const updates: any = { status };
   if (refundedAt) updates.refundedAt = refundedAt;
-  await updateDoc(doc(db, "returns", returnId), updates);
+  await updateDoc(doc(requirePharmacyDb(), "returns", returnId), updates);
 }
 
 // ─── CONTROLLED SUBSTANCES ────────────────────────────────────────────────────
 
 export async function createControlledSubstanceLog(log: Omit<ControlledSubstanceLog, "id" | "createdAt">) {
-  const docRef = await addDoc(collection(db, "controlledSubstanceLogs"), {
+  const docRef = await addDoc(collection(requirePharmacyDb(), "controlledSubstanceLogs"), {
     ...log,
     createdAt: serverTimestamp(),
   });
@@ -154,7 +161,7 @@ export async function createControlledSubstanceLog(log: Omit<ControlledSubstance
 export async function getControlledSubstanceLogsForBusiness(businessId: string) {
   const snap = await getDocs(
     query(
-      collection(db, "controlledSubstanceLogs"),
+      collection(requirePharmacyDb(), "controlledSubstanceLogs"),
       where("businessId", "==", businessId)
     )
   );
@@ -169,7 +176,7 @@ export async function getControlledSubstanceLogsForBusiness(businessId: string) 
 // ─── BARCODE MANAGEMENT ────────────────────────────────────────────────────────
 
 export async function createProductBarcode(barcode: Omit<ProductBarcode, "id" | "createdAt">) {
-  const docRef = await addDoc(collection(db, "productBarcodes"), {
+  const docRef = await addDoc(collection(requirePharmacyDb(), "productBarcodes"), {
     ...barcode,
     createdAt: serverTimestamp(),
   });
@@ -179,7 +186,7 @@ export async function createProductBarcode(barcode: Omit<ProductBarcode, "id" | 
 export async function getProductByBarcode(businessId: string, barcode: string) {
   const snap = await getDocs(
     query(
-      collection(db, "productBarcodes"),
+      collection(requirePharmacyDb(), "productBarcodes"),
       where("businessId", "==", businessId),
       where("barcode", "==", barcode)
     )
@@ -191,7 +198,7 @@ export async function getProductByBarcode(businessId: string, barcode: string) {
 export async function getBarcodesForProduct(businessId: string, productId: string) {
   const snap = await getDocs(
     query(
-      collection(db, "productBarcodes"),
+      collection(requirePharmacyDb(), "productBarcodes"),
       where("businessId", "==", businessId),
       where("productId", "==", productId)
     )
@@ -200,7 +207,7 @@ export async function getBarcodesForProduct(businessId: string, productId: strin
 }
 
 export async function deleteBarcode(barcodeId: string) {
-  await deleteDoc(doc(db, "productBarcodes", barcodeId));
+  await deleteDoc(doc(requirePharmacyDb(), "productBarcodes", barcodeId));
 }
 
 
@@ -208,7 +215,7 @@ export async function deleteBarcode(barcodeId: string) {
 export async function getProductBatchesForBusiness(businessId: string) {
   const snap = await getDocs(
     query(
-      collection(db, "productBatches"),
+      collection(requirePharmacyDb(), "productBatches"),
       where("businessId", "==", businessId)
     )
   );

@@ -17,6 +17,16 @@ import {
 import Modal from "@/components/ui/Modal";
 import toast from "react-hot-toast";
 
+function requireClientDb() {
+  if (!db) throw new Error("Firebase database is not configured");
+  return db;
+}
+
+function requireClientAuth() {
+  if (!auth) throw new Error("Firebase authentication is not configured");
+  return auth;
+}
+
 const DASHBOARD_MODULES: { id: BusinessModule; label: string; description: string }[] = [
   { id: "general", label: "General Business", description: "Sales, invoices, products, clients, and payments" },
   { id: "pharmacy", label: "Pharmacy", description: "Drugs, prescriptions, claims, and controlled substances" },
@@ -49,7 +59,7 @@ export default function AdminPage() {
   const fetchSyncTelemetry = async () => {
     setSyncLoading(true);
     try {
-      const snapshot = await getDocs(collection(db, "syncTelemetry"));
+      const snapshot = await getDocs(collection(requireClientDb(), "syncTelemetry"));
       const nextTelemetry: Record<string, SyncTelemetry> = {};
       snapshot.docs.forEach(snapshotDoc => {
         const data = snapshotDoc.data() as SyncTelemetry;
@@ -67,7 +77,7 @@ export default function AdminPage() {
   const requestBusinessSync = async (business: BusinessProfile) => {
     const t = toast.loading(`Requesting sync for ${business.businessName}...`);
     try {
-      await addDoc(collection(db, "syncCommands"), {
+      await addDoc(collection(requireClientDb(), "syncCommands"), {
         businessId: business.businessId,
         requestedBy: user?.uid || "super_admin",
         status: "requested",
@@ -83,7 +93,7 @@ export default function AdminPage() {
   const fetchBusinesses = async () => {
     setLoading(true);
     try {
-      const snap = await getDocs(query(collection(db, "businessProfiles"), orderBy("businessName")));
+      const snap = await getDocs(query(collection(requireClientDb(), "businessProfiles"), orderBy("businessName")));
       setBusinesses(snap.docs.map(d => ({ ...d.data(), businessId: d.id } as BusinessProfile)));
     } catch (err) {
       toast.error("Failed to fetch businesses");
@@ -122,7 +132,7 @@ export default function AdminPage() {
   const handleApprove = async (id: string) => {
     const t = toast.loading("Approving account...");
     try {
-      await updateDoc(doc(db, "businessProfiles", id), { status: "active" });
+      await updateDoc(doc(requireClientDb(), "businessProfiles", id), { status: "active" });
       toast.success("Account approved", { id: t });
       fetchBusinesses();
     } catch (e) {
@@ -134,7 +144,7 @@ export default function AdminPage() {
     const newStatus = currentStatus === "suspended" ? "active" : "suspended";
     const t = toast.loading(`${newStatus === "suspended" ? "Suspending" : "Activating"} account...`);
     try {
-      await updateDoc(doc(db, "businessProfiles", id), { status: newStatus });
+      await updateDoc(doc(requireClientDb(), "businessProfiles", id), { status: newStatus });
       toast.success(`Account ${newStatus}`, { id: t });
       fetchBusinesses();
     } catch (e) {
@@ -415,10 +425,10 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
 
     try {
       const [p, i, s, pay] = await Promise.all([
-        getDocs(query(collection(db, "products"), where("businessId", "==", business.businessId))),
-        getDocs(query(collection(db, "invoices"), where("businessId", "==", business.businessId))),
-        getDocs(query(collection(db, "staff"), where("businessId", "==", business.businessId))),
-        getDocs(query(collection(db, "payments"), where("businessId", "==", business.businessId)))
+        getDocs(query(collection(requireClientDb(), "products"), where("businessId", "==", business.businessId))),
+        getDocs(query(collection(requireClientDb(), "invoices"), where("businessId", "==", business.businessId))),
+        getDocs(query(collection(requireClientDb(), "staff"), where("businessId", "==", business.businessId))),
+        getDocs(query(collection(requireClientDb(), "payments"), where("businessId", "==", business.businessId)))
       ]);
       
       const totalRevenue = pay.docs.reduce((acc, doc) => acc + (doc.data().amount || 0), 0);
@@ -461,7 +471,7 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
         po: "purchaseOrders"
       }[tab];
 
-      const snap = await getDocs(query(collection(db, collectionName), where("businessId", "==", business.businessId)));
+      const snap = await getDocs(query(collection(requireClientDb(), collectionName), where("businessId", "==", business.businessId)));
       setListData(snap.docs.map(d => ({ ...d.data(), id: d.id })));
     } catch (e) {
       toast.error("Failed to fetch data");
@@ -487,7 +497,7 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
         payments: "payments",
         po: "purchaseOrders"
       }[activeTab!];
-      await deleteDoc(doc(db, collectionName, id));
+      await deleteDoc(doc(requireClientDb(), collectionName, id));
       toast.success("Permanently deleted", { id: t });
       await fetchTabData(activeTab);
       await fetchStats(true);
@@ -512,9 +522,9 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
       const { id, new: isNew, ...dataToSave } = itemForm;
       
       if (selectedItem?.id && !selectedItem.new) {
-        await updateDoc(doc(db, collectionName, selectedItem.id), dataToSave);
+        await updateDoc(doc(requireClientDb(), collectionName, selectedItem.id), dataToSave);
       } else {
-        await addDoc(collection(db, collectionName), {
+        await addDoc(collection(requireClientDb(), collectionName), {
           ...dataToSave,
           businessId: business.businessId,
           userId: user?.uid, // Link to superadmin who created it or business owner? Let's use current superadmin.
@@ -534,12 +544,12 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
     if (!editingStaff) return;
     const t = toast.loading("Updating permissions...");
     try {
-      await updateDoc(doc(db, "staff", editingStaff.id!), {
+      await updateDoc(doc(requireClientDb(), "staff", editingStaff.id!), {
         permissions: editingStaff.permissions || []
       });
       // Also update staffIndex for real-time rules enforcement
       if (editingStaff.staffUid) {
-        await updateDoc(doc(db, "staffIndex", editingStaff.staffUid), {
+        await updateDoc(doc(requireClientDb(), "staffIndex", editingStaff.staffUid), {
           permissions: editingStaff.permissions || []
         });
       }
@@ -555,10 +565,10 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
     const newStatus = staff.status === "active" ? "pending" : "active";
     const t = toast.loading(`${newStatus === "pending" ? "Suspending" : "Activating"} staff...`);
     try {
-      const batch = writeBatch(db);
-      batch.update(doc(db, "staff", staff.id!), { status: newStatus });
+      const batch = writeBatch(requireClientDb());
+      batch.update(doc(requireClientDb(), "staff", staff.id!), { status: newStatus });
       if (staff.staffUid) {
-        batch.update(doc(db, "staffIndex", staff.staffUid), { status: newStatus });
+        batch.update(doc(requireClientDb(), "staffIndex", staff.staffUid), { status: newStatus });
       }
       await batch.commit();
       toast.success(`Staff ${newStatus === "pending" ? "suspended" : "activated"}`, { id: t });
@@ -572,10 +582,10 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
     if (!confirm(`Are you sure you want to permanently delete staff ${staff.email}? This will revoke all access.`)) return;
     const t = toast.loading("Permanently deleting staff...");
     try {
-      const batch = writeBatch(db);
-      batch.delete(doc(db, "staff", staff.id!));
+      const batch = writeBatch(requireClientDb());
+      batch.delete(doc(requireClientDb(), "staff", staff.id!));
       if (staff.staffUid) {
-        batch.delete(doc(db, "staffIndex", staff.staffUid));
+        batch.delete(doc(requireClientDb(), "staffIndex", staff.staffUid));
       }
       await batch.commit();
       toast.success("Staff permanently deleted", { id: t });
@@ -589,7 +599,7 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
     if (!confirm(`Send password reset email to ${email}?`)) return;
     const t = toast.loading("Sending reset email...");
     try {
-      await sendPasswordResetEmail(auth, email);
+      await sendPasswordResetEmail(requireClientAuth(), email);
       toast.success("Reset email sent", { id: t });
     } catch (e: any) {
       toast.error(e.message || "Failed to send reset email", { id: t });
@@ -599,7 +609,7 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
   const handleUpdateBusiness = async () => {
     const t = toast.loading("Updating business profile...");
     try {
-      await updateDoc(doc(db, "businessProfiles", business.businessId), editForm);
+      await updateDoc(doc(requireClientDb(), "businessProfiles", business.businessId), editForm);
       toast.success("Business profile updated", { id: t });
       setShowEdit(false);
       onUpdate();
@@ -723,7 +733,7 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
                   try {
                     await deleteBusinessData(business.businessId);
                     // Also delete businessProfile doc itself
-                    await deleteDoc(doc(db, "businessProfiles", business.businessId));
+                    await deleteDoc(doc(requireClientDb(), "businessProfiles", business.businessId));
                     toast.success("Business permanently deleted from database", { id: t });
                     onUpdate();
                   } catch (e) {

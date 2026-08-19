@@ -8,6 +8,7 @@ export const maxDuration = 60;
 
 const RETRY_LIMIT = 5;
 const RETRY_BATCH_SIZE = 20;
+const RETRY_SCAN_SIZE = 100;
 
 function toMillis(value: any) {
   if (!value) return 0;
@@ -28,21 +29,38 @@ export async function GET(request: NextRequest) {
   }
 
   const db = getAdminDb();
-  const snapshot = await db
+  const now = Date.now();
+  const readySnapshot = await db
+    .collection("schoolNotifications")
+    .where("nextRetryAt", "<=", new Date(now))
+    .limit(RETRY_SCAN_SIZE)
+    .get();
+  const queuedSnapshot = await db
     .collection("schoolNotifications")
     .where("status", "==", "queued")
-    .limit(RETRY_BATCH_SIZE)
+    .limit(RETRY_SCAN_SIZE)
     .get();
-
-  const now = Date.now();
+  const notificationDocs = Array.from(
+    new Map(
+      [...readySnapshot.docs, ...queuedSnapshot.docs].map((doc) => [doc.id, doc]),
+    ).values(),
+  );
   let processed = 0;
   let delivered = 0;
   let queued = 0;
   let failed = 0;
   let skipped = 0;
 
-  for (const notificationDoc of snapshot.docs) {
+  for (const notificationDoc of notificationDocs) {
+    if (processed >= RETRY_BATCH_SIZE) {
+      skipped += 1;
+      continue;
+    }
     const data = notificationDoc.data() as Record<string, any>;
+    if (data.status !== "queued") {
+      skipped += 1;
+      continue;
+    }
     const retryCount = Number(data.retryCount || 0);
     const maxRetries = Math.min(Number(data.maxRetries || RETRY_LIMIT), RETRY_LIMIT);
     if (retryCount >= maxRetries || toMillis(data.nextRetryAt) > now) {

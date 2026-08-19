@@ -22,6 +22,10 @@ export default function SignupPage() {
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!auth || !db) {
+      toast.error("Authentication or database is unavailable. Please try again.");
+      return;
+    }
     setLoading(true);
     try {
       // 1. Create User

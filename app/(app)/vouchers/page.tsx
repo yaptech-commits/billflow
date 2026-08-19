@@ -52,7 +52,7 @@ export default function VouchersPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!businessId) return;
+    if (!db || !businessId) return;
     if (businessId === "SUPER_ADMIN") {
       toast.error("Please select a specific business to generate vouchers.");
       return;
@@ -78,6 +78,10 @@ export default function VouchersPage() {
   };
 
   const handleDelete = async (id: string) => {
+    if (!db) {
+      toast.error("Database is unavailable. Please try again.");
+      return;
+    }
     if (!confirm("Are you sure you want to delete this voucher?")) return;
     try {
       await deleteDoc(doc(db, "vouchers", id));
