@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { recordSecurityEvent } from "@/lib/security-events-server";
 
 export type SchoolNotificationServerChannel = "in_app" | "email" | "sms" | "push" | "whatsapp";
 
@@ -101,6 +102,21 @@ export async function dispatchSchoolNotification(payload: SchoolNotificationDisp
     : relevantValues.some((result) => result.status === "queued")
       ? "queued"
       : "delivered";
+
+  for (const [channel, result] of Object.entries(results)) {
+    if (channel === "in_app" || result.status === "delivered") continue;
+    void recordSecurityEvent({
+      category: "system_alert",
+      eventType: result.status === "failed" ? "notification_failure" : "notification_queued",
+      severity: result.status === "failed" ? "high" : "medium",
+      title: result.status === "failed" ? "Notification delivery failed" : "Notification delivery queued",
+      message: result.reason || `The ${channel} notification provider needs attention.`,
+      businessId: payload.businessId,
+      propertyId: payload.propertyId,
+      route: "/api/school/notifications/dispatch",
+      metadata: { channel, notificationId: payload.notificationId, notificationType: payload.type },
+    });
+  }
 
   return { status, results };
 }

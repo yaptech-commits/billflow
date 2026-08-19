@@ -1,4 +1,5 @@
 import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
+import { recordSecurityEvent } from "@/lib/security-events-server";
 import type { NextRequest } from "next/server";
 
 export type ServerActor = {
@@ -44,12 +45,30 @@ function hasSuperAdminClaim(decoded: DecodedServerToken) {
 async function decodeRequestToken(request: NextRequest): Promise<DecodedServerToken> {
   const authorization = request.headers.get("authorization");
   if (!authorization?.startsWith("Bearer ")) {
+    void recordSecurityEvent({
+      category: "security_event",
+      eventType: "invalid_session",
+      severity: "medium",
+      title: "Unauthenticated API request",
+      message: "A protected API route was requested without a Firebase bearer token.",
+      route: request.nextUrl.pathname,
+      metadata: { method: request.method },
+    });
     throw new HttpError(401, "Authentication required");
   }
 
   try {
     return await getAdminAuth().verifyIdToken(authorization.slice("Bearer ".length), true) as DecodedServerToken;
   } catch {
+    void recordSecurityEvent({
+      category: "security_event",
+      eventType: "invalid_session",
+      severity: "high",
+      title: "Invalid or expired session",
+      message: "A protected API route received an invalid or expired Firebase session token.",
+      route: request.nextUrl.pathname,
+      metadata: { method: request.method },
+    });
     throw new HttpError(401, "Invalid or expired session");
   }
 }
@@ -109,6 +128,19 @@ export async function requireServerActor(request: NextRequest): Promise<ServerAc
 export async function requireServerSuperAdmin(request: NextRequest): Promise<ServerActor> {
   const actor = await requireServerActor(request);
   if (actor.role !== "super_admin") {
+    void recordSecurityEvent({
+      category: "security_event",
+      eventType: "unauthorized_api_attempt",
+      severity: "high",
+      title: "Unauthorized super-admin API attempt",
+      message: `${actor.role} attempted to access a super-admin-only API route.`,
+      actorUid: actor.uid,
+      actorEmail: actor.email,
+      businessId: actor.businessId,
+      propertyId: actor.propertyId,
+      route: request.nextUrl.pathname,
+      metadata: { method: request.method, role: actor.role },
+    });
     throw new HttpError(403, "Super-admin access required");
   }
   return actor;
