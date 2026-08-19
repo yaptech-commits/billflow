@@ -43,5 +43,11 @@ export async function GET(request: NextRequest) {
       envVar: "SCHOOL_NOTIFICATION_WEBHOOK_SECRET",
       description: "Optional shared secret sent as x-billflow-webhook-secret to your provider adapter.",
     },
+    retryScheduler: {
+      configured: Boolean(process.env.CRON_SECRET),
+      envVar: "CRON_SECRET",
+      schedule: "Every 15 minutes",
+      description: "Protected Vercel cron retries queued school notifications with a maximum of five attempts.",
+    },
   });
 }

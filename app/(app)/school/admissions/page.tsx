@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { BusinessProfile, getBusinessProfile } from "@/lib/db";
 import { DEFAULT_PROPERTY_ID, getSchoolNotificationsForStudents, getStudents, SchoolNotification, Student } from "@/lib/school-db";
-import { AlertCircle, CheckCircle2, Clock3, FileCheck2, History, Mail, MessageSquareText, Phone, Printer, RefreshCw, Search, Users } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock3, Download, FileCheck2, History, Mail, MessageSquareText, Phone, Printer, RefreshCw, Search, Users } from "lucide-react";
 import toast from "react-hot-toast";
 import { formatAdmissionDate, initials } from "@/lib/school-admission-letter";
 
@@ -69,6 +69,48 @@ export default function SchoolAdmissionsPage() {
   const logoDataUrl = typeof businessProfile?.logoDataUrl === "string" && /^(data:image\/|https?:\/\/)/i.test(businessProfile.logoDataUrl)
     ? businessProfile.logoDataUrl
     : "";
+
+  const exportAdmissionCommunicationCsv = () => {
+    if (admissionNotifications.length === 0) {
+      toast("There are no admission communication records to export yet.");
+      return;
+    }
+
+    const escapeCsv = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+    const headers = ["School", "Property ID", "Student", "Student ID", "Guardian Email", "Guardian Phone", "Channels", "Channel Status", "Overall Status", "Retry Count", "Last Attempt", "Created"];
+    const rows = admissionNotifications.map((notification) => {
+      const channelStatuses = notification.channels
+        .filter((channel) => channel !== "in_app")
+        .map((channel) => `${channel}:${notificationChannelStatus(notification, channel)}`)
+        .join(" | ");
+      return [
+        schoolName,
+        propertyId,
+        notification.studentName,
+        notification.metadata?.admissionNumber || "",
+        notification.recipientEmail || "",
+        notification.recipientPhone || "",
+        notification.channels.filter((channel) => channel !== "in_app").join(" + "),
+        channelStatuses || "in_app:delivered",
+        notificationStatusLabel(notification),
+        notification.retryCount || 0,
+        formatAdmissionDate(notification.lastAttemptAt),
+        formatAdmissionDate(notification.createdAt),
+      ].map(escapeCsv).join(",");
+    });
+
+    const csv = [headers.map(escapeCsv).join(","), ...rows].join("\n");
+    const blob = new Blob([`\ufeff${csv}`], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${schoolName.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "school"}-admission-communications-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    toast.success("Admission communication history exported as CSV.");
+  };
 
   const printAdmissionLetter = () => {
     if (!selectedStudent) {
@@ -197,7 +239,12 @@ export default function SchoolAdmissionsPage() {
             <h2 className="text-sm font-semibold text-foreground flex items-center gap-2"><History size={16} className="text-gold" /> Admission Letter Delivery History</h2>
             <p className="text-xs text-muted mt-1">Email and SMS delivery records for this school property. Provider secrets never appear here.</p>
           </div>
-          <span className="text-[11px] text-muted">{admissionNotifications.length} notification{admissionNotifications.length === 1 ? "" : "s"}</span>
+          <div className="flex items-center gap-3">
+            <button onClick={exportAdmissionCommunicationCsv} className="btn-ghost border border-border text-foreground text-xs px-3 py-2 rounded-lg flex items-center gap-2" disabled={admissionNotifications.length === 0}>
+              <Download size={14} /> Export CSV
+            </button>
+            <span className="text-[11px] text-muted">{admissionNotifications.length} notification{admissionNotifications.length === 1 ? "" : "s"}</span>
+          </div>
         </div>
         {admissionNotifications.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted">No admission-letter notifications have been queued yet.</div>

@@ -147,6 +147,10 @@ export interface SchoolNotification {
   deliveryProvider?: string;
   deliveryError?: string;
   deliveryStatus?: Record<string, SchoolNotificationDeliveryResult>;
+  retryCount?: number;
+  maxRetries?: number;
+  nextRetryAt?: any;
+  lastRetryError?: string;
   lastAttemptAt?: any;
   createdAt?: any;
   sentAt?: any;
@@ -588,6 +592,8 @@ export async function enqueueSchoolNotification(notification: Omit<SchoolNotific
     ...notification,
     propertyId: notification.propertyId || DEFAULT_PROPERTY_ID,
     status: "queued",
+    retryCount: 0,
+    maxRetries: 5,
     createdAt: serverTimestamp(),
   });
   const notificationId = docRef.id;
@@ -606,14 +612,31 @@ export async function enqueueSchoolNotification(notification: Omit<SchoolNotific
     });
     const result = await response.json();
     const channelStatuses = Object.fromEntries(Object.entries(result.results || {}).map(([channel, value]) => [channel, value]));
+    const retryCount = notification.retryCount || 0;
+    const maxRetries = notification.maxRetries || 5;
+    const queued = result.status === "queued" && retryCount < maxRetries;
     await updateDoc(docRef, {
       status: result.status === "delivered" ? "sent" : result.status === "partial_failure" ? "failed" : "queued",
       deliveryStatus: channelStatuses,
+      retryCount: queued ? retryCount + 1 : retryCount,
+      maxRetries,
+      nextRetryAt: queued ? new Date(Date.now() + Math.min(60 * 60 * 1000, 2 ** retryCount * 5 * 60 * 1000)) : null,
+      lastRetryError: queued ? "One or more delivery channels are not configured yet." : null,
       lastAttemptAt: serverTimestamp(),
       ...(result.status === "delivered" ? { sentAt: serverTimestamp() } : {}),
     });
-  } catch {
-    await updateDoc(docRef, { status: "queued", lastAttemptAt: serverTimestamp() });
+  } catch (error) {
+    const retryCount = notification.retryCount || 0;
+    const maxRetries = notification.maxRetries || 5;
+    const queued = retryCount < maxRetries;
+    await updateDoc(docRef, {
+      status: "queued",
+      retryCount: queued ? retryCount + 1 : retryCount,
+      maxRetries,
+      nextRetryAt: queued ? new Date(Date.now() + Math.min(60 * 60 * 1000, 2 ** retryCount * 5 * 60 * 1000)) : null,
+      lastRetryError: queued ? (error instanceof Error ? error.message : "Notification dispatch failed") : "Retry limit reached",
+      lastAttemptAt: serverTimestamp(),
+    });
   }
   return notificationId;
 }

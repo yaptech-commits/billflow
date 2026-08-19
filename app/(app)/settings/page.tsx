@@ -51,7 +51,7 @@ export default function SettingsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [schoolNotificationPreferences, setSchoolNotificationPreferences] = useState<SchoolNotificationPreferences | null>(null);
   const [schoolNotificationSaving, setSchoolNotificationSaving] = useState(false);
-  const [providerReadiness, setProviderReadiness] = useState<{ email: { configured: boolean; envVar: string; description: string; validationMessage?: string }; sms: { configured: boolean; envVar: string; description: string; validationMessage?: string }; webhookAuth?: { configured: boolean; envVar: string; description: string } } | null>(null);
+  const [providerReadiness, setProviderReadiness] = useState<{ email: { configured: boolean; envVar: string; description: string; validationMessage?: string }; sms: { configured: boolean; envVar: string; description: string; validationMessage?: string }; webhookAuth?: { configured: boolean; envVar: string; description: string }; retryScheduler?: { configured: boolean; envVar: string; schedule: string; description: string } } | null>(null);
   const [providerReadinessLoading, setProviderReadinessLoading] = useState(false);
 
   useEffect(() => {
@@ -497,6 +497,15 @@ export default function SettingsPage() {
             <p className="text-xs font-semibold text-foreground">Webhook security</p>
             <p className="text-[11px] text-muted mt-1">{providerReadiness?.webhookAuth?.configured ? "Shared-secret authentication is enabled for outbound delivery." : "For production, configure a shared secret on both BillFlow and your provider adapter."}</p>
             {!providerReadiness?.webhookAuth?.configured && <p className="text-[11px] text-gold mt-1">Set <code className="font-mono">{providerReadiness?.webhookAuth?.envVar || "SCHOOL_NOTIFICATION_WEBHOOK_SECRET"}</code> in Vercel and validate the x-billflow-webhook-secret header on the receiving adapter.</p>}
+          </div>
+
+          <div className={`flex items-start gap-3 rounded-lg border p-3 mb-5 ${providerReadiness?.retryScheduler?.configured ? "border-green/30 bg-green/5" : "border-gold/30 bg-gold/5"}`}>
+            {providerReadiness?.retryScheduler?.configured ? <CheckCircle2 size={16} className="text-green mt-0.5 shrink-0" /> : <AlertCircle size={16} className="text-gold mt-0.5 shrink-0" />}
+            <div>
+              <p className="text-xs font-semibold text-foreground">Automatic queued-notification retries: {providerReadinessLoading ? "Checking..." : providerReadiness?.retryScheduler?.configured ? "Ready" : "Needs configuration"}</p>
+              <p className="text-[11px] text-muted mt-1">{providerReadiness?.retryScheduler?.description || "Queued school notifications are retried in the background."} Schedule: {providerReadiness?.retryScheduler?.schedule || "Every 15 minutes"}.</p>
+              {!providerReadiness?.retryScheduler?.configured && <p className="text-[11px] text-gold mt-1">Set <code className="font-mono">{providerReadiness?.retryScheduler?.envVar || "CRON_SECRET"}</code> in Vercel. The retry endpoint is protected and stops after five attempts per notification.</p>}
+            </div>
           </div>
 
           <div className="flex items-center justify-between gap-4 py-3.5 border-y border-border">

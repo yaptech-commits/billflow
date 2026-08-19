@@ -13,6 +13,12 @@
 - [x] Add optional guardian SMS delivery alongside admission email with channel-level tracking and fallback messaging.
 - [x] Build, verify, commit, and push the communication enhancements with author email `ayindenabawisdom@gmail.com`.
 
+## Admission Communication Follow-ups
+- [x] Add a branded admission-letter preview and confirm-before-dispatch flow.
+- [x] Add bounded automatic retries for queued admission notifications.
+- [x] Add a property-scoped CSV export for admission communication logs.
+- [x] Build, verify, commit, and push the follow-up improvements with author email `ayindenabawisdom@gmail.com`.
+
 ## School Admissions Page
 - [x] Create an Admissions page inside the grouped School Management features.
 - [x] Automatically list students from the existing property-scoped student records after registration.
