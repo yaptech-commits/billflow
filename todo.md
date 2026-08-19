@@ -30,7 +30,19 @@
 - [x] Add manual re-triggering for failed admission-letter deliveries with audit tracking.
 - [x] Add configurable branded templates for fee receipts and report-card notifications.
 - [x] Add optional WhatsApp delivery configuration and channel-level tracking.
-- [x] Build, verify, commit, and push the communication additions with author email `ayindenabawisdom@gmail.com`.
+- [x] Build, verify, promote, commit, and push the communication additions with author email `ayindenabawisdom@gmail.com`.
+
+## Vercel Deployment Fix
+- [ ] Inspect Vercel project branch and repository integration settings.
+- [ ] Confirm the pushed BillFlow commit `15a30ee` is available on the intended branch.
+- [ ] Correct the deployment trigger or branch configuration with the least invasive action.
+- [ ] Verify a new deployment contains the security-events route and latest commit.
+
+## Vercel Hobby Plan Deployment Remediation
+- [ ] Change `vercel.json` notification retry schedule from every 15 minutes to once daily.
+- [ ] Run the production build and verify the cron configuration.
+- [ ] Commit and push the deployment-compatible change with author email `ayindenabawisdom@gmail.com`.
+- [ ] Trigger and verify the Vercel preview deployment for commit `15a30ee` plus the cron fix.
 
 ## School Admissions Page
 - [x] Create an Admissions page inside the grouped School Management features.
