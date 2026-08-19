@@ -119,7 +119,7 @@ export interface ParentLink {
 }
 
 export type SchoolNotificationChannel = "in_app" | "email" | "sms" | "push";
-export type SchoolNotificationType = "attendance_absence" | "fee_assigned" | "fee_payment" | "report_card_published" | "announcement";
+export type SchoolNotificationType = "attendance_absence" | "fee_assigned" | "fee_payment" | "report_card_published" | "announcement" | "admission_created";
 export type SchoolNotificationStatus = "queued" | "sent" | "failed" | "read";
 
 export interface SchoolNotification {
@@ -132,6 +132,10 @@ export interface SchoolNotification {
   recipientPhone?: string;
   title: string;
   message: string;
+  /** Optional rich email content; plain message remains the in-app/SMS fallback. */
+  html?: string;
+  /** Structured context for provider delivery logs and administrative audits. */
+  metadata?: Record<string, string | number | boolean | null>;
   type: SchoolNotificationType;
   channels: SchoolNotificationChannel[];
   status: SchoolNotificationStatus;

@@ -4,23 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { BusinessProfile, getBusinessProfile } from "@/lib/db";
 import { DEFAULT_PROPERTY_ID, getStudents, Student } from "@/lib/school-db";
-import { FileCheck2, Printer, Search, Users, RefreshCw, MapPin, Phone, Mail, CalendarDays } from "lucide-react";
+import { FileCheck2, Printer, Search, Users, RefreshCw, Phone, Mail } from "lucide-react";
 import toast from "react-hot-toast";
-
-function formatAdmissionDate(value: any) {
-  try {
-    if (value?.toDate) return value.toDate().toLocaleDateString();
-    if (value instanceof Date) return value.toLocaleDateString();
-    if (typeof value === "string" || typeof value === "number") return new Date(value).toLocaleDateString();
-  } catch {
-    // Fall through to the current date when Firestore has not materialized a timestamp yet.
-  }
-  return new Date().toLocaleDateString();
-}
-
-function initials(name: string) {
-  return name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "SC";
-}
+import { formatAdmissionDate, initials } from "@/lib/school-admission-letter";
 
 export default function SchoolAdmissionsPage() {
   const { businessId, propertyId: authPropertyId } = useAuth();

@@ -2,15 +2,26 @@
 
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { Student, ParentLink, getStudents, createStudent, updateStudent, deleteStudent, createParentLink, getParentLinks } from "@/lib/school-db";
+import {
+  Student,
+  ParentLink,
+  getStudents,
+  createStudent,
+  updateStudent,
+  deleteStudent,
+  createParentLink,
+  getParentLinks,
+  enqueueSchoolNotification,
+} from "@/lib/school-db";
 import { BusinessProfile, getBusinessProfile } from "@/lib/db";
+import { buildAdmissionLetterContent } from "@/lib/school-admission-letter";
 import { toast } from "react-hot-toast";
 import { Users, UserPlus, Search, Edit, Trash2, GraduationCap, ShieldCheck, X, Check } from "lucide-react";
 import Modal from "@/components/ui/Modal";
 
 export default function StudentsPage() {
-  const { businessId, role } = useAuth();
-  const propertyId = "default_property";
+  const { businessId, role, propertyId: authPropertyId } = useAuth();
+  const propertyId = authPropertyId || "default_property";
   const [students, setStudents] = useState<Student[]>([]);
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
   const [parentLinks, setParentLinks] = useState<ParentLink[]>([]);
@@ -60,23 +71,74 @@ export default function StudentsPage() {
           propertyId: propertyId || "default_property",
           ...form,
         });
-        // Automatically save parent details and create parent portal link if guardian email is present
-        if (form.guardianEmail && form.guardianEmail.trim()) {
+        const guardianEmail = form.guardianEmail.trim();
+        let admissionEmailStatus: "queued" | "missing" | "failed" = "missing";
+
+        // Automatically save parent details and create parent portal link if guardian email is present.
+        if (guardianEmail) {
           try {
             await createParentLink({
               businessId,
-              propertyId: propertyId || "default_property",
+              propertyId,
               studentId: createdStudent.id,
               studentName: form.fullName,
-              parentEmail: form.guardianEmail,
+              parentEmail: guardianEmail,
               parentName: form.guardianName,
               parentPhone: form.guardianPhone,
             });
           } catch (linkErr) {
             console.error("Auto-parent link warning:", linkErr);
           }
+
+          // Queue the branded admission letter after the student record is safely persisted.
+          // Provider failures are intentionally isolated so a successful registration is never
+          // reported as failed just because an external email service is unavailable.
+          try {
+            const profileForLetter = businessProfile || await getBusinessProfile(businessId);
+            const letter = buildAdmissionLetterContent(
+              {
+                fullName: form.fullName,
+                admissionNumber: createdStudent.admissionNumber,
+                classGrade: form.classGrade,
+                guardianName: form.guardianName,
+                status: form.status,
+              },
+              profileForLetter,
+            );
+            await enqueueSchoolNotification({
+              businessId,
+              propertyId,
+              studentId: createdStudent.id,
+              studentName: form.fullName,
+              recipientEmail: guardianEmail,
+              recipientPhone: form.guardianPhone || undefined,
+              title: letter.subject,
+              message: letter.message,
+              html: letter.html,
+              metadata: {
+                admissionNumber: createdStudent.admissionNumber,
+                classGrade: form.classGrade,
+                deliveryPurpose: "admission_letter",
+                documentTitle: letter.title,
+              },
+              type: "admission_created",
+              channels: ["in_app", "email"],
+            });
+            admissionEmailStatus = "queued";
+          } catch (emailErr) {
+            admissionEmailStatus = "failed";
+            console.error("Admission letter email queue warning:", emailErr);
+          }
         }
+
         toast.success(`Student registered. Automatic Student ID: ${createdStudent.admissionNumber}`);
+        if (admissionEmailStatus === "queued") {
+          toast.success(`Admission letter queued for ${guardianEmail}. Delivery status is tracked in school notifications.`);
+        } else if (admissionEmailStatus === "failed") {
+          toast.error("Student registered, but the admission letter email could not be queued. Check notification delivery settings.");
+        } else {
+          toast("Student registered without an admission-letter email. Add a guardian email to send it later.");
+        }
       }
       setIsAddOpen(false);
       setEditingStudent(null);

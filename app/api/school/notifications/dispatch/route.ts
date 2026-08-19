@@ -16,6 +16,8 @@ type NotificationPayload = {
   recipientPhone?: string;
   title: string;
   message: string;
+  html?: string;
+  metadata?: Record<string, string | number | boolean | null>;
   type: string;
   channels: Channel[];
 };
@@ -77,6 +79,8 @@ export async function POST(request: NextRequest) {
           recipientPhone: payload.recipientPhone,
           title: payload.title,
           message: payload.message,
+          html: payload.html,
+          metadata: payload.metadata,
           type: payload.type,
           channel,
         }),
