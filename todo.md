@@ -1,5 +1,11 @@
 # Suggested Upgrades Implementation
 
+## School Navigation: Announcements Grouping
+- [x] Add Announcements to the grouped School Management feature list in the sidebar.
+- [x] Preserve the existing `/school/announcements` composer route and school-only access rules.
+- [x] Ensure Announcements appears for the appropriate school owner and Super Admin views without becoming a separate top-level module.
+- [ ] Build, verify, commit, and push the navigation correction with author email `ayindenabawisdom@gmail.com`.
+
 ## School Announcements Page
 - [x] Add a dedicated administrator page for composing announcements to parents.
 - [x] Support school-wide or class-targeted audiences with property-aware student and guardian selection.
