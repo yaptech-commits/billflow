@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import Modal from "@/components/ui/Modal";
 import { useAuth } from "@/lib/auth-context";
 import { BusinessProfile, getBusinessProfile, getStaff, Staff } from "@/lib/db";
 import {
@@ -36,7 +37,7 @@ interface ClassGroup {
 }
 
 export default function SchoolTeachersPage() {
-  const { businessId, role, propertyId: authPropertyId } = useAuth();
+  const { businessId, role, propertyId: authPropertyId, user } = useAuth();
   const propertyId = authPropertyId || DEFAULT_PROPERTY_ID;
   const [staff, setStaff] = useState<Staff[]>([]);
   const [schoolClasses, setSchoolClasses] = useState<SchoolClass[]>([]);
@@ -46,6 +47,15 @@ export default function SchoolTeachersPage() {
   const [classSelections, setClassSelections] = useState<Record<string, string>>({});
   const [savingClass, setSavingClass] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createSaving, setCreateSaving] = useState(false);
+  const [teacherForm, setTeacherForm] = useState({
+    displayName: "",
+    email: "",
+    phone: "",
+    employeeId: "",
+    subjectSpecialty: "",
+  });
 
   const load = async () => {
     if (!businessId) return;
@@ -84,6 +94,11 @@ export default function SchoolTeachersPage() {
     [staff],
   );
 
+  const assignableStaff = useMemo(
+    () => staff.filter((member) => member.status === "active" || member.staffType === "teacher"),
+    [staff],
+  );
+
   const classGroups = useMemo<ClassGroup[]>(() => {
     const byName = new Map<string, Student[]>();
     students.forEach((student) => {
@@ -113,9 +128,15 @@ export default function SchoolTeachersPage() {
 
   const filteredStaff = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
-    if (!query) return activeStaff;
-    return activeStaff.filter((member) => member.email.toLowerCase().includes(query));
-  }, [activeStaff, searchTerm]);
+    if (!query) return assignableStaff;
+    return assignableStaff.filter((member) =>
+      [member.displayName, member.email, member.employeeId, member.subjectSpecialty]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(query),
+    );
+  }, [assignableStaff, searchTerm]);
 
   const assignedClassCount = useMemo(
     () => classGroups.filter((group) => Boolean(group.schoolClass?.teacherId)).length,
@@ -127,10 +148,51 @@ export default function SchoolTeachersPage() {
     [classGroups],
   );
 
+  const resetTeacherForm = () => {
+    setTeacherForm({ displayName: "", email: "", phone: "", employeeId: "", subjectSpecialty: "" });
+  };
+
+  const handleCreateTeacher = async () => {
+    if (!businessId || businessId === "SUPER_ADMIN") {
+      toast.error("Select a specific school business before creating a teacher profile");
+      return;
+    }
+    if (!user) {
+      toast.error("Your session has expired. Please sign in again");
+      return;
+    }
+
+    setCreateSaving(true);
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch("/api/school/teachers", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ ...teacherForm, businessId, propertyId }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result.error || "Could not create teacher profile");
+      }
+
+      toast.success(`${teacherForm.displayName.trim()} teacher profile created`);
+      setCreateOpen(false);
+      resetTeacherForm();
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not create teacher profile");
+    } finally {
+      setCreateSaving(false);
+    }
+  };
+
   const saveTeacherAssignment = async (group: ClassGroup) => {
     if (!businessId) return;
     const teacherId = classSelections[group.name] || "";
-    const teacher = activeStaff.find((member) => member.id === teacherId);
+    const teacher = assignableStaff.find((member) => member.id === teacherId);
     setSavingClass(group.name);
     try {
       await saveSchoolClass({
@@ -138,7 +200,7 @@ export default function SchoolTeachersPage() {
         propertyId,
         name: group.name,
         teacherId: teacher?.id,
-        teacherName: teacher?.email,
+        teacherName: teacher?.displayName || teacher?.email,
         teacherEmail: teacher?.email,
       });
       toast.success(
@@ -183,6 +245,13 @@ export default function SchoolTeachersPage() {
               aria-label="Search teachers"
             />
           </div>
+          <button
+            onClick={() => setCreateOpen(true)}
+            disabled={!businessId || businessId === "SUPER_ADMIN"}
+            className="btn-primary flex items-center gap-2 disabled:opacity-50"
+          >
+            <UserPlus size={15} /> Add teacher
+          </button>
           <Link href="/staff" className="btn-ghost flex items-center gap-2">
             <UserPlus size={15} /> Manage staff
           </Link>
@@ -236,14 +305,21 @@ export default function SchoolTeachersPage() {
                 <div className="space-y-3">
                   {filteredStaff.map((member) => {
                     const assignedClasses = classGroups.filter((group) => group.schoolClass?.teacherId === member.id);
+                    const teacherName = member.displayName || member.email;
                     return (
                       <div key={member.id || member.email} className="border border-border p-3">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="text-sm text-white font-medium truncate">{member.email}</p>
-                            <p className="text-xs text-muted mt-1">Active staff account</p>
+                            <p className="text-sm text-white font-medium truncate">{teacherName}</p>
+                            <p className="text-xs text-muted mt-1 truncate">
+                              {member.email}
+                              {member.employeeId ? ` · ${member.employeeId}` : ""}
+                              {member.subjectSpecialty ? ` · ${member.subjectSpecialty}` : ""}
+                            </p>
                           </div>
-                          <span className="text-[10px] uppercase tracking-wider text-emerald-300 border border-emerald-300/30 px-2 py-1">Active</span>
+                          <span className={`text-[10px] uppercase tracking-wider border px-2 py-1 ${member.status === "active" ? "text-emerald-300 border-emerald-300/30" : "text-gold border-gold/30"}`}>
+                            {member.status === "active" ? "Active" : "Pending"}
+                          </span>
                         </div>
                         <div className="mt-3 flex flex-wrap gap-1.5">
                           {assignedClasses.length === 0 ? (
@@ -303,12 +379,14 @@ export default function SchoolTeachersPage() {
                                 aria-label={`Assign teacher to ${group.name}`}
                               >
                                 <option value="">Unassigned</option>
-                                {activeStaff.map((member) => (
-                                  <option key={member.id || member.email} value={member.id || ""}>{member.email}</option>
+                                {assignableStaff.map((member) => (
+                                  <option key={member.id || member.email} value={member.id || ""}>
+                                    {member.displayName ? `${member.displayName} · ${member.email}` : member.email}
+                                  </option>
                                 ))}
                               </select>
-                              {group.schoolClass?.teacherEmail && !activeStaff.some((member) => member.id === group.schoolClass?.teacherId) && (
-                                <p className="text-xs text-amber-300 mt-2">Previously assigned to {group.schoolClass.teacherEmail}; choose an active account to replace it.</p>
+                              {group.schoolClass?.teacherEmail && !assignableStaff.some((member) => member.id === group.schoolClass?.teacherId) && (
+                                <p className="text-xs text-amber-300 mt-2">Previously assigned to {group.schoolClass.teacherEmail}; choose an available account to replace it.</p>
                               )}
                             </td>
                             <td className="px-5 py-4 text-right">
@@ -332,6 +410,94 @@ export default function SchoolTeachersPage() {
           </div>
         </>
       )}
+
+      <Modal
+        open={createOpen}
+        onClose={() => {
+          if (!createSaving) {
+            setCreateOpen(false);
+            resetTeacherForm();
+          }
+        }}
+        title="Create Teacher Profile"
+      >
+        <div className="space-y-4">
+          <p className="text-xs text-muted">
+            Create a property-scoped teacher profile. The profile starts as pending until the teacher signs in or is invited through staff access.
+          </p>
+          <div>
+            <label className="label" htmlFor="teacher-display-name">Full name *</label>
+            <input
+              id="teacher-display-name"
+              className="input"
+              value={teacherForm.displayName}
+              onChange={(event) => setTeacherForm((current) => ({ ...current, displayName: event.target.value }))}
+              placeholder="e.g. Ama Mensah"
+              autoComplete="name"
+            />
+          </div>
+          <div>
+            <label className="label" htmlFor="teacher-email">Email address *</label>
+            <input
+              id="teacher-email"
+              className="input"
+              type="email"
+              value={teacherForm.email}
+              onChange={(event) => setTeacherForm((current) => ({ ...current, email: event.target.value }))}
+              placeholder="teacher@school.com"
+              autoComplete="email"
+            />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="label" htmlFor="teacher-phone">Phone</label>
+              <input
+                id="teacher-phone"
+                className="input"
+                value={teacherForm.phone}
+                onChange={(event) => setTeacherForm((current) => ({ ...current, phone: event.target.value }))}
+                placeholder="024 000 0000"
+                autoComplete="tel"
+              />
+            </div>
+            <div>
+              <label className="label" htmlFor="teacher-employee-id">Employee ID</label>
+              <input
+                id="teacher-employee-id"
+                className="input"
+                value={teacherForm.employeeId}
+                onChange={(event) => setTeacherForm((current) => ({ ...current, employeeId: event.target.value }))}
+                placeholder="TCH-001"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="label" htmlFor="teacher-specialty">Subject or specialty</label>
+            <input
+              id="teacher-specialty"
+              className="input"
+              value={teacherForm.subjectSpecialty}
+              onChange={(event) => setTeacherForm((current) => ({ ...current, subjectSpecialty: event.target.value }))}
+              placeholder="Mathematics"
+            />
+          </div>
+          <div className="flex gap-3 justify-end pt-2">
+            <button
+              className="btn-ghost"
+              onClick={() => {
+                setCreateOpen(false);
+                resetTeacherForm();
+              }}
+              disabled={createSaving}
+            >
+              Cancel
+            </button>
+            <button className="btn-primary" onClick={handleCreateTeacher} disabled={createSaving}>
+              {createSaving ? "Creating…" : "Create teacher"}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -253,6 +253,14 @@ export interface Staff {
   role: StaffRole;
   status: StaffStatus;
   staffUid?: string;
+  /** Distinguishes a school teacher profile from a general salesperson account. */
+  staffType?: "staff" | "teacher";
+  /** Profile fields used by the school Teachers workspace. */
+  displayName?: string;
+  phone?: string;
+  employeeId?: string;
+  subjectSpecialty?: string;
+  propertyId?: string;
   /** List of page paths the staff can access (e.g. ["/pos", "/products"]). If unset/empty, they see all standard salesperson pages. */
   permissions?: string[];
   createdAt?: Timestamp | null;
