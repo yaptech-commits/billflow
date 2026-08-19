@@ -55,7 +55,7 @@ export default function StudentsPage() {
         await updateStudent(editingStudent.id, form);
         toast.success("Student updated successfully.");
       } else {
-        const studentId = await createStudent({
+        const createdStudent = await createStudent({
           businessId,
           propertyId: propertyId || "default_property",
           ...form,
@@ -66,7 +66,7 @@ export default function StudentsPage() {
             await createParentLink({
               businessId,
               propertyId: propertyId || "default_property",
-              studentId,
+              studentId: createdStudent.id,
               studentName: form.fullName,
               parentEmail: form.guardianEmail,
               parentName: form.guardianName,
@@ -76,7 +76,7 @@ export default function StudentsPage() {
             console.error("Auto-parent link warning:", linkErr);
           }
         }
-        toast.success("Student registered successfully with guardian profile saved.");
+        toast.success(`Student registered. Automatic Student ID: ${createdStudent.admissionNumber}`);
       }
       setIsAddOpen(false);
       setEditingStudent(null);
@@ -177,8 +177,8 @@ export default function StudentsPage() {
         <button
           onClick={() => {
             setEditingStudent(null);
-            setForm({
-              admissionNumber: `ADM-${Math.floor(1000 + Math.random() * 9000)}`,
+              setForm({
+              admissionNumber: "",
               fullName: "",
               classGrade: "Grade 1",
               guardianName: "",
@@ -199,7 +199,7 @@ export default function StudentsPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={16} />
           <input
             type="text"
-            placeholder="Search by student name, admission #, or class..."
+            placeholder="Search by student name, Student ID, or class..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="input-field w-full pl-10"
@@ -212,7 +212,7 @@ export default function StudentsPage() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-border text-xs text-muted uppercase">
-                <th className="py-3 px-4">Admission #</th>
+                <th className="py-3 px-4">Student ID</th>
                 <th className="py-3 px-4">Student Name</th>
                 <th className="py-3 px-4">Class / Grade</th>
                 <th className="py-3 px-4">Guardian Name</th>
@@ -289,14 +289,15 @@ export default function StudentsPage() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="text-xs text-muted mb-1 block">Admission Number *</label>
+              <label className="text-xs text-muted mb-1 block">Student ID</label>
               <input
                 type="text"
-                required
                 value={form.admissionNumber}
-                onChange={(e) => setForm({ ...form, admissionNumber: e.target.value })}
-                className="input-field w-full font-mono"
+                readOnly
+                placeholder={editingStudent ? "Student ID" : "Generated automatically"}
+                className="input-field w-full font-mono opacity-80"
               />
+              {!editingStudent && <p className="text-[11px] text-muted mt-1">BillFlow generates this ID automatically when the student is registered.</p>}
             </div>
             <div>
               <label className="text-xs text-muted mb-1 block">Class / Grade *</label>

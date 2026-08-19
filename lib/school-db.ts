@@ -203,12 +203,17 @@ function parentLinkDocumentId(businessId: string, studentId: string, parentEmail
 // ─── STUDENTS ────────────────────────────────────────────────────────────────
 
 export async function createStudent(student: Omit<Student, "id" | "createdAt">) {
-  const docRef = await addDoc(collection(db, "students"), {
+  // Allocate the Firestore document ID before writing so the generated Student ID
+  // is collision-free without relying on client-side random numbers.
+  const docRef = doc(collection(db!, "students"));
+  const admissionNumber = student.admissionNumber?.trim() || `STU-${docRef.id.slice(0, 8).toUpperCase()}`;
+  await setDoc(docRef, {
     ...student,
+    admissionNumber,
     propertyId: student.propertyId || DEFAULT_PROPERTY_ID,
     createdAt: serverTimestamp(),
   });
-  return docRef.id;
+  return { id: docRef.id, admissionNumber };
 }
 
 export async function getStudents(businessId: string, propertyId?: string) {

@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { 
-  LayoutDashboard, FileText, Users, Ticket, 
+  LayoutDashboard, FileText, FileCheck2, Users, Ticket,
   CreditCard, BarChart3, Settings, Package, 
   ChevronLeft, ChevronRight, ShoppingCart, Truck, UserCircle, Shield,
   LogOut, Building2, AlertCircle, Pill,   BedDouble, CalendarDays, ConciergeBell, UserRound, CircleDollarSign, ChevronDown, GraduationCap, ClipboardList, Megaphone
@@ -63,6 +63,7 @@ export default function Sidebar() {
     { name: "Online Booking", icon: Ticket, path: "/hotel/booking-widget", roles: ["owner", "salesperson", "super_admin"], hotel: true },
     { name: "Classes", icon: GraduationCap, path: "/school/classes", roles: ["owner", "super_admin"], school: true },
     { name: "Students", icon: Users, path: "/school/students", roles: ["owner", "super_admin"], school: true },
+    { name: "Admissions", icon: FileCheck2, path: "/school/admissions", roles: ["owner", "super_admin"], school: true },
     { name: "Parents", icon: Users, path: "/school/parents", roles: ["owner", "super_admin"], school: true },
     { name: "Announcements", icon: Megaphone, path: "/school/announcements", roles: ["owner", "super_admin"], school: true },
     { name: "Fees & Billing", icon: CreditCard, path: "/school/fees", roles: ["owner", "super_admin"], school: true },
@@ -157,8 +158,8 @@ export default function Sidebar() {
       key: "school",
       label: "School",
       shortLabel: "SCH",
-      description: "Classes, students, parents, announcements, fees, attendance, report cards, analytics, and parent access",
-      paths: ["/school/classes", "/school/students", "/school/parents", "/school/announcements", "/school/fees", "/school/attendance", "/school/reports", "/school/analytics", "/school/portal"],
+      description: "Classes, students, admissions, parents, announcements, fees, attendance, report cards, analytics, and parent access",
+      paths: ["/school/classes", "/school/students", "/school/admissions", "/school/parents", "/school/announcements", "/school/fees", "/school/attendance", "/school/reports", "/school/analytics", "/school/portal"],
     },
     {
       key: "administration",
