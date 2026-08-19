@@ -157,8 +157,8 @@ export default function Sidebar() {
       key: "school",
       label: "School",
       shortLabel: "SCH",
-      description: "Classes, students, fees, attendance, report cards, analytics, and parent access",
-      paths: ["/school/classes", "/school/students", "/school/fees", "/school/attendance", "/school/reports", "/school/analytics", "/school/portal"],
+      description: "Classes, students, parents, announcements, fees, attendance, report cards, analytics, and parent access",
+      paths: ["/school/classes", "/school/students", "/school/parents", "/school/announcements", "/school/fees", "/school/attendance", "/school/reports", "/school/analytics", "/school/portal"],
     },
     {
       key: "administration",
@@ -286,7 +286,7 @@ export default function Sidebar() {
           <div className="space-y-3">
             {superAdminGroups.map((group) => {
               const isExpanded = expandedGroups[group.key];
-              const groupHasActivePage = group.paths.includes(pathname);
+              const groupHasActivePage = pathname ? group.paths.includes(pathname) : false;
               return (
                 <section key={group.key} className="space-y-1">
                   <button
