@@ -258,3 +258,16 @@
 
 ## Scope Boundary
 - [x] Do not implement the separate in-app plan upgrade workflow.
+
+## Registration Onboarding Payment and Invoice Receipt
+- [x] Inspect the existing payment provider, email delivery, signup, and approval flows before extending them.
+- [x] Add a post-registration payment step with Cash and Mobile Money choices, preserving the selected plan and startup amount.
+- [x] Keep cash registrations pending for administrator confirmation and never auto-approve from a client-side signal.
+- [x] Add verified Mobile Money confirmation handling that auto-approves the account only after a trusted provider/webhook result.
+- [x] Email the onboarding invoice receipt to the registered business email with delivery status and retry-safe handling.
+- [x] Verify payment, approval, email, webhook security, and production behavior; unauthenticated routes return 401 and the production build passes.
+- [x] Commit and push with author email `ayindenabawisdom@gmail.com`.
+
+## Registration Payment Scope Boundary
+- [x] Do not implement the separate plan upgrade workflow.
+- [x] Add a dedicated cash-payment amount field on the onboarding payment page and carry the entered amount into the pending cash record.

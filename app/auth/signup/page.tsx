@@ -33,8 +33,14 @@ export default function SignupPage() {
     }
     setLoading(true);
     try {
+      const firebaseAuth = auth;
+      const firestore = db;
+      if (!firebaseAuth || !firestore) {
+        throw new Error("Firebase is not configured for this deployment. Please contact the BillFlow administrator.");
+      }
+
       // 1. Create User
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const userCredential = await createUserWithEmailAndPassword(firebaseAuth, email, password);
       const user = userCredential.user;
 
       // 2. Update Profile
@@ -45,23 +51,44 @@ export default function SignupPage() {
       
       // Create business record with automatically assigned pages based on business type
       const allowedPages = getPagesForBusinessType(businessType as any);
-      await setDoc(doc(db, "businesses", businessId), {
+      await setDoc(doc(firestore, "businesses", businessId), {
         businessName,
         businessType,
         ownerUid: user.uid,
         email,
-        status: "pending", // New accounts require approval
+        status: "pending", // New accounts require payment/approval
         allowedPages, // Auto-assign pages based on business type
         createdAt: serverTimestamp(),
         managementPlan: selectedPlan,
         proBusinessScale: selectedPlan === "pro" ? proBusinessScale : null,
         currency: "GHS",
         taxRate: 0,
-        taxInclusive: false
+        taxInclusive: false,
+        paymentStatus: "pending",
+        onboardingPaymentMethod: null,
       });
 
+      // Keep the owner-scoped profile in sync so server-side payment verification
+      // can approve the same account without relying on client-only state.
+      await setDoc(doc(firestore, "businessProfiles", user.uid), {
+        businessId,
+        ownerUid: user.uid,
+        businessName,
+        businessType,
+        email,
+        ownerEmail: email,
+        status: "pending",
+        allowedPages,
+        managementPlan: selectedPlan,
+        proBusinessScale: selectedPlan === "pro" ? proBusinessScale : null,
+        currency: "GHS",
+        paymentStatus: "pending",
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+
       // Create staff record for owner
-      await setDoc(doc(db, "staff", `staff_${user.uid}`), {
+      await setDoc(doc(firestore, "staff", `staff_${user.uid}`), {
         businessId,
         staffUid: user.uid,
         email,
@@ -70,8 +97,8 @@ export default function SignupPage() {
         createdAt: serverTimestamp()
       });
 
-      toast.success("Account created! Waiting for admin approval.");
-      router.push("/auth/login?error=Account pending approval. Contact BillFlow Official for approval.");
+      toast.success("Account created! Continue to payment.");
+      router.push(`/auth/onboarding-payment?businessId=${encodeURIComponent(businessId)}`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Signup failed";
       toast.error(msg.replace("Firebase: ", "").replace(/ \(auth.*\)\.?/, ""));
