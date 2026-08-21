@@ -289,3 +289,10 @@
 - [x] Apply the smallest secure fix and preserve pending-payment/account-approval safeguards.
 - [x] Verify the registration-to-payment handoff contract and production build; `pnpm run build` and `git diff --check` pass.
 - [x] Commit and push the fix with author email `ayindenabawisdom@gmail.com`; commit `2431d0ae07847883c374312eb56b8a13c6918d24`.
+
+## Registration-to-Payment Redirect Correction
+- [x] Inspect the current signup success handler, selected-plan persistence, and onboarding payment route contract.
+- [x] Reproduce why account creation does not navigate to `/auth/onboarding-payment` after plan selection: the global auth provider treated the newly created pending profile as a login-blocking approval error and signed the user out.
+- [x] Fix the redirect using a route-scoped pending-onboarding exception with cancellation-safe auth lifecycle handling; tenant isolation and approval/payment safeguards remain enforced outside onboarding.
+- [x] Verify the redirect path, production build, and relevant error handling; `pnpm run build` and `git diff --check` pass.
+- [ ] Commit and push the correction with author email `ayindenabawisdom@gmail.com`.

@@ -1224,7 +1224,8 @@ export async function receivePurchaseOrder(id: string) {
  */
 export async function resolveBusinessContext(
   uid: string,
-  email: string
+  email: string,
+  allowPendingOnboarding = false,
 ): Promise<{ businessId: string; role: StaffRole; staffId?: string; permissions?: string[] }> {
   // Super Admin Check
   if (email === "wisdomasaare41@gmail.com") {
@@ -1273,6 +1274,9 @@ export async function resolveBusinessContext(
       throw new Error("Your account has been suspended. Contact BillFlow Official for assistance.");
     }
     if (data.status === "pending") {
+      if (allowPendingOnboarding) {
+        return { businessId: uid, role: "owner", permissions: data.permissions };
+      }
       throw new Error("Account pending approval. Contact BillFlow Official for approval.");
     }
     return { businessId: uid, role: "owner", permissions: data.permissions };
@@ -1287,6 +1291,10 @@ export async function resolveBusinessContext(
     createdAt: serverTimestamp(),
   });
   
+  if (allowPendingOnboarding) {
+    return { businessId: uid, role: "owner", permissions: [] };
+  }
+
   throw new Error("Account pending approval. Contact BillFlow Official for approval.");
 }
 

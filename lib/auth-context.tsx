@@ -4,7 +4,7 @@ import { User, onAuthStateChanged, signOut } from "firebase/auth";
 import { auth, isFirebaseConfigured } from "@/lib/firebase";
 import { resolveBusinessContext, StaffRole } from "@/lib/db";
 import { claimParentLinks, getParentLinksForUser, ParentLink } from "@/lib/school-db";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 
 interface AuthContextType {
   user: User | null;
@@ -47,6 +47,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [parentLinks, setParentLinks] = useState<ParentLink[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const pathname = usePathname();
 
   const businessId = role === "super_admin" 
     ? (selectedBusinessId || "SUPER_ADMIN") 
@@ -58,6 +59,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    const isOnboardingRoute = pathname === "/auth/signup" || pathname === "/auth/onboarding-payment";
+    let cancelled = false;
     const unsub = onAuthStateChanged(auth, async (u) => {
       setUser(u);
       setPropertyId(null);
@@ -65,7 +68,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setParentLinks([]);
       if (u && u.email) {
         try {
-          const ctx = await resolveBusinessContext(u.uid, u.email);
+          const ctx = await resolveBusinessContext(u.uid, u.email, isOnboardingRoute);
+          if (cancelled) return;
 
           // Resolve Super Admin first so a privileged oversight account is never
           // narrowed into a parent-only portal by a linked student record.
@@ -78,9 +82,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (saved) setSelectedBusinessId(saved);
           } else {
             const links = await getParentLinksForUser(u.uid, u.email);
+            if (cancelled) return;
             if (links.length && ctx.role === "owner" && ctx.businessId === u.uid) {
               const scopedLinks = links.filter((link) => link.businessId === links[0].businessId);
               await claimParentLinks(u.uid, u.email);
+              if (cancelled) return;
               setRealBusinessId(scopedLinks[0].businessId);
               setPropertyId(scopedLinks[0].propertyId || "default_property");
               setParentLinks(scopedLinks);
@@ -96,6 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setPropertyId((ctx as { propertyId?: string }).propertyId || "default_property");
           }
         } catch (err: any) {
+          if (cancelled) return;
           // If it's an approval error, log out and let the login page show the message
           if (err.message?.includes("Contact BillFlow Official")) {
             await signOut(auth);
@@ -118,10 +125,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setParentStudentIds([]);
         setParentLinks([]);
       }
-      setLoading(false);
+      if (!cancelled) setLoading(false);
     });
-    return unsub;
-  }, []);
+    return () => {
+      cancelled = true;
+      unsub();
+    };
+  }, [pathname, router]);
 
   const handleSetSelectedBusinessId = (id: string | null) => {
     setSelectedBusinessId(id);
