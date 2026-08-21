@@ -342,3 +342,9 @@
 - [x] Preserve the selected plan and business identifier across registration-to-payment navigation through URL parameters and a session-scoped fallback for existing pending accounts.
 - [x] Automatically populate the Cash amount from the canonical plan price when available, with server-side invoice pricing remaining authoritative at submission.
 - [x] Verify the production route contract and build; `pnpm run build` and `git diff --check` pass. Commit and push remain pending.
+
+## Fixed Onboarding Price Display
+- [x] Remove the editable Cash amount input and its adjustment guidance from the onboarding payment page.
+- [x] Keep the selected plan startup price visible and send Cash payments without a client-editable amount.
+- [x] Preserve server-side canonical pricing and validate Cash, Mobile Money, and Demo behavior; the server defaults Cash to the canonical invoice amount when no client amount is submitted.
+- [ ] Run the production build, commit, and push with author email `ayindenabawisdom@gmail.com`.

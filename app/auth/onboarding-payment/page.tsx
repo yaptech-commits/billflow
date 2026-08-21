@@ -56,11 +56,8 @@ function PaymentPageContent() {
   const [message, setMessage] = useState("");
   const [amount, setAmount] = useState<number | null>(fallbackPlanDetails?.startupPrice ?? null);
   const [currency, setCurrency] = useState("GHS");
-  const [cashAmount, setCashAmount] = useState(fallbackPlanDetails ? String(fallbackPlanDetails.startupPrice) : "");
   const [managementPlan, setManagementPlan] = useState<ManagementPlan | null>(registrationPlan?.managementPlan ?? null);
   const [proBusinessScale, setProBusinessScale] = useState<"large" | "small">(registrationPlan?.proBusinessScale ?? "large");
-  const [planLoading, setPlanLoading] = useState(true);
-  const [planLoadError, setPlanLoadError] = useState("");
 
   useEffect(() => {
     if (!auth) return;
@@ -82,8 +79,6 @@ function PaymentPageContent() {
     let cancelled = false;
     const loadPlanSummary = async () => {
       try {
-        setPlanLoading(true);
-        setPlanLoadError("");
         const token = await user.getIdToken();
         const response = await fetch(`/api/onboarding/payment/details?businessId=${encodeURIComponent(businessId)}`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -97,20 +92,10 @@ function PaymentPageContent() {
         setProBusinessScale(payload.proBusinessScale === "small" ? "small" : registrationPlan?.proBusinessScale || "large");
         setAmount(trustedAmount);
         setCurrency(payload.currency || "GHS");
-        setCashAmount(String(trustedAmount));
       } catch (error) {
-        if (cancelled) return;
-        if (registrationPlan && fallbackPlanDetails) {
-          setManagementPlan(registrationPlan.managementPlan);
-          setProBusinessScale(registrationPlan.proBusinessScale);
-          setAmount(fallbackPlanDetails.startupPrice);
-          setCashAmount(String(fallbackPlanDetails.startupPrice));
-          setPlanLoadError("The selected plan is being synced. The amount from registration will be checked again securely when you submit.");
-        } else {
-          setPlanLoadError(error instanceof Error ? error.message : "The selected plan could not be loaded.");
+        if (!cancelled && !registrationPlan) {
+          console.error("Unable to load the selected onboarding plan.", error);
         }
-      } finally {
-        if (!cancelled) setPlanLoading(false);
       }
     };
     void loadPlanSummary();
@@ -158,14 +143,6 @@ function PaymentPageContent() {
       toast.error("Your registration session has expired. Please sign in or register again.");
       return;
     }
-    if (method === "cash") {
-      const parsedCashAmount = Number(cashAmount);
-      const requiresPayment = (amount ?? 0) > 0;
-      if (requiresPayment && (!cashAmount.trim() || !Number.isFinite(parsedCashAmount) || parsedCashAmount <= 0)) {
-        toast.error("Enter a valid cash amount for the selected plan.");
-        return;
-      }
-    }
     setLoading(true);
     setPaymentMethod(method);
     try {
@@ -173,13 +150,12 @@ function PaymentPageContent() {
       const response = await fetch("/api/onboarding/payment/initialize", {
         method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ businessId, paymentMethod: method, ...(method === "cash" ? { cashAmount: Number(cashAmount) } : {}) }),
+          body: JSON.stringify({ businessId, paymentMethod: method }),
         });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || "The payment step could not be started.");
       setAmount(Number(payload.amount || 0));
       setCurrency(payload.currency || "GHS");
-      if (payload.cashAmount != null) setCashAmount(String(payload.cashAmount));
 
       if (payload.status === "checkout_ready" && payload.authorizationUrl) {
         window.location.assign(payload.authorizationUrl);
@@ -252,28 +228,6 @@ function PaymentPageContent() {
           <p className="mt-2 text-sm text-white/70">Your invoice receipt will be sent to the business email used during registration.</p>
         </div>
       )}
-
-      <div className="mb-4 rounded-2xl border border-white/20 bg-white/10 p-5 text-white">
-        <label htmlFor="cash-amount" className="block text-sm font-semibold uppercase tracking-wide text-white/70">Cash amount you are paying (GHS)</label>
-        <input
-          id="cash-amount"
-          type="number"
-          min="0.01"
-          step="0.01"
-          inputMode="decimal"
-          value={cashAmount}
-          onChange={(event) => setCashAmount(event.target.value)}
-          placeholder={planLoading ? "Loading selected plan amount…" : "Enter the amount paid"}
-          className="mt-2 w-full rounded-xl border border-white/25 bg-white px-4 py-3 text-base font-semibold text-slate-900 outline-none ring-offset-2 placeholder:text-slate-400 focus:ring-2 focus:ring-white"
-        />
-        <p className="mt-2 text-xs text-white/65">
-          {planLoading
-            ? "Loading the amount for your selected plan…"
-            : planDetails
-              ? `Automatically set to ${money} for ${planDetails.label}. You may adjust the cash amount before submitting.`
-              : planLoadError || "This field is used for Cash payments. Mobile Money is charged for the full onboarding invoice through Paystack."}
-        </p>
-      </div>
 
       <div className="space-y-4">
         <button type="button" onClick={() => startPayment("momo")} disabled={loading || !user} className="flex w-full items-center gap-4 rounded-2xl border border-white/25 bg-white px-5 py-4 text-left text-[#0066FF] shadow-md transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-60">
