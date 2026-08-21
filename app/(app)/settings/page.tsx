@@ -6,7 +6,7 @@ import { auth } from "@/lib/firebase";
 import {
   getBusinessProfile, upsertBusinessProfile, BusinessProfile,
   DEFAULT_ACCENT_COLOR, MAX_LOGO_BYTES, CURRENCIES, DEFAULT_CURRENCY,
-  DEFAULT_TAX_RATE, DEFAULT_TAX_LABEL, deleteBusinessData,
+  DEFAULT_TAX_RATE, DEFAULT_TAX_LABEL,
 } from "@/lib/db";
 import { checkAndEnforceThreeDayOnlineAutoSwitch, getOfflineSummary, syncAllOfflineData } from "@/lib/offline-sync";
 import { getDocs, collection, query, where } from "firebase/firestore";
@@ -199,10 +199,10 @@ export default function SettingsPage() {
 
   const [deleting, setDeleting] = useState(false);
   const handleDeleteAccount = async () => {
-    if (!businessId || role !== "owner") return;
-    const confirmText = "delete my business data";
-    const input = prompt(`DANGER: This will permanently delete all your products, sales, and business data. Type "${confirmText}" to confirm:`);
-    
+    if (!businessId || role !== "owner" || !user) return;
+    const confirmText = "PERMANENTLY DELETE";
+    const input = prompt(`DANGER: This permanently deletes your BillFlow account, login email, and all business data. This cannot be undone. Type "${confirmText}" to confirm:`);
+
     if (input !== confirmText) {
       if (input !== null) toast.error("Incorrect confirmation text");
       return;
@@ -210,13 +210,17 @@ export default function SettingsPage() {
 
     setDeleting(true);
     try {
-      await deleteBusinessData(businessId);
-      toast.success("All business data has been deleted.");
-      // Redirect or logout
-      setTimeout(() => {
-        auth.signOut();
-        window.location.href = "/auth/login";
-      }, 2000);
+      const token = await user.getIdToken();
+      const response = await fetch("/api/admin/delete-business", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ businessId, confirmation: input }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || "Could not delete account data");
+      toast.success("Your BillFlow account, email login, and business data were permanently deleted.");
+      await auth.signOut();
+      window.location.href = "/auth/login";
     } catch (err: any) {
       toast.error(err.message || "Could not delete account data");
     } finally {
@@ -853,13 +857,13 @@ export default function SettingsPage() {
       {role === "owner" && (
         <div className="card border-red/20">
           <h2 className="font-grotesk font-semibold text-red mb-3">Danger Zone</h2>
-          <p className="text-xs text-muted mb-4">These actions are permanent and cannot be undone. All your business records will be wiped from our database.</p>
+          <p className="text-xs text-muted mb-4">This permanently removes your BillFlow login email, business account, and associated records from our database. It cannot be undone.</p>
           <button 
             className="btn-danger" 
             onClick={handleDeleteAccount}
             disabled={deleting}
           >
-            {deleting ? "Deleting Data..." : "Delete All Business Data"}
+            {deleting ? "Deleting Account..." : "Delete Account and All Data"}
           </button>
         </div>
       )}

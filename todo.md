@@ -302,3 +302,9 @@
 - [x] Trace the remaining auth, Firestore, and browser navigation risk after account creation; the destination route was healthy, while the client-router transition remained interruptible.
 - [x] Implement and verify a stronger redirect handoff with `window.location.replace()` after account creation; payment and approval controls remain preserved.
 - [ ] Commit and push the follow-up fix with author email `ayindenabawisdom@gmail.com`.
+
+## Permanent Email and Account Deletion
+- [x] Audit existing owner, staff, and super-admin deletion paths and enumerate all email-linked Firestore collections and auth records.
+- [x] Define secure permanent-deletion rules: verified Firebase ID token, Super Admin or self-owner authorization, exact confirmation phrase, idempotent missing-auth handling, and protection for the Super Admin account.
+- [x] Implement server-side deletion of the Firebase Auth user and all tenant-owned database records, indexes, invitations, payment/onboarding records, and business-scoped references; staff deletion also removes the linked login and access index.
+- [x] Verify deletion behavior without inserting test data; `pnpm run build` and `git diff --check` pass. Commit and push remain pending.

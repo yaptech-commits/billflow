@@ -6,7 +6,7 @@ import {
 } from "firebase/firestore";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { db, auth } from "@/lib/firebase";
-import { approveBusinessAccount, BusinessProfile, BusinessModule, Staff, Product, Invoice, deleteBusinessData } from "@/lib/db";
+import { approveBusinessAccount, BusinessProfile, BusinessModule, Staff, Product, Invoice } from "@/lib/db";
 import { SyncTelemetry } from "@/lib/offline-sync";
 import { formatMoney, cn } from "@/lib/utils";
 import { formatPlanPrice, getManagementPlanDetails, normalizeManagementPlan } from "@/lib/management-plans";
@@ -646,19 +646,33 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
   };
 
   const handleDeleteStaff = async (staff: Staff) => {
-    if (!confirm(`Are you sure you want to permanently delete staff ${staff.email}? This will revoke all access.`)) return;
-    const t = toast.loading("Permanently deleting staff...");
+    if (!confirm(`Are you sure you want to permanently delete staff ${staff.email}? This will revoke all access and remove the linked login.`)) return;
+    const typedConfirmation = window.prompt('Type "PERMANENTLY DELETE" to confirm:');
+    if (typedConfirmation !== "PERMANENTLY DELETE") {
+      toast.error("Permanent deletion cancelled");
+      return;
+    }
+
+    const t = toast.loading("Permanently deleting staff and login...");
     try {
-      const batch = writeBatch(db);
-      batch.delete(doc(db, "staff", staff.id!));
-      if (staff.staffUid) {
-        batch.delete(doc(db, "staffIndex", staff.staffUid));
-      }
-      await batch.commit();
-      toast.success("Staff permanently deleted", { id: t });
+      if (!user) throw new Error("Your session has expired. Please sign in again.");
+      const token = await user.getIdToken();
+      const response = await fetch("/api/admin/delete-staff", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          staffId: staff.id,
+          staffUid: staff.staffUid || null,
+          confirmation: typedConfirmation,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || "Deletion failed");
+      toast.success("Staff and linked login permanently deleted", { id: t });
       await fetchStats(true);
     } catch (e) {
-      toast.error("Deletion failed", { id: t });
+      console.error("Staff deletion failed", e);
+      toast.error(e instanceof Error ? e.message : "Deletion failed", { id: t });
     }
   };
 
@@ -796,18 +810,29 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
               className="p-1.5 text-muted hover:text-red transition-colors" 
               title="Delete Business Completely"
               onClick={async () => {
-                if (confirm(`CRITICAL WARNING: Are you sure you want to permanently delete ${business.businessName} and all its associated records from the database? This action is IRREVERSIBLE.`)) {
-                  const t = toast.loading("Permanently deleting business and all records...");
-                  try {
-                    await deleteBusinessData(business.businessId);
-                    // Also delete businessProfile doc itself
-                    await deleteDoc(doc(db, "businessProfiles", business.businessId));
-                    toast.success("Business permanently deleted from database", { id: t });
-                    onUpdate();
-                  } catch (e) {
-                    console.error(e);
-                    toast.error("Failed to delete business completely", { id: t });
-                  }
+                if (!confirm(`CRITICAL WARNING: Permanently delete ${business.businessName}, its email account, and every associated record? This action is IRREVERSIBLE.`)) return;
+                const typedConfirmation = window.prompt('Type "PERMANENTLY DELETE" to confirm:');
+                if (typedConfirmation !== "PERMANENTLY DELETE") {
+                  toast.error("Permanent deletion cancelled");
+                  return;
+                }
+
+                const t = toast.loading("Permanently deleting account, login, and records...");
+                try {
+                  if (!user) throw new Error("Your session has expired. Please sign in again.");
+                  const token = await user.getIdToken();
+                  const response = await fetch("/api/admin/delete-business", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({ businessId: business.businessId, confirmation: typedConfirmation }),
+                  });
+                  const payload = await response.json().catch(() => ({}));
+                  if (!response.ok) throw new Error(payload.error || "Failed to delete business completely");
+                  toast.success("Business, email login, and all records permanently deleted", { id: t });
+                  onUpdate();
+                } catch (e) {
+                  console.error("Business deletion failed", e);
+                  toast.error(e instanceof Error ? e.message : "Failed to delete business completely", { id: t });
                 }
               }}
             >
