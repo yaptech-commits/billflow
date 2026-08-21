@@ -34,6 +34,10 @@ type OnlineBooking = {
   confirmationEmailStatus: "pending" | "sent" | "failed" | "queued" | null;
   confirmationEmailSentAt: string | null;
   confirmationEmailError: string | null;
+  smsDeliveryStatus?: "sent" | "failed" | "queued" | "skipped" | null;
+  smsDeliveryError?: string | null;
+  whatsappDeliveryStatus?: "sent" | "failed" | "queued" | "skipped" | null;
+  whatsappDeliveryError?: string | null;
 };
 
 type Filter = "all" | BookingStatus;
@@ -310,14 +314,24 @@ function HotelBookingWidgetContent() {
                       {booking.specialRequests ? <span>Note: {booking.specialRequests}</span> : null}
                     </div>
                     {booking.approvalStatus === "approved" ? (
-                      <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-2">
-                        <div className="bg-gold/10 border border-gold/30 rounded-lg px-3 py-2">
-                          <p className="text-[10px] uppercase tracking-wider text-gold">Customer booking code</p>
-                          <p className="font-mono font-bold tracking-[0.18em] text-gold mt-0.5">{booking.confirmationCode || "Not generated"}</p>
+                      <div className="mt-4 flex flex-col gap-2">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                          <div className="bg-gold/10 border border-gold/30 rounded-lg px-3 py-2">
+                            <p className="text-[10px] uppercase tracking-wider text-gold">Customer booking code</p>
+                            <p className="font-mono font-bold tracking-[0.18em] text-gold mt-0.5">{booking.confirmationCode || "Not generated"}</p>
+                          </div>
+                          <div className="text-xs space-y-1">
+                            <p className={booking.confirmationEmailStatus === "sent" ? "text-emerald-300" : booking.confirmationEmailStatus === "failed" ? "text-red-300" : "text-amber-200"}>
+                              Email: {emailStatusLabel(booking.confirmationEmailStatus)}{booking.confirmationEmailError ? ` (${booking.confirmationEmailError})` : ""}
+                            </p>
+                            <p className={booking.smsDeliveryStatus === "sent" ? "text-emerald-300" : booking.smsDeliveryStatus === "failed" ? "text-red-300" : "text-muted"}>
+                              SMS: {booking.smsDeliveryStatus || "queued"}{booking.smsDeliveryError ? ` (${booking.smsDeliveryError})` : ""}
+                            </p>
+                            <p className={booking.whatsappDeliveryStatus === "sent" ? "text-emerald-300" : booking.whatsappDeliveryStatus === "failed" ? "text-red-300" : "text-muted"}>
+                              WhatsApp: {booking.whatsappDeliveryStatus || "queued"}{booking.whatsappDeliveryError ? ` (${booking.whatsappDeliveryError})` : ""}
+                            </p>
+                          </div>
                         </div>
-                        <p className={`text-xs ${booking.confirmationEmailStatus === "sent" ? "text-emerald-300" : booking.confirmationEmailStatus === "failed" ? "text-red-300" : "text-amber-200"}`}>
-                          {emailStatusLabel(booking.confirmationEmailStatus)}{booking.confirmationEmailError ? ` · ${booking.confirmationEmailError}` : ""}
-                        </p>
                       </div>
                     ) : null}
                     {booking.approvalStatus === "rejected" && booking.rejectionReason ? <p className="text-xs text-red-300 mt-3">Reason: {booking.rejectionReason}</p> : null}

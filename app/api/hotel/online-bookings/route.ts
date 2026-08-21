@@ -366,30 +366,62 @@ export async function POST(request: NextRequest) {
     });
 
     const booking = serializeBooking(reservationId, result.data as Record<string, unknown>);
-    if (action === "approve" && booking.approvalStatus === "approved" && booking.confirmationCode && booking.guestEmail && (result.changed || booking.confirmationEmailStatus !== "sent")) {
+    if (action === "approve" && booking.approvalStatus === "approved" && booking.confirmationCode && (result.changed || booking.confirmationEmailStatus !== "sent")) {
       const businessSnap = await firestore.collection("businesses").doc(businessId).get();
       const businessName = stringValue(businessSnap.data()?.businessName || businessSnap.data()?.name, "BillFlow Hotel");
-      const delivery = await deliverApprovalEmail({
-        businessId,
-        businessName,
-        guestEmail: booking.guestEmail,
-        guestName: booking.guestName,
-        bookingCode: booking.confirmationCode,
-        roomNumber: booking.roomNumber,
-        roomType: booking.roomType,
-        bookingTime: booking.bookingTime,
-        checkInDate: booking.checkInDate,
-        checkOutDate: booking.checkOutDate,
-      });
+      
+      const [emailResult, messagingResult] = await Promise.all([
+        booking.guestEmail
+          ? deliverApprovalEmail({
+              businessId,
+              businessName,
+              guestEmail: booking.guestEmail,
+              guestName: booking.guestName,
+              bookingCode: booking.confirmationCode,
+              roomNumber: booking.roomNumber,
+              roomType: booking.roomType,
+              bookingTime: booking.bookingTime,
+              checkInDate: booking.checkInDate,
+              checkOutDate: booking.checkOutDate,
+            })
+          : Promise.resolve({ status: "skipped" as const, reason: "No guest email provided" }),
+        booking.guestPhone
+          ? deliverSmsOrWhatsAppMessage({
+              businessId,
+              businessName,
+              guestPhone: booking.guestPhone,
+              guestName: booking.guestName,
+              bookingCode: booking.confirmationCode,
+              roomNumber: booking.roomNumber,
+              roomType: booking.roomType,
+              checkInDate: booking.checkInDate,
+              checkOutDate: booking.checkOutDate,
+            })
+          : Promise.resolve({ smsStatus: "skipped" as const, smsError: "No guest phone provided", whatsappStatus: "skipped" as const, whatsappError: "No guest phone provided" }),
+      ]);
+
       await reservationRef.update({
-        confirmationEmailStatus: delivery.status,
-        ...(delivery.status === "sent" ? { confirmationEmailSentAt: FieldValue.serverTimestamp() } : {}),
-        ...(delivery.reason ? { confirmationEmailError: delivery.reason } : {}),
+        ...(booking.guestEmail ? {
+          confirmationEmailStatus: emailResult.status,
+          ...(emailResult.status === "sent" ? { confirmationEmailSentAt: FieldValue.serverTimestamp() } : {}),
+          ...("reason" in emailResult && emailResult.reason ? { confirmationEmailError: emailResult.reason } : {}),
+        } : {}),
+        smsDeliveryStatus: messagingResult.smsStatus,
+        ...("smsError" in messagingResult && messagingResult.smsError ? { smsDeliveryError: messagingResult.smsError } : {}),
+        whatsappDeliveryStatus: messagingResult.whatsappStatus,
+        ...("whatsappError" in messagingResult && messagingResult.whatsappError ? { whatsappDeliveryError: messagingResult.whatsappError } : {}),
         updatedAt: FieldValue.serverTimestamp(),
       });
-      booking.confirmationEmailStatus = delivery.status;
-      booking.confirmationEmailError = delivery.reason || null;
-      if (delivery.status === "sent") booking.confirmationEmailSentAt = new Date().toISOString();
+
+      if (booking.guestEmail) {
+        booking.confirmationEmailStatus = emailResult.status as any;
+        booking.confirmationEmailError = "reason" in emailResult ? emailResult.reason || null : null;
+        if (emailResult.status === "sent") booking.confirmationEmailSentAt = new Date().toISOString();
+      }
+      (booking as any).smsDeliveryStatus = messagingResult.smsStatus;
+      (booking as any).smsDeliveryError = "smsError" in messagingResult ? messagingResult.smsError || null : null;
+      (booking as any).whatsappDeliveryStatus = messagingResult.whatsappStatus;
+      (booking as any).whatsappDeliveryError = "whatsappError" in messagingResult ? messagingResult.whatsappError || null : null;
     }
 
     await recordSecurityEvent({

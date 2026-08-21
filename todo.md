@@ -368,3 +368,9 @@
 - [x] Generate a customer confirmation code on approval and display the assigned room and stay timing details.
 - [x] Deliver the approved booking details to the customer through the configured email/webhook path and show delivery status to hotel staff.
 - [x] Run the TypeScript review and production build; responsive route validation, commit, and push are the remaining delivery steps.
+
+## SMS and WhatsApp Booking Confirmation Delivery
+- [x] Add SMS and WhatsApp provider dispatch helpers for hotel booking confirmations using environment variables (`SMS_PROVIDER_URL`, `WHATSAPP_API_URL`, `TWILIO_ACCOUNT_SID`, etc.).
+- [x] Extend booking approval to dispatch SMS or WhatsApp messages containing the confirmation code, assigned room number, and check-in/check-out timing.
+- [x] Track SMS/WhatsApp delivery status and error messages in hotel reservations alongside email status.
+- [x] Run production build, verification checks, commit, and push with author email `ayindenabawisdom@gmail.com`.
