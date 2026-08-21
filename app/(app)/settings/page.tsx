@@ -198,23 +198,15 @@ export default function SettingsPage() {
   };
 
   const [deleting, setDeleting] = useState(false);
-  const handleDeleteAccount = async () => {
+    const handleDeleteAccount = async () => {
     if (!businessId || role !== "owner" || !user) return;
-    const confirmText = "PERMANENTLY DELETE";
-    const input = prompt(`DANGER: This permanently deletes your BillFlow account, login email, and all business data. This cannot be undone. Type "${confirmText}" to confirm:`);
-
-    if (input !== confirmText) {
-      if (input !== null) toast.error("Incorrect confirmation text");
-      return;
-    }
-
     setDeleting(true);
     try {
       const token = await user.getIdToken();
       const response = await fetch("/api/admin/delete-business", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ businessId, confirmation: input }),
+        body: JSON.stringify({ businessId }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || "Could not delete account data");

@@ -348,3 +348,9 @@
 - [x] Keep the selected plan startup price visible and send Cash payments without a client-editable amount.
 - [x] Preserve server-side canonical pricing and validate Cash, Mobile Money, and Demo behavior; the server defaults Cash to the canonical invoice amount when no client amount is submitted.
 - [x] Run the production build, commit, and push with author email `ayindenabawisdom@gmail.com`; UI commit `1d4a70b62143dfbb48e4f34fbaa09617974f03f9`.
+
+## Direct Permanent Deletion Action
+- [x] Inspect the current typed-confirmation UI and protected deletion endpoint.
+- [x] Remove the typed `PERMANENTLY DELETE` requirement so an authorized delete click proceeds directly.
+- [x] Preserve verified-token authorization, owner/Super Admin scope checks, Super Admin protection, and idempotent server-side cleanup.
+- [x] Run the production build and diff checks; `pnpm run build` and `git diff --check` pass. Commit and push remain pending.

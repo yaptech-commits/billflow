@@ -6,7 +6,6 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const SUPER_ADMIN_EMAIL = "wisdomasaare41@gmail.com";
-const DELETE_CONFIRMATION = "PERMANENTLY DELETE";
 
 function errorResponse(status: number, error: string) {
   return NextResponse.json(
@@ -54,11 +53,7 @@ export async function POST(request: NextRequest) {
 
   const staffId = stringValue(body.staffId);
   const requestedStaffUid = stringValue(body.staffUid);
-  const confirmation = stringValue(body.confirmation);
   if (!staffId && !requestedStaffUid) return errorResponse(400, "Staff ID or staff UID is required");
-  if (confirmation !== DELETE_CONFIRMATION) {
-    return errorResponse(400, `Type ${DELETE_CONFIRMATION} to confirm permanent deletion`);
-  }
 
   const firestore = getAdminDb();
   const adminAuth = getAdminAuth();

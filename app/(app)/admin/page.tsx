@@ -645,14 +645,7 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
     }
   };
 
-  const handleDeleteStaff = async (staff: Staff) => {
-    if (!confirm(`Are you sure you want to permanently delete staff ${staff.email}? This will revoke all access and remove the linked login.`)) return;
-    const typedConfirmation = window.prompt('Type "PERMANENTLY DELETE" to confirm:');
-    if (typedConfirmation !== "PERMANENTLY DELETE") {
-      toast.error("Permanent deletion cancelled");
-      return;
-    }
-
+    const handleDeleteStaff = async (staff: Staff) => {
     const t = toast.loading("Permanently deleting staff and login...");
     try {
       if (!user) throw new Error("Your session has expired. Please sign in again.");
@@ -663,7 +656,6 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
         body: JSON.stringify({
           staffId: staff.id,
           staffUid: staff.staffUid || null,
-          confirmation: typedConfirmation,
         }),
       });
       const payload = await response.json().catch(() => ({}));
@@ -810,13 +802,6 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
               className="p-1.5 text-muted hover:text-red transition-colors" 
               title="Delete Business Completely"
               onClick={async () => {
-                if (!confirm(`CRITICAL WARNING: Permanently delete ${business.businessName}, its email account, and every associated record? This action is IRREVERSIBLE.`)) return;
-                const typedConfirmation = window.prompt('Type "PERMANENTLY DELETE" to confirm:');
-                if (typedConfirmation !== "PERMANENTLY DELETE") {
-                  toast.error("Permanent deletion cancelled");
-                  return;
-                }
-
                 const t = toast.loading("Permanently deleting account, login, and records...");
                 try {
                   if (!user) throw new Error("Your session has expired. Please sign in again.");
@@ -824,7 +809,7 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
                   const response = await fetch("/api/admin/delete-business", {
                     method: "POST",
                     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-                    body: JSON.stringify({ businessId: business.businessId, confirmation: typedConfirmation }),
+                    body: JSON.stringify({ businessId: business.businessId }),
                   });
                   const payload = await response.json().catch(() => ({}));
                   if (!response.ok) throw new Error(payload.error || "Failed to delete business completely");
