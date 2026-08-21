@@ -87,21 +87,31 @@ export default function SignupPage() {
         updatedAt: serverTimestamp(),
       }, { merge: true });
 
-      // Create staff record for owner
-      await setDoc(doc(firestore, "staff", `staff_${user.uid}`), {
-        businessId,
-        staffUid: user.uid,
-        email,
-        role: "owner",
-        status: "active",
-        createdAt: serverTimestamp()
-      });
-
+      // Owners are resolved from their businessProfiles/{uid} document. Do not
+      // create an owner staff document here: staff is reserved for invited
+      // salespeople and Firestore intentionally rejects owner-role staff writes.
       toast.success("Account created! Continue to payment.");
       router.push(`/auth/onboarding-payment?businessId=${encodeURIComponent(businessId)}`);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Signup failed";
-      toast.error(msg.replace("Firebase: ", "").replace(/ \(auth.*\)\.?/, ""));
+      const firebaseError = err as { code?: unknown; message?: unknown } | null;
+      const rawMessage = typeof firebaseError?.message === "string"
+        ? firebaseError.message
+        : typeof firebaseError?.code === "string"
+          ? firebaseError.code
+          : "Signup failed";
+      const normalizedCode = typeof firebaseError?.code === "string" ? firebaseError.code : "";
+      const msg = rawMessage
+        .replace(/^Firebase:\s*/i, "")
+        .replace(/\s*\(auth\/[^)]+\)\.?$/i, "")
+        .trim();
+      const friendlyMessage = normalizedCode.includes("auth/email-already-in-use")
+        ? "This email already has a BillFlow account. Please sign in or use another email."
+        : normalizedCode.includes("auth/invalid-email")
+          ? "Enter a valid email address."
+          : normalizedCode.includes("auth/weak-password")
+            ? "Choose a stronger password with at least 6 characters."
+            : msg || "Signup failed. Please try again.";
+      toast.error(friendlyMessage);
     } finally {
       setLoading(false);
     }

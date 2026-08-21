@@ -282,3 +282,10 @@
 
 ## Follow-up Scope Boundary
 - [x] Do not implement the separate in-app plan upgrade workflow.
+
+## Registration Submit Error Fix
+- [x] Reproduce the registration submit failure and inspect client/server logs and response details.
+- [x] Trace the signup validation, Firebase account creation, business/profile writes, and payment-page redirect path.
+- [x] Apply the smallest secure fix and preserve pending-payment/account-approval safeguards.
+- [x] Verify the registration-to-payment handoff contract and production build; `pnpm run build` and `git diff --check` pass.
+- [ ] Commit and push the fix with author email `ayindenabawisdom@gmail.com`.
