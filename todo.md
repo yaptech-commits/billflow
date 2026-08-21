@@ -315,3 +315,23 @@
 - [x] Populate the cash amount from the authenticated selected plan's trusted startup price and keep it synchronized with plan context.
 - [x] Preserve valid Cash handling and the full canonical Mobile Money invoice amount; invalid empty/zero Cash submissions remain blocked.
 - [x] Verify the payment route and production build; `pnpm run build` and `git diff --check` pass. Commit and push remain pending.
+
+## Existing Paystack Account Configuration
+- [ ] Inspect current Paystack environment-variable names, payment routes, and production webhook path.
+- [ ] Confirm the production BillFlow domain and obtain the Paystack secret through secure deployment settings, never chat.
+- [ ] Configure the existing Paystack account for Mobile Money receiving and verified webhook settlement.
+- [ ] Verify configuration without performing a real payment, document redeploy requirements, and push any configuration-documentation changes with author email `ayindenabawisdom@gmail.com`.
+
+## Shared Paystack Webhook Routing for DataFlow and BillFlow
+- [x] Inspect the DataFlow repository/backend webhook endpoint and BillFlow Paystack metadata and signatures.
+- [x] Define event ownership routing, signature verification, replay protection, and idempotent forwarding without exposing secrets.
+- [x] Implement the shared webhook handler while preserving existing DataFlow settlement behavior and adding BillFlow onboarding settlement.
+- [x] Validate the router with `node --check index.js` and `git diff --check`; document the exact Paystack webhook URL and deployment environment requirements.
+- [x] Commit and push the DataFlow repository change with author email `ayindenabawisdom@gmail.com`; commit `7814039`.
+- [ ] Add `BILLFLOW_WEBHOOK_URL` to the DataFlow Render service and redeploy before changing the Paystack Live Webhook URL.
+
+## Vercel Firebase Admin Runtime Compatibility
+- [x] Confirmed BillFlow API routes were failing in production with `ERR_REQUIRE_ESM` from `jwks-rsa@4` loading `jose@6` through Firebase Admin 14.
+- [x] Pinned `firebase-admin` to `13.6.0`, which uses `jwks-rsa@3.2.x` and CommonJS-compatible `jose@4.15.x`.
+- [x] Verified `pnpm run build`, `git diff --check`, and the dependency tree; a new Vercel deployment is required before rechecking the live webhook.
+- [ ] Confirm the new Vercel deployment serves BillFlow API routes, then complete the Paystack shared-webhook rollout without a real payment.
