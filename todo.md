@@ -278,7 +278,7 @@
 - [x] Add secure downloadable or printable paid onboarding receipts.
 - [x] Add live provider environment-variable and Paystack webhook setup guidance in the settings surface and project documentation.
 - [x] Verify tenant isolation safeguards, receipt rendering contract, webhook protection, and the production build.
-- [ ] Commit and push the follow-up changes with author email `ayindenabawisdom@gmail.com`.
+- [x] Commit and push the follow-up changes with author email `ayindenabawisdom@gmail.com`.
 
 ## Follow-up Scope Boundary
 - [x] Do not implement the separate in-app plan upgrade workflow.
