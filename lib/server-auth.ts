@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
+import { recordSecurityEvent } from "@/lib/security-events-server";
 
 export type ServerActor = {
   uid: string;
@@ -25,6 +26,13 @@ export async function requireServerActor(request: NextRequest): Promise<ServerAc
   try {
     decoded = await getAdminAuth().verifyIdToken(authorization.slice(7), true);
   } catch {
+    await recordSecurityEvent({
+      category: "security",
+      severity: "warning",
+      eventType: "invalid_session",
+      message: "A protected API request used an invalid or expired session.",
+      route: request.nextUrl.pathname,
+    });
     throw new HttpError(401, "Invalid or expired session");
   }
 
@@ -45,6 +53,16 @@ export async function requireServerActor(request: NextRequest): Promise<ServerAc
     typeof index?.businessId !== "string" ||
     !index.businessId
   ) {
+    await recordSecurityEvent({
+      category: "security",
+      severity: "warning",
+      eventType: "inactive_staff_access",
+      message: "An inactive or invalid staff account attempted to access a protected API.",
+      actorUid: decoded.uid,
+      actorEmail: decoded.email ?? undefined,
+      route: request.nextUrl.pathname,
+      metadata: { indexedRole: typeof index?.role === "string" ? index.role : null },
+    });
     throw new HttpError(403, "This staff account is not active");
   }
 

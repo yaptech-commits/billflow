@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/school/notifications/dispatch",
+      "schedule": "0 0 * * *"
+    }
+  ]
+}

@@ -10,22 +10,39 @@ const SYNC_QUEUE_KEY = "billflow_offline_sales";
 const OFFLINE_INVOICES_KEY = "billflow_offline_invoices";
 const OFFLINE_PAYMENTS_KEY = "billflow_offline_payments";
 const OFFLINE_FOLIOS_KEY = "billflow_offline_folios";
+const SYNC_FAILURES_KEY = "billflow_offline_sync_failures";
 
 export interface OfflineItem {
   id: string;
   data: any;
   timestamp: number;
   retries: number;
+  lastError?: string;
+  status?: "pending" | "blocked";
+}
+
+export interface OfflineSyncFailure {
+  id: string;
+  queueKey: string;
+  itemId: string;
+  businessId?: string;
+  idempotencyKey?: string;
+  error: string;
+  kind: "retryable" | "conflict" | "permanent";
+  createdAt: number;
+  updatedAt: number;
 }
 
 export function queueOfflineItem(key: string, payload: any) {
   if (typeof window === "undefined") return null;
   const queue: OfflineItem[] = JSON.parse(localStorage.getItem(key) || "[]");
 
-  // Prevent exact duplicate payload queuing within 10 seconds
+  const idempotencyKey = payload.idempotencyKey || crypto.randomUUID();
+  // Idempotency keys are the durable duplicate-prevention boundary. The short
+  // payload comparison preserves compatibility with older queued records.
   const duplicate = queue.find(item =>
-    JSON.stringify(item.data) === JSON.stringify(payload) &&
-    (Date.now() - item.timestamp) < 10000
+    (item.data?.idempotencyKey && item.data.idempotencyKey === idempotencyKey) ||
+    (JSON.stringify(item.data) === JSON.stringify(payload) && (Date.now() - item.timestamp) < 10000)
   );
   if (duplicate) return duplicate;
 
@@ -33,7 +50,7 @@ export function queueOfflineItem(key: string, payload: any) {
     id: crypto.randomUUID(),
     data: {
       ...payload,
-      idempotencyKey: payload.idempotencyKey || crypto.randomUUID()
+      idempotencyKey,
     },
     timestamp: Date.now(),
     retries: 0,
@@ -75,6 +92,41 @@ export function removeFromQueue(key: string, id: string) {
   localStorage.setItem(key, JSON.stringify(filtered));
 }
 
+function isConflictError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { status?: number; code?: string };
+  return candidate.status === 409 || candidate.code === "conflict" || candidate.code === "already_processed";
+}
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message.slice(0, 300);
+  return "Unable to synchronize this record";
+}
+
+function recordSyncFailure(failure: OfflineSyncFailure) {
+  if (typeof window === "undefined") return;
+  const existing = getOfflineSyncFailures();
+  const sameItem = existing.findIndex(item => item.itemId === failure.itemId && item.queueKey === failure.queueKey);
+  if (sameItem >= 0) existing[sameItem] = { ...existing[sameItem], ...failure, updatedAt: Date.now() };
+  else existing.unshift(failure);
+  localStorage.setItem(SYNC_FAILURES_KEY, JSON.stringify(existing.slice(0, 100)));
+}
+
+export function getOfflineSyncFailures(): OfflineSyncFailure[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const parsed = JSON.parse(localStorage.getItem(SYNC_FAILURES_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function clearOfflineSyncFailure(itemId: string) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(SYNC_FAILURES_KEY, JSON.stringify(getOfflineSyncFailures().filter(item => item.itemId !== itemId)));
+}
+
 export async function syncQueue(key: string, syncFn: (data: any) => Promise<any>) {
   const queue = getOfflineQueue(key);
   if (queue.length === 0) return { synced: 0, failed: 0 };
@@ -85,24 +137,33 @@ export async function syncQueue(key: string, syncFn: (data: any) => Promise<any>
 
   for (const item of queue) {
     try {
-      await syncFn(item.data);
+      const result = await syncFn(item.data);
+      // Server-side idempotency may report an already-processed operation as a
+      // successful terminal state. Treat every successful response as terminal
+      // so stale failure records do not remain visible after recovery.
+      clearOfflineSyncFailure(item.id);
       synced++;
     } catch (err) {
+      const message = getErrorMessage(err);
+      const conflict = isConflictError(err);
       console.error(`Failed to sync offline item from ${key}:`, err);
       item.retries = (item.retries || 0) + 1;
-      // Keep in queue if under 5 retries, drop if persistent failure
-      if (item.retries < 5) {
-        remaining.push(item);
-      } else {
-        const businessId = item.data?.businessId;
-        if (businessId) {
-          try {
-            console.warn(`[Admin Email Alert] Persistent sync failure alert for business ${businessId} dispatched.`);
-          } catch (alertErr) {
-            console.error("Failed to send sync failure email alert:", alertErr);
-          }
-        }
-      }
+      item.lastError = message;
+      item.status = conflict ? "blocked" : "pending";
+      // Never silently discard a client transaction. Keep it queued and create
+      // a durable local failure record for administrator review/resolution.
+      remaining.push(item);
+      recordSyncFailure({
+        id: `${key}:${item.id}`,
+        queueKey: key,
+        itemId: item.id,
+        businessId: item.data?.businessId,
+        idempotencyKey: item.data?.idempotencyKey,
+        error: message,
+        kind: conflict ? "conflict" : item.retries >= 5 ? "permanent" : "retryable",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
       failed++;
     }
   }
@@ -132,12 +193,13 @@ export async function syncAllOfflineData(syncHandlers: {
 }
 
 export function getOfflineSummary() {
-  if (typeof window === "undefined") return { sales: 0, invoices: 0, payments: 0, folios: 0, total: 0 };
+  if (typeof window === "undefined") return { sales: 0, invoices: 0, payments: 0, folios: 0, failures: 0, total: 0 };
   const sales = getOfflineQueue(SYNC_QUEUE_KEY).length;
   const invoices = getOfflineQueue(OFFLINE_INVOICES_KEY).length;
   const payments = getOfflineQueue(OFFLINE_PAYMENTS_KEY).length;
   const folios = getOfflineQueue(OFFLINE_FOLIOS_KEY).length;
-  return { sales, invoices, payments, folios, total: sales + invoices + payments + folios };
+  const failures = getOfflineSyncFailures().length;
+  return { sales, invoices, payments, folios, failures, total: sales + invoices + payments + folios };
 }
 
 export interface SyncTelemetry {
@@ -146,6 +208,7 @@ export interface SyncTelemetry {
   invoices: number;
   payments: number;
   folios: number;
+  failures?: number;
   total: number;
   offlineMode: boolean;
   lastSeenAt?: unknown;
@@ -293,6 +356,7 @@ export function clearAllOfflineData() {
   localStorage.removeItem(OFFLINE_PAYMENTS_KEY);
   localStorage.removeItem(OFFLINE_FOLIOS_KEY);
   localStorage.removeItem("billflow_offline_start_timestamp");
+  localStorage.removeItem(SYNC_FAILURES_KEY);
 }
 
 // Backward-compatible wrappers for existing BillFlow pages.

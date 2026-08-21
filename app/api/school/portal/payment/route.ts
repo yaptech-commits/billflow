@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebase-admin";
+import { enforceRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -23,6 +24,13 @@ function jsonError(error: string, status: number) {
 
 export async function POST(request: NextRequest) {
   try {
+    const rateLimit = await enforceRateLimit(request, {
+      name: "school-parent-portal-payment",
+      limit: 8,
+      windowMs: 10 * 60 * 1000,
+    });
+    if (!rateLimit.allowed) return rateLimitResponse(rateLimit);
+
     const body = await request.json().catch(() => ({}));
     const feeId = String(body.feeId || "").trim();
     const studentId = String(body.studentId || "").trim();

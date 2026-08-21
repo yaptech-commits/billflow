@@ -354,6 +354,16 @@ service cloud.firestore {
       allow create: if ownsIncomingBusinessDocument();
     }
 
+    // Server-only operational telemetry. These collections are written and
+    // read through Firebase Admin SDK routes, never directly from browsers.
+    match /rateLimits/{id} {
+      allow read, write: if false;
+    }
+
+    match /securityEvents/{id} {
+      allow read, write: if false;
+    }
+
     // Default deny for all current and future collections.
     match /{document=**} {
       allow read, write: if false;

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { Firestore, QueryDocumentSnapshot } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebase-admin";
+import { enforceRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -176,6 +177,13 @@ async function readDashboard(db: Firestore, student: any, studentId: string) {
 
 export async function POST(request: NextRequest) {
   try {
+    const rateLimit = await enforceRateLimit(request, {
+      name: "school-parent-portal-lookup",
+      limit: 12,
+      windowMs: 10 * 60 * 1000,
+    });
+    if (!rateLimit.allowed) return rateLimitResponse(rateLimit);
+
     const body = await request.json().catch(() => ({}));
     const lookup = normalize(body.query);
     const requestedStudentId = String(body.studentId || "").trim();
@@ -202,10 +210,13 @@ export async function POST(request: NextRequest) {
         .map((item) => makeCandidate(item.data(), item.id));
 
       if (!candidates.length) {
-        return NextResponse.json({ error: "No student matched that Student ID or Ward Name." }, { status: 404 });
+        return NextResponse.json({ error: "We could not verify those details. Check the Student ID or Ward Name and try again." }, { status: 404 });
       }
       if (candidates.length > 1) {
-        return NextResponse.json({ candidates });
+        return NextResponse.json({
+          requiresStudentId: true,
+          error: "More than one student matched. Enter the Student ID to continue.",
+        }, { status: 409 });
       }
       selected = snapshot.docs.find((item) => item.id === candidates[0].id);
     }

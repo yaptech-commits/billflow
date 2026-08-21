@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { 
   getDocs, collection, query, orderBy, doc, getDoc, updateDoc, deleteDoc, where, writeBatch, addDoc, serverTimestamp
@@ -12,7 +12,8 @@ import { formatMoney, cn } from "@/lib/utils";
 import { 
   Users, Package, FileText, Search, ShieldAlert, 
   Trash2, Edit, ExternalLink, ArrowRight, X, Check, Shield, Ban, RotateCcw, UserMinus,
-  Truck, CreditCard, Ticket, ShoppingCart, Eye, Plus, ChevronRight
+  Truck, CreditCard, Ticket, ShoppingCart, Eye, Plus, ChevronRight,
+  Activity, RefreshCw, AlertTriangle, LockKeyhole, Clock3
 } from "lucide-react";
 import Modal from "@/components/ui/Modal";
 import toast from "react-hot-toast";
@@ -277,6 +278,8 @@ export default function AdminPage() {
         </div>
       ) : (
         <div className="space-y-6">
+          <SecurityAlertsWidget user={user} />
+
           {pendingUsers.length > 0 && (
             <div className="space-y-4">
               <h2 className="text-lg font-bold text-gold flex items-center gap-2">
@@ -1179,5 +1182,174 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
         )}
       </Modal>
     </>
+  );
+}
+
+
+type SecurityEvent = {
+  id: string;
+  category: "security" | "system";
+  eventType: string;
+  severity: "critical" | "warning" | "info";
+  message: string;
+  actorEmail: string | null;
+  businessId: string | null;
+  route: string | null;
+  createdAt: string | null;
+};
+
+type SecuritySummary = {
+  total: number;
+  security: number;
+  system: number;
+  critical: number;
+  warning: number;
+};
+
+const EMPTY_SECURITY_SUMMARY: SecuritySummary = {
+  total: 0,
+  security: 0,
+  system: 0,
+  critical: 0,
+  warning: 0,
+};
+
+function formatSecurityEventTime(value: string | null) {
+  if (!value) return "Time pending";
+  const timestamp = new Date(value).getTime();
+  if (Number.isNaN(timestamp)) return "Unknown time";
+  const difference = Date.now() - timestamp;
+  if (difference < 60_000) return "Just now";
+  if (difference < 3_600_000) return `${Math.floor(difference / 60_000)}m ago`;
+  if (difference < 86_400_000) return `${Math.floor(difference / 3_600_000)}h ago`;
+  return new Date(value).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function securitySeverityClasses(severity: SecurityEvent["severity"]) {
+  if (severity === "critical") return { text: "text-red-300", background: "bg-red-500/15", border: "border-red-500/30" };
+  if (severity === "warning") return { text: "text-orange-300", background: "bg-orange-500/15", border: "border-orange-500/30" };
+  return { text: "text-blue-300", background: "bg-blue-500/15", border: "border-blue-500/30" };
+}
+
+function SecurityAlertsWidget({ user }: { user: { getIdToken: () => Promise<string> } | null }) {
+  const [events, setEvents] = useState<SecurityEvent[]>([]);
+  const [summary, setSummary] = useState<SecuritySummary>(EMPTY_SECURITY_SUMMARY);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchEvents = useCallback(async () => {
+    if (!user) return;
+    setRefreshing(true);
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch("/api/admin/security-events", {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || "Unable to load security events");
+      setEvents(Array.isArray(payload.events) ? payload.events : []);
+      setSummary({ ...EMPTY_SECURITY_SUMMARY, ...(payload.summary || {}) });
+      setError(null);
+    } catch (fetchError) {
+      console.error("Failed to fetch security events:", fetchError);
+      setError(fetchError instanceof Error ? fetchError.message : "Unable to load security events");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    void fetchEvents();
+    const interval = window.setInterval(() => void fetchEvents(), 60_000);
+    return () => window.clearInterval(interval);
+  }, [fetchEvents]);
+
+  const displayedEvents = events.slice(0, 6);
+  const urgentCount = summary.critical + summary.warning;
+
+  return (
+    <section className="card overflow-hidden" aria-labelledby="security-alerts-heading">
+      <div className="flex flex-col gap-4 border-b border-border/70 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <ShieldAlert size={18} className="text-gold" />
+            <h2 id="security-alerts-heading" className="text-lg font-bold text-white">Security &amp; System Alerts</h2>
+            <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-green-300">
+              <Activity size={11} /> Live
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-muted">Protected activity and delivery health across BillFlow. Refreshes every minute.</p>
+        </div>
+        <button
+          onClick={() => void fetchEvents()}
+          disabled={refreshing}
+          className="btn-ghost inline-flex items-center justify-center gap-2 text-xs"
+          aria-label="Refresh security events"
+        >
+          <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
+          {refreshing ? "Refreshing..." : "Refresh"}
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 divide-x divide-border/70 border-b border-border/70 md:grid-cols-4">
+        <div className="px-5 py-4">
+          <p className="text-[10px] font-mono uppercase tracking-wider text-muted">Events tracked</p>
+          <p className="mt-1 text-2xl font-bold text-white">{summary.total}</p>
+        </div>
+        <div className="px-5 py-4">
+          <p className="text-[10px] font-mono uppercase tracking-wider text-muted">Security events</p>
+          <p className="mt-1 text-2xl font-bold text-blue-300">{summary.security}</p>
+        </div>
+        <div className="px-5 py-4">
+          <p className="text-[10px] font-mono uppercase tracking-wider text-muted">System alerts</p>
+          <p className="mt-1 text-2xl font-bold text-gold">{summary.system}</p>
+        </div>
+        <div className="px-5 py-4">
+          <p className="text-[10px] font-mono uppercase tracking-wider text-muted">Urgent</p>
+          <p className={`mt-1 text-2xl font-bold ${urgentCount > 0 ? "text-red-300" : "text-green-300"}`}>{urgentCount}</p>
+        </div>
+      </div>
+
+      <div className="px-5 py-4">
+        {loading ? (
+          <div className="flex items-center gap-3 py-5 text-sm text-muted"><RefreshCw size={16} className="animate-spin text-gold" /> Loading monitoring feed...</div>
+        ) : error ? (
+          <div className="flex items-start gap-3 rounded-lg border border-red-500/25 bg-red-500/10 p-4 text-sm text-red-200">
+            <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+            <div><p className="font-medium">Monitoring feed unavailable</p><p className="mt-1 text-xs text-red-200/80">{error}</p></div>
+          </div>
+        ) : displayedEvents.length === 0 ? (
+          <div className="flex items-center gap-3 py-5 text-sm text-muted"><LockKeyhole size={18} className="text-green-300" /> No security events or system alerts have been recorded yet.</div>
+        ) : (
+          <div className="space-y-1">
+            {displayedEvents.map((event) => {
+              const tone = securitySeverityClasses(event.severity);
+              return (
+                <div key={event.id} className="flex items-start gap-3 rounded-lg px-2 py-3 hover:bg-white/[0.03]">
+                  <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${tone.background} ${tone.text}`}>
+                    {event.category === "security" ? <ShieldAlert size={15} /> : <AlertTriangle size={15} />}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                      <p className="truncate text-sm font-medium text-white">{event.message}</p>
+                      <span className="inline-flex shrink-0 items-center gap-1 text-[11px] text-muted"><Clock3 size={12} /> {formatSecurityEventTime(event.createdAt)}</span>
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted">
+                      <span className={`rounded-full border px-2 py-0.5 uppercase tracking-wide ${tone.border} ${tone.text}`}>{event.severity}</span>
+                      <span>{event.category === "security" ? "Security event" : "System alert"}</span>
+                      <span className="font-mono">{event.eventType}</span>
+                      {event.route ? <span className="font-mono">{event.route}</span> : null}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </section>
   );
 }

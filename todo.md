@@ -229,3 +229,14 @@
 - [x] Ensure Invoices, Payments, and Reports are present for Hotel, Pharmacy, Cold Store, and General business accounts.
 - [x] Verify that data queries filter strictly by businessId and salesperson scope.
 - [x] Validate TypeScript compilation, commit, and push changes to main.
+
+## Narrow Teachers School-Grouping Release
+- [ ] Confirm `c3d911e` contains only the Teachers page and School sidebar grouping delta.
+- [ ] Apply only that delta to `main` without merging the broader feature branch.
+- [ ] Build, push, and verify the narrow release.
+
+## Teacher Profile Creation
+- [ ] Inspect the existing staff creation flow and administrator permissions.
+- [ ] Add secure property-scoped teacher profile creation using the existing staff model.
+- [ ] Add the create-teacher form and success/error feedback to `/school/teachers`.
+- [ ] Run production verification, commit, and push the implementation.

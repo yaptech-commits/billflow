@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
+import { enforceRateLimit, rateLimitResponse } from "@/lib/rate-limit";
+import { recordAuditEvent } from "@/lib/security-events-server";
 
 const SUPER_ADMIN_EMAIL = "wisdomasaare41@gmail.com";
 const DEFAULT_PROPERTY_ID = "default_property";
@@ -23,6 +25,13 @@ function errorResponse(error: unknown) {
 
 export async function POST(request: NextRequest) {
   try {
+    const rateLimit = await enforceRateLimit(request, {
+      name: "school-teacher-profile-create",
+      limit: 20,
+      windowMs: 15 * 60 * 1000,
+    });
+    if (!rateLimit.allowed) return rateLimitResponse(rateLimit);
+
     const authorization = request.headers.get("authorization");
     if (!authorization?.startsWith("Bearer ")) {
       throw new Error("Authentication required");
@@ -101,6 +110,17 @@ export async function POST(request: NextRequest) {
       createdBy: decoded.uid,
     };
     const teacherRef = await db.collection("staff").add(teacherData);
+    await recordAuditEvent({
+      severity: "info",
+      eventType: "teacher_profile_created",
+      message: "A pending teacher profile was created.",
+      actorUid: decoded.uid,
+      actorEmail: decoded.email || undefined,
+      businessId,
+      propertyId,
+      route: "/api/school/teachers",
+      metadata: { teacherId: teacherRef.id },
+    });
 
     return NextResponse.json({
       teacher: {

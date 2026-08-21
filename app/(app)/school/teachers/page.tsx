@@ -423,7 +423,7 @@ export default function SchoolTeachersPage() {
       >
         <div className="space-y-4">
           <p className="text-xs text-muted">
-            Create a property-scoped teacher profile. The profile starts as pending until the teacher signs in or is invited through staff access.
+            Create a property-scoped teacher profile. The profile starts as <strong className="text-gold">pending</strong> until the teacher registers or signs in with this email address, at which point BillFlow automatically activates their account and links their permissions.
           </p>
           <div>
             <label className="label" htmlFor="teacher-display-name">Full name *</label>
