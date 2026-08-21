@@ -6,9 +6,10 @@ import {
 } from "firebase/firestore";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { db, auth } from "@/lib/firebase";
-import { BusinessProfile, BusinessModule, Staff, Product, Invoice, deleteBusinessData } from "@/lib/db";
+import { approveBusinessAccount, BusinessProfile, BusinessModule, Staff, Product, Invoice, deleteBusinessData } from "@/lib/db";
 import { SyncTelemetry } from "@/lib/offline-sync";
 import { formatMoney, cn } from "@/lib/utils";
+import { formatPlanPrice, getManagementPlanDetails, normalizeManagementPlan } from "@/lib/management-plans";
 import { 
   Users, Package, FileText, Search, ShieldAlert, 
   Trash2, Edit, ExternalLink, ArrowRight, X, Check, Shield, Ban, RotateCcw, UserMinus,
@@ -29,6 +30,29 @@ function dashboardModulesForBusiness(business: BusinessProfile): BusinessModule[
   if (business.activeModules?.length) return business.activeModules;
   if (business.businessType === "hotel" || business.businessType === "pharmacy" || business.businessType === "coldstore") return [business.businessType];
   return ["general"];
+}
+
+function ManagementPlanBadge({ business }: { business: BusinessProfile }) {
+  const plan = normalizeManagementPlan(business.managementPlan);
+  if (!plan) {
+    return <span className="inline-flex items-center rounded-full bg-white/5 px-2 py-0.5 text-[10px] text-muted">Plan not selected</span>;
+  }
+
+  const details = getManagementPlanDetails(plan, business.proBusinessScale);
+  const isDemo = plan === "demo";
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold",
+        isDemo ? "bg-sky-400/10 text-sky-300" : "bg-gold/10 text-gold",
+      )}
+      title={`${details.packageName}${details.recurringDescription ? ` · ${details.recurringDescription}` : ""}`}
+    >
+      <span>{details.label}</span>
+      {!isDemo && <span className="font-mono">· {formatPlanPrice(details.startupPrice)}</span>}
+      {plan === "pro" && <span className="font-normal opacity-80">· {business.proBusinessScale === "small" ? "Small" : "Large"}</span>}
+    </span>
+  );
 }
 
 export default function AdminPage() {
@@ -83,10 +107,45 @@ export default function AdminPage() {
 
   const fetchBusinesses = async () => {
     setLoading(true);
+    const firestore = db;
+    if (!firestore) {
+      toast.error("Firestore is not configured");
+      setLoading(false);
+      return;
+    }
     try {
-      const snap = await getDocs(query(collection(db, "businessProfiles"), orderBy("businessName")));
-      setBusinesses(snap.docs.map(d => ({ ...d.data(), businessId: d.id } as BusinessProfile)));
+      const [profileSnap, registrationSnap] = await Promise.all([
+        getDocs(query(collection(firestore, "businessProfiles"), orderBy("businessName"))),
+        getDocs(collection(firestore, "businesses")),
+      ]);
+      const registrationById = new Map<string, Record<string, any>>();
+      const registrationByOwner = new Map<string, Record<string, any>>();
+      registrationSnap.docs.forEach(registrationDoc => {
+        const registration = { ...registrationDoc.data(), businessId: registrationDoc.id } as Record<string, any>;
+        registrationById.set(registrationDoc.id, registration);
+        if (typeof registration.ownerUid === "string") registrationByOwner.set(registration.ownerUid, registration);
+      });
+
+      const mergedBusinesses = profileSnap.docs.map(profileDoc => {
+        const profile = { ...profileDoc.data(), businessId: profileDoc.id } as BusinessProfile & { ownerUid?: string };
+        const registration = registrationById.get(profileDoc.id) ?? registrationByOwner.get(profile.ownerUid || profileDoc.id);
+        const profileName = profile.businessName && profile.businessName !== "New Business" ? profile.businessName : undefined;
+        return {
+          ...registration,
+          ...profile,
+          businessId: profileDoc.id,
+          businessName: profileName || registration?.businessName || profile.businessName || "Unnamed business",
+          businessType: profile.businessType ?? registration?.businessType,
+          email: profile.email ?? registration?.email,
+          ownerEmail: profile.ownerEmail ?? registration?.email,
+          managementPlan: profile.managementPlan ?? registration?.managementPlan,
+          proBusinessScale: profile.proBusinessScale ?? registration?.proBusinessScale,
+          allowedPages: profile.allowedPages ?? registration?.allowedPages,
+        } as BusinessProfile;
+      });
+      setBusinesses(mergedBusinesses);
     } catch (err) {
+      console.error("Failed to fetch businesses", err);
       toast.error("Failed to fetch businesses");
     } finally {
       setLoading(false);
@@ -121,13 +180,27 @@ export default function AdminPage() {
   };
 
   const handleApprove = async (id: string) => {
+    const pendingBusiness = businesses.find(business => business.businessId === id);
     const t = toast.loading("Approving account...");
     try {
-      await updateDoc(doc(db, "businessProfiles", id), { status: "active" });
-      toast.success("Account approved", { id: t });
-      fetchBusinesses();
+      const result = await approveBusinessAccount({
+        businessId: id,
+        approvedBy: user?.uid || "super_admin",
+        businessName: pendingBusiness?.businessName,
+        managementPlan: pendingBusiness?.managementPlan,
+        proBusinessScale: pendingBusiness?.proBusinessScale,
+      });
+      if (result.invoiceCreated) {
+        toast.success(`Account approved · ${formatPlanPrice(result.amount)} onboarding invoice created`, { id: t });
+      } else if (result.plan === "demo") {
+        toast.success("Account approved · Demo Management has no startup invoice", { id: t });
+      } else {
+        toast.success("Account approved", { id: t });
+      }
+      await fetchBusinesses();
     } catch (e) {
-      toast.error("Approval failed", { id: t });
+      console.error("Approval failed", e);
+      toast.error(e instanceof Error ? e.message : "Approval failed", { id: t });
     }
   };
 
@@ -292,6 +365,7 @@ export default function AdminPage() {
                       <div>
                         <h3 className="font-bold text-surface">{b.businessName}</h3>
                         <p className="text-xs text-muted">{b.email}</p>
+                        <div className="mt-2"><ManagementPlanBadge business={b} /></div>
                       </div>
                       <div className="flex gap-2">
                         <button onClick={() => handleApprove(b.businessId)} className="p-2 bg-green/20 text-green rounded-full hover:bg-green/30 transition-colors" title="Approve Account"><Check size={16} /></button>
@@ -626,6 +700,7 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
             <div>
               <h3 className="font-bold text-surface group-hover:text-gold transition-colors">{business.businessName}</h3>
               <p className="text-[10px] text-muted truncate max-w-[150px]">{business.email || "No email"}</p>
+              <div className="mt-1"><ManagementPlanBadge business={business} /></div>
             </div>
           </div>
           <button 
@@ -770,6 +845,10 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
               <div className="flex justify-between py-2 border-b border-border/30">
                 <span className="text-xs text-muted">Address</span>
                 <span className="text-xs text-surface">{business.address || "N/A"}</span>
+              </div>
+              <div className="flex justify-between py-2 border-b border-border/30">
+                <span className="text-xs text-muted">Management Plan</span>
+                <span className="text-xs text-surface"><ManagementPlanBadge business={business} /></span>
               </div>
               <div className="flex justify-between py-2 border-b border-border/30">
                 <span className="text-xs text-muted">Currency</span>

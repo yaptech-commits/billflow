@@ -9,6 +9,11 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // Keep this aligned with the application-level Super Admin identity in lib/db.ts.
+    function isSuperAdmin() {
+      return isSignedIn() && request.auth.token.email == 'wisdomasaare41@gmail.com';
+    }
+
     function isOwner(businessId) {
       return isSignedIn() && request.auth.uid == businessId;
     }
@@ -228,8 +233,8 @@ service cloud.firestore {
     }
 
     match /invoices/{id} {
-      allow read, update, delete: if ownsExistingBusinessDocument() || isHotelMember(resource.data.businessId);
-      allow create: if ownsIncomingBusinessDocument() || isHotelMember(request.resource.data.businessId);
+      allow read, update, delete: if isSuperAdmin() || ownsExistingBusinessDocument() || isHotelMember(resource.data.businessId);
+      allow create: if isSuperAdmin() || ownsIncomingBusinessDocument() || isHotelMember(request.resource.data.businessId);
     }
 
     match /payments/{id} {
@@ -264,7 +269,15 @@ service cloud.firestore {
     }
 
     match /businessProfiles/{businessId} {
-      allow read, write: if isOwner(businessId);
+      allow read, write: if isSuperAdmin() || isOwner(businessId);
+    }
+
+    // Registration records hold the plan selected before a business profile is approved.
+    match /businesses/{businessId} {
+      allow read: if isSuperAdmin() || (isSignedIn() && resource.data.ownerUid == request.auth.uid);
+      allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if isSuperAdmin() || (isSignedIn() && resource.data.ownerUid == request.auth.uid && request.resource.data.ownerUid == resource.data.ownerUid);
+      allow delete: if isSuperAdmin();
     }
 
     // Hotel operations are isolated by businessId + propertyId. Owners manage

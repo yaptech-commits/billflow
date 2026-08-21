@@ -248,3 +248,13 @@
 - [x] Implement interactive pricing details for Standard Management (Monthly Renewal, Startup Price: 1,500 GHS, Monthly Renewal: 300 GHS)
 - [x] Verify plan interactions in the browser and production build with `pnpm run build`
 - [x] Commit and push with author email `ayindenabawisdom@gmail.com`
+
+## Super Admin Plan Visibility and Onboarding Invoice
+- [x] Inspect the Super Admin business view and account approval billing path.
+- [x] Show each business's selected management plan and relevant pricing as a Super Admin badge.
+- [x] Generate one startup-fee onboarding invoice when a business account is approved, using the selected plan and preserving auditability.
+- [x] Verify the approval path and production build; browser admin verification requires a signed-in Super Admin session.
+- [x] Commit and push the scoped changes with author email `ayindenabawisdom@gmail.com`.
+
+## Scope Boundary
+- [x] Do not implement the separate in-app plan upgrade workflow.

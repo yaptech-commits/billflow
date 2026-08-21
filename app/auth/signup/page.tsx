@@ -8,12 +8,11 @@ import { auth } from "@/lib/firebase";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { getPagesForBusinessType } from "@/lib/business-type-config";
+import { ManagementPlan } from "@/lib/management-plans";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import toast from "react-hot-toast";
 import { Eye, EyeOff } from "lucide-react";
-
-type ManagementPlan = "pro" | "standard" | "demo";
 
 export default function SignupPage() {
   const [businessName, setBusinessName] = useState("");

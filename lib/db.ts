@@ -18,6 +18,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db } from "./firebase";
+import { getManagementPlanDetails, normalizeManagementPlan, ManagementPlan, ProBusinessScale } from "./management-plans";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -65,6 +66,8 @@ export interface Invoice {
   dueAt: Timestamp | null;
   paidAt?: Timestamp | null;
   isOffline?: boolean;
+  /** Distinguishes account-onboarding invoices from ordinary customer invoices. */
+  invoiceType?: "sales" | "onboarding";
 }
 
 export interface CreditNoteLineItem {
@@ -308,6 +311,14 @@ export interface BusinessProfile {
   permissions?: string[];
   /** List of page paths the business owner is allowed to access. Managed by super admin during approval. */
   allowedPages?: string[];
+  /** Management plan selected during registration. */
+  managementPlan?: ManagementPlan;
+  /** Applies only to Pro Management pricing. */
+  proBusinessScale?: ProBusinessScale | null;
+  /** Deterministic onboarding invoice created when a paid account is approved. */
+  onboardingInvoiceId?: string;
+  onboardingInvoiceNumber?: string | number;
+  onboardingInvoiceCreatedAt?: Timestamp | null;
   /** Whether staff/salesperson accounts are allowed to offer checkout discounts. */
   allowStaffDiscounts?: boolean;
   createdAt?: Timestamp | null;
@@ -468,6 +479,138 @@ export async function createInvoice(data: Omit<Invoice, "id" | "invoiceNumber">)
     });
 
     return invoiceRef;
+  });
+}
+
+/**
+ * Approves a business and creates its one-time paid-plan onboarding invoice atomically.
+ * The deterministic invoice id makes retries safe, while the transaction keeps the
+ * account status, invoice number sequence, and invoice record consistent.
+ */
+export async function approveBusinessAccount(params: {
+  businessId: string;
+  approvedBy: string;
+  managementPlan?: unknown;
+  proBusinessScale?: unknown;
+  businessName?: string;
+}) {
+  const firestore = db;
+  if (!firestore) throw new Error("Firestore is not configured");
+
+  const profileRef = doc(firestore, "businessProfiles", params.businessId);
+  const registrationRef = doc(firestore, "businesses", params.businessId);
+  const registrationQuery = query(collection(firestore, "businesses"), where("ownerUid", "==", params.businessId), limit(1));
+  const invoiceRef = doc(firestore, "invoices", `onboarding_${params.businessId}`);
+
+  return runTransaction(firestore, async (tx) => {
+    const [profileSnap, directRegistrationSnap, registrationQuerySnap, invoiceSnap] = await Promise.all([
+      tx.get(profileRef),
+      tx.get(registrationRef),
+      tx.get(registrationQuery),
+      tx.get(invoiceRef),
+    ]);
+
+    if (!profileSnap.exists()) {
+      throw new Error("Business profile not found");
+    }
+
+    const profileData = profileSnap.data() as Partial<BusinessProfile>;
+    const registrationSnap = directRegistrationSnap.exists()
+      ? directRegistrationSnap
+      : registrationQuerySnap.empty
+        ? null
+        : registrationQuerySnap.docs[0];
+    const registrationData = registrationSnap
+      ? (registrationSnap.data() as Record<string, unknown>)
+      : {};
+    const selectedPlan = normalizeManagementPlan(
+      profileData.managementPlan ?? registrationData.managementPlan ?? params.managementPlan,
+    );
+    const selectedScale = profileData.proBusinessScale ?? registrationData.proBusinessScale ?? params.proBusinessScale;
+    const details = selectedPlan ? getManagementPlanDetails(selectedPlan, selectedScale) : null;
+    const businessName =
+      (profileData.businessName && profileData.businessName !== "New Business"
+        ? profileData.businessName
+        : undefined) ||
+      (typeof registrationData.businessName === "string" ? registrationData.businessName : undefined) ||
+      params.businessName ||
+      "BillFlow business";
+
+    const profileUpdate: Record<string, unknown> = {
+      status: "active",
+      approvedBy: params.approvedBy,
+      approvedAt: serverTimestamp(),
+      businessName,
+    };
+
+    const registrationUpdate: Record<string, unknown> = {
+      status: "active",
+      approvedBy: params.approvedBy,
+      approvedAt: serverTimestamp(),
+    };
+
+    if (selectedPlan) {
+      const normalizedScale = selectedPlan === "pro" && selectedScale === "small" ? "small" : selectedPlan === "pro" ? "large" : null;
+      profileUpdate.managementPlan = selectedPlan;
+      profileUpdate.proBusinessScale = normalizedScale;
+      registrationUpdate.managementPlan = selectedPlan;
+      registrationUpdate.proBusinessScale = normalizedScale;
+    }
+
+    if (!details || details.startupPrice <= 0) {
+      if (registrationSnap) tx.update(registrationSnap.ref, registrationUpdate);
+      tx.update(profileRef, profileUpdate);
+      return {
+        plan: selectedPlan,
+        invoiceCreated: false,
+        invoiceId: null,
+        invoiceNumber: null,
+        amount: 0,
+      };
+    }
+
+    const existingInvoice = invoiceSnap.exists() ? invoiceSnap.data() : null;
+    const invoiceNumber = existingInvoice?.invoiceNumber ?? (profileData.nextInvoiceNumber || 0) + 1;
+    profileUpdate.onboardingInvoiceId = invoiceRef.id;
+    profileUpdate.onboardingInvoiceNumber = invoiceNumber;
+    profileUpdate.onboardingInvoiceCreatedAt = existingInvoice?.createdAt ?? serverTimestamp();
+    registrationUpdate.onboardingInvoiceId = invoiceRef.id;
+    registrationUpdate.onboardingInvoiceNumber = invoiceNumber;
+    if (registrationSnap) tx.update(registrationSnap.ref, registrationUpdate);
+
+    if (!existingInvoice) {
+      profileUpdate.nextInvoiceNumber = invoiceNumber;
+      tx.set(invoiceRef, {
+        invoiceNumber,
+        userId: params.approvedBy,
+        businessId: params.businessId,
+        clientId: `business_${params.businessId}`,
+        clientName: businessName,
+        item: `${details.label} — Startup Activation`,
+        items: [],
+        amount: details.startupPrice,
+        subtotal: details.startupPrice,
+        taxAmount: 0,
+        discountAmount: 0,
+        amountPaid: 0,
+        notes: `Onboarding invoice for ${details.packageName}. ${details.recurringDescription || ""}`.trim(),
+        status: "pending",
+        paymentMethod: "cash",
+        issuedAt: serverTimestamp(),
+        dueAt: null,
+        invoiceType: "onboarding",
+        createdAt: serverTimestamp(),
+      });
+    }
+
+    tx.update(profileRef, profileUpdate);
+    return {
+      plan: selectedPlan,
+      invoiceCreated: !existingInvoice,
+      invoiceId: invoiceRef.id,
+      invoiceNumber,
+      amount: details.startupPrice,
+    };
   });
 }
 
