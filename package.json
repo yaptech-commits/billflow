@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "verify:readiness": "node scripts/verify-production-readiness.mjs"
+    "verify:readiness": "node scripts/verify-production-readiness.mjs",
+    "test:pilot": "node scripts/run-pilot-smoke-test.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

@@ -5,17 +5,20 @@
  */
 
 import http from 'node:http';
+import https from 'node:https';
 
 const BASE_URL = process.env.TEST_BASE_URL || 'http://localhost:3000';
 
-async function checkRoute(path) {
+async function checkRoute(path, expectedStatus = [200, 301, 302, 307, 308]) {
   return new Promise((resolve) => {
     const url = `${BASE_URL}${path}`;
-    http.get(url, (res) => {
+    const client = url.startsWith('https') ? https : http;
+    client.get(url, (res) => {
+      const ok = expectedStatus.includes(res.statusCode);
       resolve({
         path,
         statusCode: res.statusCode,
-        ok: res.statusCode >= 200 && res.statusCode < 400,
+        ok,
       });
     }).on('error', (err) => {
       resolve({
@@ -31,14 +34,15 @@ async function checkRoute(path) {
 async function run() {
   console.log(`=== BillFlow Pilot Smoke Test (${BASE_URL}) ===`);
   const routes = [
-    '/api/health',
-    '/school/portal',
-    '/auth/login',
+    { path: '/api/health', expected: [200] },
+    { path: '/school/portal', expected: [200] },
+    { path: '/auth/login', expected: [200] },
+    { path: '/admin', expected: [200, 302, 307] }, // Protected route should redirect or challenge unauthenticated users
   ];
 
   let allPassed = true;
-  for (const route of routes) {
-    const result = await checkRoute(route);
+  for (const item of routes) {
+    const result = await checkRoute(item.path, item.expected);
     if (result.ok) {
       console.log(`[PASS] ${result.path} -> HTTP ${result.statusCode}`);
     } else {
