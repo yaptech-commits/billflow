@@ -247,4 +247,4 @@
 - [x] Implement interactive pricing details for Pro Management (Lifetime Activation, Startup Price: 3,500 GHS, Monthly Database Upgrade: 500 GHS large scale / 300 GHS small scale)
 - [x] Implement interactive pricing details for Standard Management (Monthly Renewal, Startup Price: 1,500 GHS, Monthly Renewal: 300 GHS)
 - [x] Verify plan interactions in the browser and production build with `pnpm run build`
-- [ ] Commit and push with author email `ayindenabawisdom@gmail.com`
+- [x] Commit and push with author email `ayindenabawisdom@gmail.com`
