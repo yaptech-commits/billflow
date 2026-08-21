@@ -271,3 +271,14 @@
 ## Registration Payment Scope Boundary
 - [x] Do not implement the separate plan upgrade workflow.
 - [x] Add a dedicated cash-payment amount field on the onboarding payment page and carry the entered amount into the pending cash record.
+
+## Billing History, Receipt Downloads, and Provider Setup
+- [x] Inspect the existing tenant-scoped payment and invoice data access, receipt builders, settings surfaces, and Paystack webhook configuration.
+- [x] Add an owner-facing billing history view for onboarding invoices and payments.
+- [x] Add secure downloadable or printable paid onboarding receipts.
+- [x] Add live provider environment-variable and Paystack webhook setup guidance in the settings surface and project documentation.
+- [x] Verify tenant isolation safeguards, receipt rendering contract, webhook protection, and the production build.
+- [ ] Commit and push the follow-up changes with author email `ayindenabawisdom@gmail.com`.
+
+## Follow-up Scope Boundary
+- [x] Do not implement the separate in-app plan upgrade workflow.

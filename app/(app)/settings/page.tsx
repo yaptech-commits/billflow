@@ -46,6 +46,8 @@ export default function SettingsPage() {
   const [exportStartDate, setExportStartDate] = useState("");
   const [exportEndDate, setExportEndDate] = useState("");
   const [offlineSummary, setOfflineSummary] = useState({ sales: 0, invoices: 0, payments: 0, folios: 0, total: 0 });
+  const [webhookUrl, setWebhookUrl] = useState("");
+  const [copyingWebhook, setCopyingWebhook] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -75,6 +77,26 @@ export default function SettingsPage() {
       setBrandLoading(false);
     });
   }, [businessId]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") setWebhookUrl(`${window.location.origin}/api/onboarding/payment/webhook`);
+  }, []);
+
+  const handleCopyWebhook = async () => {
+    if (!webhookUrl || typeof navigator === "undefined" || !navigator.clipboard) {
+      toast.error("Webhook URL is not available to copy");
+      return;
+    }
+    setCopyingWebhook(true);
+    try {
+      await navigator.clipboard.writeText(webhookUrl);
+      toast.success("Paystack webhook URL copied");
+    } catch {
+      toast.error("Could not copy the webhook URL");
+    } finally {
+      setCopyingWebhook(false);
+    }
+  };
 
   const handleLogoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -423,6 +445,25 @@ export default function SettingsPage() {
           <button className="btn-primary w-full justify-center" onClick={handleSaveBrand} disabled={brandSaving}>
             {brandSaving ? "Saving..." : "Save API Settings"}
           </button>
+        </div>
+
+        <div className="border-t border-border pt-5 mt-5">
+          <h3 className="font-grotesk font-semibold text-white text-sm mb-2">Live onboarding payments</h3>
+          <p className="text-xs text-muted leading-relaxed mb-4">Mobile Money onboarding payments use the server-side Paystack secret and are approved only after a verified Paystack settlement. Email receipts use the configured Resend provider or the school email webhook fallback.</p>
+          <div className="mb-4">
+            <label className="label">Paystack webhook URL</label>
+            <div className="flex gap-2">
+              <input className="input min-w-0" readOnly value={webhookUrl} placeholder="https://your-domain/api/onboarding/payment/webhook" />
+              <button type="button" className="btn-ghost whitespace-nowrap" onClick={handleCopyWebhook} disabled={!webhookUrl || copyingWebhook}>{copyingWebhook ? "Copying..." : "Copy URL"}</button>
+            </div>
+          </div>
+          <ol className="space-y-2 text-xs text-muted list-decimal pl-5">
+            <li>Add <span className="font-mono text-surface">PAYSTACK_SECRET_KEY</span> to the server environment.</li>
+            <li>Add <span className="font-mono text-surface">RESEND_API_KEY</span> and <span className="font-mono text-surface">RESEND_FROM_EMAIL</span>, or configure <span className="font-mono text-surface">SCHOOL_EMAIL_WEBHOOK_URL</span>.</li>
+            <li>Paste the webhook URL into Paystack Dashboard → Settings → API Keys & Webhooks.</li>
+            <li>Use the same live/test mode across Paystack keys and the deployment before accepting client payments.</li>
+          </ol>
+          <p className="text-[11px] text-muted mt-4">Keep secret keys on the server. They should never be entered into this browser form or committed to Git.</p>
         </div>
 
         {[

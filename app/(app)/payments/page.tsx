@@ -1,19 +1,23 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { getPayments, createPayment, getClients, deletePayment, Payment, Client, PaymentMethod } from "@/lib/db";
+import { getPayments, getInvoices, getBusinessProfile, createPayment, getClients, deletePayment, Payment, Invoice, BusinessProfile, Client, PaymentMethod } from "@/lib/db";
 import { deleteOfflinePayment, deleteOfflinePOSSale } from "@/lib/offline-sync";
-import { Trash2 } from "lucide-react";
+import { Download, ReceiptText, Trash2 } from "lucide-react";
 import { formatCedi, formatMoney } from "@/lib/utils";
 import { Timestamp } from "firebase/firestore";
 import Modal from "@/components/ui/Modal";
 import Badge from "@/components/ui/Badge";
 import toast from "react-hot-toast";
+import { getManagementPlanDetails, normalizeManagementPlan } from "@/lib/management-plans";
+import { downloadReceipt } from "@/lib/print-receipt";
 import { Plus } from "lucide-react";
 
 export default function PaymentsPage() {
-  const { user, businessId } = useAuth();
+  const { user, businessId, role } = useAuth();
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [onboardingInvoices, setOnboardingInvoices] = useState<Invoice[]>([]);
+  const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
   const [clients, setClients] = useState<Client[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -22,7 +26,12 @@ export default function PaymentsPage() {
 
   const load = async () => {
     if (!user || !businessId) return;
-    const [pay, cli] = await Promise.all([getPayments(businessId), getClients(businessId)]);
+    const [pay, cli, invoiceRows, profile] = await Promise.all([
+      getPayments(businessId),
+      getClients(businessId),
+      getInvoices(businessId),
+      getBusinessProfile(businessId),
+    ]);
 
     // Merge with offline records
     const offlineSales = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("billflow_offline_sales") || "[]") : [];
@@ -50,6 +59,8 @@ export default function PaymentsPage() {
     }));
 
     setPayments([...posOfflinePayments, ...manualPayments, ...pay]);
+    setOnboardingInvoices(invoiceRows.filter(invoice => invoice.invoiceType === "onboarding"));
+    setBusinessProfile(profile);
     setClients(cli);
     setLoading(false);
   };
@@ -63,6 +74,40 @@ export default function PaymentsPage() {
   const momoTotal = payments.filter(p => p.method === "momo" && p.status === "success").reduce((s, p) => s + p.amount, 0);
   const cardTotal = payments.filter(p => p.method === "card" && p.status === "success").reduce((s, p) => s + p.amount, 0);
   const cashTotal = payments.filter(p => p.method === "cash" && p.status === "success").reduce((s, p) => s + p.amount, 0);
+  const canSeeOnboardingBilling = role === "owner" || role === "super_admin";
+
+  const invoiceDate = (value: any) => {
+    if (value && typeof value.toDate === "function") return value.toDate();
+    const parsed = value ? new Date(value) : new Date();
+    return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+  };
+
+  const downloadOnboardingReceipt = (invoice: Invoice) => {
+    const plan = normalizeManagementPlan(businessProfile?.managementPlan) || "demo";
+    const details = getManagementPlanDetails(plan, businessProfile?.proBusinessScale || "large");
+    const amount = Number(invoice.amount || details.startupPrice || 0);
+    const isPaid = invoice.status === "paid";
+    const documentLabel = isPaid ? "RECEIPT" : "INVOICE";
+    const safeInvoiceNumber = String(invoice.invoiceNumber || invoice.id || "onboarding").replace(/[^a-z0-9_-]+/gi, "-");
+    downloadReceipt({
+      documentTitle: documentLabel,
+      invoiceNumber: String(invoice.invoiceNumber || invoice.id || "ONBOARDING"),
+      issuedAt: invoiceDate(invoice.issuedAt || (invoice as any).createdAt),
+      dueDate: invoiceDate(invoice.dueAt || invoice.issuedAt || (invoice as any).createdAt),
+      items: [{ productName: `${details.label} — Startup Activation`, quantity: 1, unitPrice: amount }],
+      subtotal: amount,
+      taxAmount: 0,
+      total: amount,
+      paymentMethod: invoice.paymentMethod || "cash",
+      amountPaid: isPaid ? Number(invoice.amountPaid || amount) : 0,
+      customerName: businessProfile?.businessName || invoice.clientName,
+      customerAddress: businessProfile?.email || businessProfile?.ownerEmail || "",
+      currencyCode: businessProfile?.currency || "GHS",
+      footerNote: `Selected plan: ${details.label}. ${details.recurringDescription || ""}`.trim(),
+      logoDataUrl: businessProfile?.logoDataUrl,
+      businessName: businessProfile?.businessName || invoice.clientName,
+    }, `billflow-${safeInvoiceNumber}-${isPaid ? "receipt" : "invoice"}.html`);
+  };
 
   const handleRecord = async () => {
     if (!user || !businessId || !form.clientId || !form.amount) { toast.error("Fill all required fields"); return; }
@@ -138,6 +183,67 @@ export default function PaymentsPage() {
 
   return (
     <div>
+      {canSeeOnboardingBilling && (
+        <div className="card mb-7">
+          <div className="flex items-start justify-between gap-4 mb-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <ReceiptText size={17} className="text-gold" />
+                <h2 className="font-grotesk font-semibold text-white">Onboarding billing</h2>
+              </div>
+              <p className="text-xs text-muted mt-1">Plan activation invoices and verified onboarding payments for this business.</p>
+            </div>
+            <span className="text-[10px] uppercase tracking-wider text-muted border border-border rounded-full px-2.5 py-1">Owner view</span>
+          </div>
+          {onboardingInvoices.length === 0 ? (
+            <p className="text-muted text-sm py-5 text-center">No onboarding invoice has been created for this business yet.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[720px]">
+                <thead>
+                  <tr className="text-[11px] text-muted uppercase tracking-wide">
+                    <th className="text-left pb-3">Invoice</th>
+                    <th className="text-left pb-3">Issued</th>
+                    <th className="text-left pb-3">Plan</th>
+                    <th className="text-left pb-3">Amount</th>
+                    <th className="text-left pb-3">Status</th>
+                    <th className="text-left pb-3">Receipt</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {onboardingInvoices.map(invoice => {
+                    const plan = normalizeManagementPlan(businessProfile?.managementPlan) || "demo";
+                    const details = getManagementPlanDetails(plan, businessProfile?.proBusinessScale || "large");
+                    const relatedPayment = payments.find(payment => payment.invoiceId === invoice.id || payment.reference === (invoice as any).providerReference);
+                    const issued = invoiceDate(invoice.issuedAt || (invoice as any).createdAt);
+                    const isPaid = invoice.status === "paid";
+                    return (
+                      <tr key={invoice.id || invoice.invoiceNumber} className="border-t border-border">
+                        <td className="py-3 font-grotesk text-surface">{invoice.invoiceNumber || invoice.id}</td>
+                        <td className="py-3 text-muted text-xs">{issued.toLocaleDateString("en-GH")}</td>
+                        <td className="py-3 text-surface">{details.label}</td>
+                        <td className="py-3 font-grotesk font-semibold text-green">{formatCedi(Number(invoice.amount || details.startupPrice))}</td>
+                        <td className="py-3"><Badge status={invoice.status} />{relatedPayment?.reference && <span className="block text-[10px] text-muted mt-1">{relatedPayment.reference}</span>}</td>
+                        <td className="py-3">
+                          <button
+                            type="button"
+                            onClick={() => downloadOnboardingReceipt(invoice)}
+                            className={`inline-flex items-center gap-1.5 text-xs ${isPaid ? "text-gold hover:text-white" : "text-muted hover:text-surface"}`}
+                            title={isPaid ? "Download paid receipt" : "Download onboarding invoice"}
+                          >
+                            <Download size={14} /> {isPaid ? "Download receipt" : "Download invoice"}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Summary cards */}
       <div className="grid grid-cols-3 gap-5 mb-7">
         <div className="card text-center py-6">
