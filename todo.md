@@ -374,3 +374,15 @@
 - [x] Extend booking approval to dispatch SMS or WhatsApp messages containing the confirmation code, assigned room number, and check-in/check-out timing.
 - [x] Track SMS/WhatsApp delivery status and error messages in hotel reservations alongside email status.
 - [x] Run production build, verification checks, commit, and push with author email `ayindenabawisdom@gmail.com`.
+
+## Vercel SMS and WhatsApp Environment Configuration
+- [ ] Inspect existing Vercel CLI and project linkage for BillFlow (`yaptech/billflow`).
+- [ ] Confirm gateway endpoint URLs and API tokens with the user or apply secure placeholders.
+- [ ] Push production environment variables (`SMS_PROVIDER_URL`, `SMS_API_KEY`, `SMS_SENDER_ID`, `WHATSAPP_API_URL`, `WHATSAPP_API_TOKEN`) to Vercel production environment.
+- [ ] Trigger a clean production deployment and verify configuration status.
+
+## Meta WhatsApp Template Implementation
+- [x] Upgrade the server-side WhatsApp dispatch helper in `app/api/hotel/online-bookings/route.ts` to support approved Meta Cloud API templates with variable substitution (`WHATSAPP_BOOKING_TEMPLATE_NAME`) and Ghanaian phone normalization.
+- [x] Preserve free-form fallback when template configuration is absent.
+- [x] Run Next.js production build (`pnpm build`) and verify TypeScript compilation.
+- [x] Commit and push implementation with author email `ayindenabawisdom@gmail.com`.

@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase-admin";
@@ -46,6 +45,10 @@ type BookingRecord = {
   confirmationEmailStatus: "pending" | "sent" | "failed" | "queued" | null;
   confirmationEmailSentAt: string | null;
   confirmationEmailError: string | null;
+  smsDeliveryStatus: "pending" | "sent" | "failed" | "queued" | "skipped" | null;
+  smsDeliveryError: string | null;
+  whatsappDeliveryStatus: "pending" | "sent" | "failed" | "queued" | "skipped" | null;
+  whatsappDeliveryError: string | null;
 };
 
 function stringValue(value: unknown, fallback = "") {
@@ -122,6 +125,24 @@ function serializeBooking(id: string, data: Record<string, unknown>): BookingRec
         : null,
     confirmationEmailSentAt: timestampToIso(data.confirmationEmailSentAt),
     confirmationEmailError: stringValue(data.confirmationEmailError) || null,
+    smsDeliveryStatus:
+      data.smsDeliveryStatus === "pending" ||
+      data.smsDeliveryStatus === "sent" ||
+      data.smsDeliveryStatus === "failed" ||
+      data.smsDeliveryStatus === "queued" ||
+      data.smsDeliveryStatus === "skipped"
+        ? data.smsDeliveryStatus
+        : null,
+    smsDeliveryError: stringValue(data.smsDeliveryError) || null,
+    whatsappDeliveryStatus:
+      data.whatsappDeliveryStatus === "pending" ||
+      data.whatsappDeliveryStatus === "sent" ||
+      data.whatsappDeliveryStatus === "failed" ||
+      data.whatsappDeliveryStatus === "queued" ||
+      data.whatsappDeliveryStatus === "skipped"
+        ? data.whatsappDeliveryStatus
+        : null,
+    whatsappDeliveryError: stringValue(data.whatsappDeliveryError) || null,
   };
 }
 
@@ -145,6 +166,12 @@ function displayDate(value: string | null) {
     timeStyle: "short",
     timeZone: "Africa/Accra",
   }).format(new Date(value));
+}
+
+function normalizePhone(value: string) {
+  const digits = value.replace(/\D/g, "");
+  if (digits.startsWith("0")) return `233${digits.slice(1)}`;
+  return digits;
 }
 
 async function deliverApprovalEmail(params: {
@@ -228,6 +255,126 @@ async function deliverApprovalEmail(params: {
   }
 
   return { status: "queued" as const, reason: "No booking email provider is configured." };
+}
+
+async function deliverSmsOrWhatsAppMessage(params: {
+  businessId: string;
+  businessName: string;
+  guestPhone: string;
+  guestName: string;
+  bookingCode: string;
+  roomNumber: string | null;
+  roomType: string;
+  checkInDate: string | null;
+  checkOutDate: string | null;
+}) {
+  const phone = normalizePhone(params.guestPhone);
+  const textMessage = `Hello ${params.guestName}, your reservation at ${params.businessName} is confirmed! Code: ${params.bookingCode}. Room: ${params.roomNumber || "Assigned at check-in"} (${params.roomType}). Check-in: ${displayDate(params.checkInDate)}. Check-out: ${displayDate(params.checkOutDate)}. Present this code at the front desk.`;
+
+  let smsStatus: "sent" | "failed" | "queued" | "skipped" = "queued";
+  let smsError: string | null = "No SMS provider configured.";
+  let whatsappStatus: "sent" | "failed" | "queued" | "skipped" = "queued";
+  let whatsappError: string | null = "No WhatsApp provider configured.";
+
+  const smsUrl = stringValue(process.env.SMS_PROVIDER_URL);
+  const smsKey = stringValue(process.env.SMS_API_KEY);
+  const senderId = stringValue(process.env.SMS_SENDER_ID, "BillFlow");
+
+  if (smsUrl && smsKey && phone) {
+    try {
+      const response = await fetch(smsUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${smsKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          to: phone,
+          message: textMessage,
+          sender: senderId,
+          businessId: params.businessId,
+        }),
+        cache: "no-store",
+      });
+      if (response.ok) {
+        smsStatus = "sent";
+        smsError = null;
+      } else {
+        smsStatus = "failed";
+        smsError = `SMS gateway returned HTTP ${response.status}`;
+      }
+    } catch (error) {
+      smsStatus = "failed";
+      smsError = error instanceof Error ? error.message : "SMS dispatch failed";
+    }
+  }
+
+  const whatsappUrl = stringValue(process.env.WHATSAPP_API_URL);
+  const whatsappToken = stringValue(process.env.WHATSAPP_API_TOKEN);
+  const templateName = stringValue(process.env.WHATSAPP_BOOKING_TEMPLATE_NAME);
+
+  if (whatsappUrl && whatsappToken && phone) {
+    try {
+      let bodyData: unknown;
+      if (templateName) {
+        bodyData = {
+          messaging_product: "whatsapp",
+          recipient_type: "individual",
+          to: phone,
+          type: "template",
+          template: {
+            name: templateName,
+            language: { code: process.env.WHATSAPP_BOOKING_TEMPLATE_LANGUAGE || "en_US" },
+            components: [
+              {
+                type: "body",
+                parameters: [
+                  { type: "text", text: params.guestName },
+                  { type: "text", text: params.businessName },
+                  { type: "text", text: params.bookingCode },
+                  { type: "text", text: params.roomNumber || "Assigned at check-in" },
+                  { type: "text", text: displayDate(params.checkInDate) },
+                  { type: "text", text: displayDate(params.checkOutDate) },
+                ],
+              },
+            ],
+          },
+        };
+      } else {
+        bodyData = {
+          messaging_product: "whatsapp",
+          recipient_type: "individual",
+          to: phone,
+          type: "text",
+          text: { body: textMessage },
+        };
+      }
+
+      const response = await fetch(whatsappUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${whatsappToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(bodyData),
+        cache: "no-store",
+      });
+
+      if (response.ok) {
+        whatsappStatus = "sent";
+        whatsappError = null;
+      } else {
+        const errorJson = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
+        whatsappStatus = "failed";
+        whatsappError = errorJson?.error?.message || `WhatsApp gateway returned HTTP ${response.status}`;
+      }
+    } catch (error) {
+      whatsappStatus = "failed";
+      whatsappError = error instanceof Error ? error.message : "WhatsApp dispatch failed";
+    }
+  }
+
+  return { smsStatus, smsError, whatsappStatus, whatsappError };
 }
 
 function isOverlapping(start1: string, end1: string, start2: string, end2: string) {
@@ -328,28 +475,34 @@ export async function POST(request: NextRequest) {
         const roomId = stringValue(room.id);
         const roomNumber = stringValue(room.roomNumber);
         return !existingReservations.some((reservation) => {
-          const existingRoomId = stringValue(reservation.roomId);
-          const existingRoomNumber = stringValue(reservation.roomNumber);
-          return (roomId && existingRoomId === roomId) || (roomNumber && existingRoomNumber === roomNumber)
-            ? isOverlapping(checkInDate, checkOutDate, timestampToIso(reservation.checkInDate) || "", timestampToIso(reservation.checkOutDate) || "")
-            : false;
+          const resStart = timestampToIso(reservation.checkInDate);
+          const resEnd = timestampToIso(reservation.checkOutDate);
+          if (!resStart || !resEnd) return false;
+          const matchesRoom = stringValue(reservation.roomId) === roomId || (roomNumber && stringValue(reservation.roomNumber) === roomNumber);
+          return matchesRoom && isOverlapping(checkInDate, checkOutDate, resStart, resEnd);
         });
       };
-      const preferredRoom = rooms.find((room) => (assignedRoomId && room.id === assignedRoomId) || (assignedRoomNumber && stringValue(room.roomNumber) === assignedRoomNumber));
-      const selectedRoom = (preferredRoom && roomIsAvailable(preferredRoom) ? preferredRoom : rooms.find(roomIsAvailable)) || null;
-      if (!selectedRoom) throw new HttpError(409, "No room of this type remains available for the selected dates.");
 
-      const confirmationCode = stringValue(data.confirmationCode) || `BF-${randomBytes(4).toString("hex").toUpperCase()}`;
+      let selectedRoom = rooms.find((room) => room.id === assignedRoomId || (assignedRoomNumber && stringValue(room.roomNumber) === assignedRoomNumber));
+      if (!selectedRoom || !roomIsAvailable(selectedRoom)) {
+        selectedRoom = rooms.find((room) => roomIsAvailable(room));
+      }
+      if (!selectedRoom) {
+        throw new HttpError(409, "No rooms of the requested type are available for the selected dates.");
+      }
+
+      const confirmationCode = stringValue(data.confirmationCode) || `BF-${Math.floor(100000 + Math.random() * 900000)}`;
       transaction.update(reservationRef, {
         status: "booked",
         approvalStatus: "approved",
         confirmationCode,
         roomId: selectedRoom.id,
-        roomNumber: stringValue(selectedRoom.roomNumber) || assignedRoomNumber || null,
+        roomNumber: stringValue(selectedRoom.roomNumber) || null,
         approvedAt: FieldValue.serverTimestamp(),
         approvedBy: actor.uid,
-        confirmationEmailStatus: stringValue(data.guestEmail) ? "pending" : "queued",
-        confirmationEmailError: "",
+        confirmationEmailStatus: "queued",
+        smsDeliveryStatus: "queued",
+        whatsappDeliveryStatus: "queued",
         updatedAt: FieldValue.serverTimestamp(),
       });
       return {
@@ -369,7 +522,7 @@ export async function POST(request: NextRequest) {
     if (action === "approve" && booking.approvalStatus === "approved" && booking.confirmationCode && (result.changed || booking.confirmationEmailStatus !== "sent")) {
       const businessSnap = await firestore.collection("businesses").doc(businessId).get();
       const businessName = stringValue(businessSnap.data()?.businessName || businessSnap.data()?.name, "BillFlow Hotel");
-      
+
       const [emailResult, messagingResult] = await Promise.all([
         booking.guestEmail
           ? deliverApprovalEmail({
@@ -397,19 +550,26 @@ export async function POST(request: NextRequest) {
               checkInDate: booking.checkInDate,
               checkOutDate: booking.checkOutDate,
             })
-          : Promise.resolve({ smsStatus: "skipped" as const, smsError: "No guest phone provided", whatsappStatus: "skipped" as const, whatsappError: "No guest phone provided" }),
+          : Promise.resolve({
+              smsStatus: "skipped" as const,
+              smsError: "No guest phone provided",
+              whatsappStatus: "skipped" as const,
+              whatsappError: "No guest phone provided",
+            }),
       ]);
 
       await reservationRef.update({
-        ...(booking.guestEmail ? {
-          confirmationEmailStatus: emailResult.status,
-          ...(emailResult.status === "sent" ? { confirmationEmailSentAt: FieldValue.serverTimestamp() } : {}),
-          ...("reason" in emailResult && emailResult.reason ? { confirmationEmailError: emailResult.reason } : {}),
-        } : {}),
+        ...(booking.guestEmail
+          ? {
+              confirmationEmailStatus: emailResult.status,
+              ...(emailResult.status === "sent" ? { confirmationEmailSentAt: FieldValue.serverTimestamp() } : {}),
+              ...("reason" in emailResult && emailResult.reason ? { confirmationEmailError: emailResult.reason } : {}),
+            }
+          : {}),
         smsDeliveryStatus: messagingResult.smsStatus,
-        ...("smsError" in messagingResult && messagingResult.smsError ? { smsDeliveryError: messagingResult.smsError } : {}),
+        ...(messagingResult.smsError ? { smsDeliveryError: messagingResult.smsError } : {}),
         whatsappDeliveryStatus: messagingResult.whatsappStatus,
-        ...("whatsappError" in messagingResult && messagingResult.whatsappError ? { whatsappDeliveryError: messagingResult.whatsappError } : {}),
+        ...(messagingResult.whatsappError ? { whatsappDeliveryError: messagingResult.whatsappError } : {}),
         updatedAt: FieldValue.serverTimestamp(),
       });
 
@@ -418,10 +578,10 @@ export async function POST(request: NextRequest) {
         booking.confirmationEmailError = "reason" in emailResult ? emailResult.reason || null : null;
         if (emailResult.status === "sent") booking.confirmationEmailSentAt = new Date().toISOString();
       }
-      (booking as any).smsDeliveryStatus = messagingResult.smsStatus;
-      (booking as any).smsDeliveryError = "smsError" in messagingResult ? messagingResult.smsError || null : null;
-      (booking as any).whatsappDeliveryStatus = messagingResult.whatsappStatus;
-      (booking as any).whatsappDeliveryError = "whatsappError" in messagingResult ? messagingResult.whatsappError || null : null;
+      booking.smsDeliveryStatus = messagingResult.smsStatus;
+      booking.smsDeliveryError = messagingResult.smsError;
+      booking.whatsappDeliveryStatus = messagingResult.whatsappStatus;
+      booking.whatsappDeliveryError = messagingResult.whatsappError;
     }
 
     await recordSecurityEvent({
