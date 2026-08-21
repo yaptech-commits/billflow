@@ -328,10 +328,11 @@
 - [x] Implement the shared webhook handler while preserving existing DataFlow settlement behavior and adding BillFlow onboarding settlement.
 - [x] Validate the router with `node --check index.js` and `git diff --check`; document the exact Paystack webhook URL and deployment environment requirements.
 - [x] Commit and push the DataFlow repository change with author email `ayindenabawisdom@gmail.com`; commit `7814039`.
-- [ ] Add `BILLFLOW_WEBHOOK_URL` to the DataFlow Render service and redeploy before changing the Paystack Live Webhook URL.
+- [x] Add `BILLFLOW_WEBHOOK_URL` to the DataFlow Render service and redeploy before changing the Paystack Live Webhook URL; the user confirmed completion.
 
 ## Vercel Firebase Admin Runtime Compatibility
 - [x] Confirmed BillFlow API routes were failing in production with `ERR_REQUIRE_ESM` from `jwks-rsa@4` loading `jose@6` through Firebase Admin 14.
 - [x] Pinned `firebase-admin` to `13.6.0`, which uses `jwks-rsa@3.2.x` and CommonJS-compatible `jose@4.15.x`.
-- [x] Verified `pnpm run build`, `git diff --check`, and the dependency tree; a new Vercel deployment is required before rechecking the live webhook.
-- [ ] Confirm the new Vercel deployment serves BillFlow API routes, then complete the Paystack shared-webhook rollout without a real payment.
+- [x] Verified `pnpm run build`, `git diff --check`, and the dependency tree.
+- [x] Confirmed the new Vercel deployment now serves `/api/health` and `/api/onboarding/payment/webhook` with HTTP 200; no real payment was initiated.
+- [x] Complete final Paystack shared-webhook rollout verification after confirming `BILLFLOW_WEBHOOK_URL` is present in Render; no real payment was initiated.
