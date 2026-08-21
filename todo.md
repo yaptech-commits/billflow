@@ -347,4 +347,4 @@
 - [x] Remove the editable Cash amount input and its adjustment guidance from the onboarding payment page.
 - [x] Keep the selected plan startup price visible and send Cash payments without a client-editable amount.
 - [x] Preserve server-side canonical pricing and validate Cash, Mobile Money, and Demo behavior; the server defaults Cash to the canonical invoice amount when no client amount is submitted.
-- [ ] Run the production build, commit, and push with author email `ayindenabawisdom@gmail.com`.
+- [x] Run the production build, commit, and push with author email `ayindenabawisdom@gmail.com`; UI commit `1d4a70b62143dfbb48e4f34fbaa09617974f03f9`.
