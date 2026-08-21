@@ -288,4 +288,4 @@
 - [x] Trace the signup validation, Firebase account creation, business/profile writes, and payment-page redirect path.
 - [x] Apply the smallest secure fix and preserve pending-payment/account-approval safeguards.
 - [x] Verify the registration-to-payment handoff contract and production build; `pnpm run build` and `git diff --check` pass.
-- [ ] Commit and push the fix with author email `ayindenabawisdom@gmail.com`.
+- [x] Commit and push the fix with author email `ayindenabawisdom@gmail.com`; commit `2431d0ae07847883c374312eb56b8a13c6918d24`.
