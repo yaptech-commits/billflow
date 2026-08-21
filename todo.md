@@ -354,3 +354,17 @@
 - [x] Remove the typed `PERMANENTLY DELETE` requirement so an authorized delete click proceeds directly.
 - [x] Preserve verified-token authorization, owner/Super Admin scope checks, Super Admin protection, and idempotent server-side cleanup.
 - [x] Run the production build and diff checks; `pnpm run build` and `git diff --check` pass. Commit and push remain pending.
+
+## Offline Mode Audit and Hardening
+- [ ] Audit the current offline state, IndexedDB/local queue, cached invoices/payment logs, and network reconnect listeners.
+- [ ] Verify queued writes sync immediately and idempotently after connectivity returns, with tenant isolation and failed-sync visibility.
+- [ ] Verify or implement the 3-day automatic return-to-online rule and administrator email/push alerts.
+- [ ] Verify or improve the Super Admin offline sync monitoring dashboard and manual queue-trigger actions.
+- [ ] Run offline/reconnect validation, production build, commit, and push with author email `ayindenabawisdom@gmail.com`.
+
+## Hotel Online Booking Approval Workflow
+- [x] List inbound direct-widget and OTA bookings with source, booking time, guest, room, check-in, and check-out details.
+- [x] Add approve/reject actions with business/property scoping and availability conflict checks.
+- [x] Generate a customer confirmation code on approval and display the assigned room and stay timing details.
+- [x] Deliver the approved booking details to the customer through the configured email/webhook path and show delivery status to hotel staff.
+- [x] Run the TypeScript review and production build; responsive route validation, commit, and push are the remaining delivery steps.

@@ -5,7 +5,7 @@ import {
   getInvoices, createInvoice, updateInvoice, deleteInvoice, recordPayment, createCreditNote, getBusinessProfile,
   getClients, getProducts, Invoice, Client, Product, InvoiceStatus, InvoiceLineItem, PaymentMethod, BusinessProfile,
 } from "@/lib/db";
-import { deleteOfflineInvoice, deleteOfflinePOSSale } from "@/lib/offline-sync";
+import { deleteOfflineInvoice, deleteOfflinePOSSale, queueOfflineInvoice } from "@/lib/offline-sync";
 import { formatMoney } from "@/lib/utils";
 import { Timestamp } from "firebase/firestore";
 import Modal from "@/components/ui/Modal";
@@ -183,28 +183,22 @@ export default function InvoicesPage() {
       const isOnline = navigator.onLine && localStorage.getItem("billflow_offline_mode") !== "true";
       
       if (!isOnline && !editTarget) {
-        const offlineInvoices = JSON.parse(localStorage.getItem("billflow_offline_invoices") || "[]");
-        const newOfflineInvoice = {
-          id: crypto.randomUUID(),
-          data: {
-            userId: user.uid,
-            businessId,
-            clientId: form.clientId,
-            clientName: client?.name ?? "Unknown",
-            items,
-            subtotal: lineTotal,
-            discountAmount: discountAmount,
-            amount: total,
-            notes: form.notes,
-            status,
-            paymentMethod: form.paymentMethod,
-            issuedAt: Date.now(),
-            dueAt: form.dueDate ? new Date(form.dueDate).getTime() : null,
-          },
-          timestamp: Date.now()
-        };
-        offlineInvoices.push(newOfflineInvoice);
-        localStorage.setItem("billflow_offline_invoices", JSON.stringify(offlineInvoices));
+        const queued = queueOfflineInvoice({
+          userId: user.uid,
+          businessId,
+          clientId: form.clientId,
+          clientName: client?.name ?? "Unknown",
+          items,
+          subtotal: lineTotal,
+          discountAmount,
+          amount: total,
+          notes: form.notes,
+          status,
+          paymentMethod: form.paymentMethod,
+          issuedAt: Date.now(),
+          dueDate: form.dueDate || null,
+        });
+        if (!queued) throw new Error("Offline storage is unavailable");
         toast.success("Invoice saved offline! Will sync when online.");
       } else if (editTarget) {
         if (!isOnline) throw new Error("Cannot edit invoices while offline");

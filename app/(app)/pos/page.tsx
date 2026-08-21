@@ -16,7 +16,7 @@ import toast from "react-hot-toast";
 import { Search, Plus, Minus, Trash2, ShoppingCart, Printer, X, Wifi, WifiOff, ArrowRight, CreditCard, Camera, Bluetooth } from "lucide-react";
 import { printReceipt } from "@/lib/print-receipt";
 import { isBluetoothPrintingSupported, printReceiptOverBluetooth } from "@/lib/bluetooth-printer";
-import { queueOfflineSale, syncAllOfflineData, getOfflineQueue, checkAndEnforceThreeDayOnlineAutoSwitch } from "@/lib/offline-sync";
+import { queueOfflineSale, syncAllOfflineData, getOfflineQueue, checkAndEnforceThreeDayOnlineAutoSwitch, postAuthenticatedOfflineRequest } from "@/lib/offline-sync";
 import { createSafeId } from "@/lib/safe-id";
 
 interface CartLine {
@@ -124,8 +124,8 @@ export default function PosPage() {
   }, [user, businessId]);
 
   useEffect(() => {
-    const checkStatus = () => {
-      const switched = checkAndEnforceThreeDayOnlineAutoSwitch();
+    const checkStatus = async () => {
+      const switched = businessId ? await checkAndEnforceThreeDayOnlineAutoSwitch(businessId) : false;
       if (switched) {
         toast.success("Automatic sync: 3-day offline limit reached. Switched back to Online mode and syncing queue!");
       }
@@ -144,24 +144,9 @@ export default function PosPage() {
             idempotencyKey: data.idempotencyKey || createSafeId("pos"),
           });
         },
-        invoice: async (data: any) => {
-          const res = await fetch("/api/invoices", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(data),
-          });
-          if (!res.ok) throw new Error("Failed to sync offline invoice");
-          return res.json();
-        },
-        payment: async (data: any) => {
-          const res = await fetch("/api/payments", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(data),
-          });
-          if (!res.ok) throw new Error("Failed to sync offline payment");
-          return res.json();
-        }
+        invoice: async (data: any) => postAuthenticatedOfflineRequest("/api/invoices", { ...data, businessId }),
+        payment: async (data: any) => postAuthenticatedOfflineRequest("/api/payments", { ...data, businessId }),
+        folio: async (data: any) => postAuthenticatedOfflineRequest("/api/hotel/folio-items", { ...data, businessId }),
       }).then(({ synced, failed }) => {
         if (synced > 0) {
           toast.success(`Synced ${synced} offline transactions!`);
@@ -445,6 +430,10 @@ export default function PosPage() {
       items,
       paymentMethod: payMethod,
       discountAmount: discountVal,
+      // Preserve the open shift so the global reconnect worker can safely
+      // replay an offline sale without guessing its accounting context.
+      shiftId: activeShift.id!,
+      businessId,
     };
 
     if (isOnline && !isForcedOffline && (payMethod === "card" || payMethod === "momo") && profile?.paystackPublicKey) {
@@ -513,6 +502,7 @@ export default function PosPage() {
     try {
       if (!isOnline || isForcedOffline) {
         const offlineSale = queueOfflineSale(saleData);
+        if (!offlineSale) throw new Error("Offline queue is unavailable on this device");
         toast.success(isForcedOffline ? "Sale saved in Offline Mode!" : "Sale saved offline! Will sync when online.");
         setReceipt({
           invoiceId: `OFFLINE-${offlineSale.id.slice(0, 5)}`,

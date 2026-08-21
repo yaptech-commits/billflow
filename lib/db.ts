@@ -19,6 +19,7 @@ import {
 } from "firebase/firestore";
 import { db } from "./firebase";
 import { getManagementPlanDetails, normalizeManagementPlan, ManagementPlan, ProBusinessScale } from "./management-plans";
+import { postAuthenticatedOfflineRequest } from "./offline-sync";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -1560,16 +1561,16 @@ export async function checkLowStockAndNotify(businessId: string) {
           createdAt: serverTimestamp(),
         });
 
-        // Trigger admin email alert dispatch
+        // Email delivery and alert audit are handled by the protected server route.
         try {
-          const profileSnap = await getDoc(doc(db, "businessProfiles", businessId));
-          if (profileSnap.exists()) {
-            const profileData = profileSnap.data() as BusinessProfile;
-            const adminEmail = profileData.email || profileData.ownerEmail;
-            if (adminEmail) {
-              console.log(`[Admin Email Alert] Low stock warning for ${product.name} sent to ${adminEmail}`);
-            }
-          }
+          await postAuthenticatedOfflineRequest("/api/offline-sync", {
+            action: "low_stock",
+            businessId,
+            productId: product.id || "unknown",
+            productName: product.name,
+            stockQty: product.stockQty,
+            reorderLevel,
+          });
         } catch (err) {
           console.error("Failed to dispatch low stock admin email alert:", err);
         }
@@ -2107,8 +2108,9 @@ export interface TaxRule {
   createdAt?: Timestamp | null;
 }
 
-export type ReservationStatus = "booked" | "checked_in" | "checked_out" | "cancelled" | "no_show";
+export type ReservationStatus = "pending" | "booked" | "checked_in" | "checked_out" | "cancelled" | "no_show";
 export type BookingSource = "walk_in" | "phone" | "online" | "ota" | "corporate";
+export type BookingApprovalStatus = "pending" | "approved" | "rejected";
 
 export interface Reservation {
   id?: string;
@@ -2128,6 +2130,15 @@ export interface Reservation {
   children: number;
   status: ReservationStatus;
   bookingSource: BookingSource;
+  approvalStatus?: BookingApprovalStatus;
+  approvedAt?: Timestamp | null;
+  approvedBy?: string;
+  rejectedAt?: Timestamp | null;
+  rejectedBy?: string;
+  rejectionReason?: string;
+  confirmationEmailStatus?: "pending" | "sent" | "failed" | "queued";
+  confirmationEmailSentAt?: Timestamp | null;
+  confirmationEmailError?: string;
   ratePerNight: number;
   totalAmount: number;
   amountPaid: number;
@@ -2814,14 +2825,16 @@ export async function createExternalChannelReservation(req: ExternalBookingReque
       roomNumber: assignedRoomNumber,
       roomType: req.roomTypeId,
       nightlyRate: 150, // default rate or fetched from rate plan
-      status: "booked",
-      bookingSource: req.channel,
+      status: "pending",
+      approvalStatus: "pending",
+      bookingSource: req.channel === "direct_widget" ? "online" : "ota",
       externalReferenceId: req.externalReferenceId || "",
       specialRequests: req.specialRequests || "",
+      requestedAt: serverTimestamp(),
       createdAt: serverTimestamp(),
     };
 
     tx.set(resRef, newRes);
-    return { reservationId: resRef.id, roomNumber: assignedRoomNumber };
+    return { reservationId: resRef.id, roomNumber: assignedRoomNumber, status: "pending" as const };
   });
 }

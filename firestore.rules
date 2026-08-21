@@ -367,6 +367,21 @@ service cloud.firestore {
       allow create: if ownsIncomingBusinessDocument();
     }
 
+    // A Super Admin creates sync commands through the protected server route.
+    // The target business client may claim and complete only its own command;
+    // all command creation and cross-business reads remain server-only.
+    match /syncCommands/{id} {
+      allow read: if isSignedIn() && isBusinessMember(resource.data.businessId);
+      allow create: if false;
+      allow update: if isSignedIn()
+        && isBusinessMember(resource.data.businessId)
+        && request.resource.data.businessId == resource.data.businessId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'startedAt', 'completedAt', 'result', 'error'
+        ]);
+      allow delete: if false;
+    }
+
     // Server-only operational telemetry. These collections are written and
     // read through Firebase Admin SDK routes, never directly from browsers.
     match /rateLimits/{id} {

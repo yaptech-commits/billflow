@@ -3,8 +3,8 @@
  * Stores pending payloads in localStorage with idempotency keys and retry counters.
  */
 
-import { collection, doc, onSnapshot, query, runTransaction, setDoc, updateDoc, where } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { collection, doc, onSnapshot, query, runTransaction, updateDoc, where } from "firebase/firestore";
+import { auth, db } from "@/lib/firebase";
 
 const SYNC_QUEUE_KEY = "billflow_offline_sales";
 const OFFLINE_INVOICES_KEY = "billflow_offline_invoices";
@@ -33,11 +33,16 @@ export interface OfflineSyncFailure {
   updatedAt: number;
 }
 
+function createOfflineId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 export function queueOfflineItem(key: string, payload: any) {
   if (typeof window === "undefined") return null;
-  const queue: OfflineItem[] = JSON.parse(localStorage.getItem(key) || "[]");
+  const queue = getOfflineQueue(key);
 
-  const idempotencyKey = payload.idempotencyKey || crypto.randomUUID();
+  const idempotencyKey = payload.idempotencyKey || createOfflineId();
   // Idempotency keys are the durable duplicate-prevention boundary. The short
   // payload comparison preserves compatibility with older queued records.
   const duplicate = queue.find(item =>
@@ -47,7 +52,7 @@ export function queueOfflineItem(key: string, payload: any) {
   if (duplicate) return duplicate;
 
   const newItem: OfflineItem = {
-    id: crypto.randomUUID(),
+    id: createOfflineId(),
     data: {
       ...payload,
       idempotencyKey,
@@ -137,7 +142,13 @@ export async function syncQueue(key: string, syncFn: (data: any) => Promise<any>
 
   for (const item of queue) {
     try {
-      const result = await syncFn(item.data);
+      const result = await syncFn({
+        ...item.data,
+        // Older queued payloads may not contain an idempotency key. The queue
+        // item id is stable across retries and is safe to use as the fallback.
+        idempotencyKey: item.data?.idempotencyKey || item.id,
+        offlineQueueItemId: item.id,
+      });
       // Server-side idempotency may report an already-processed operation as a
       // successful terminal state. Treat every successful response as terminal
       // so stale failure records do not remain visible after recovery.
@@ -222,22 +233,43 @@ function resolveActiveBusinessId(explicitBusinessId?: string) {
   return localStorage.getItem("billflow_active_business_id");
 }
 
-/** Publishes only aggregate queue telemetry; invoice, payment, and product payloads never leave the browser. */
+export async function postAuthenticatedOfflineRequest<T = any>(path: string, payload: Record<string, unknown>): Promise<T> {
+  const currentUser = auth?.currentUser;
+  if (!currentUser) throw new Error("Authentication is not ready for offline synchronization");
+  const token = await currentUser.getIdToken();
+  const response = await fetch(path, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+    cache: "no-store",
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(typeof body?.error === "string" ? body.error : `Offline sync request failed (${response.status})`);
+    (error as Error & { status?: number; code?: string }).status = response.status;
+    (error as Error & { status?: number; code?: string }).code = response.status === 409 ? "conflict" : undefined;
+    throw error;
+  }
+  return body as T;
+}
+
+/** Publishes aggregate queue telemetry through a protected server route. Invoice, payment, and product payloads never leave the browser as telemetry. */
 export async function reportOfflineSyncTelemetry(businessId?: string, syncResult?: { synced: number; failed: number }) {
   if (typeof window === "undefined" || !navigator.onLine) return;
   const resolvedBusinessId = resolveActiveBusinessId(businessId);
   if (!resolvedBusinessId || resolvedBusinessId === "default") return;
 
-  const summary = getOfflineSummary();
-  const telemetryRef = doc(db, "syncTelemetry", resolvedBusinessId);
   try {
-    await setDoc(telemetryRef, {
+    await postAuthenticatedOfflineRequest("/api/offline-sync", {
+      action: "telemetry",
       businessId: resolvedBusinessId,
-      ...summary,
+      summary: getOfflineSummary(),
       offlineMode: localStorage.getItem("billflow_offline_mode") === "true",
-      lastSeenAt: new Date().toISOString(),
-      ...(syncResult ? { lastSyncAt: new Date().toISOString(), lastSyncResult: syncResult } : {})
-    }, { merge: true });
+      syncResult: syncResult || null,
+    });
   } catch (error) {
     console.warn("Unable to publish offline sync telemetry:", error);
   }
@@ -253,17 +285,18 @@ export function subscribeToManualSyncCommands(
   },
   onComplete?: (result: { synced: number; failed: number }) => void
 ) {
-  if (typeof window === "undefined" || !businessId) return () => undefined;
+  if (typeof window === "undefined" || !businessId || !db) return () => undefined;
+  const firestore = db;
 
-  const commandsQuery = query(collection(db, "syncCommands"), where("businessId", "==", businessId));
+  const commandsQuery = query(collection(firestore, "syncCommands"), where("businessId", "==", businessId));
   return onSnapshot(commandsQuery, (snapshot) => {
     snapshot.docs
       .filter(command => command.data().status === "requested")
       .forEach(async (commandSnapshot) => {
-        const commandRef = doc(db, "syncCommands", commandSnapshot.id);
+        const commandRef = doc(firestore, "syncCommands", commandSnapshot.id);
         let claimed = false;
         try {
-          await runTransaction(db, async (transaction) => {
+          await runTransaction(firestore, async (transaction) => {
             const current = await transaction.get(commandRef);
             if (current.exists() && current.data().status === "requested") {
               transaction.update(commandRef, { status: "processing", startedAt: new Date().toISOString() });
@@ -298,7 +331,7 @@ export function subscribeToManualSyncCommands(
   });
 }
 
-export function checkAndEnforceThreeDayOnlineAutoSwitch() {
+export async function checkAndEnforceThreeDayOnlineAutoSwitch(activeBusinessId?: string | null) {
   if (typeof window === "undefined") return false;
   const isOfflineMode = localStorage.getItem("billflow_offline_mode") === "true";
   if (!isOfflineMode) return false;
@@ -308,7 +341,6 @@ export function checkAndEnforceThreeDayOnlineAutoSwitch() {
   let startTimestamp = localStorage.getItem(timestampKey);
 
   if (!startTimestamp) {
-    // If offline mode is enabled but no start time recorded, set it now
     localStorage.setItem(timestampKey, now.toString());
     return false;
   }
@@ -317,27 +349,34 @@ export function checkAndEnforceThreeDayOnlineAutoSwitch() {
   const elapsed = now - parseInt(startTimestamp, 10);
 
   if (elapsed >= THREE_DAYS_MS) {
-    // Exceeded 3 days! Automatically switch back to online mode
     localStorage.setItem("billflow_offline_mode", "false");
     localStorage.removeItem(timestampKey);
     window.dispatchEvent(new Event("billflow_offline_change"));
 
-    // Push notification / activity log for admin
     try {
-      const businessId = localStorage.getItem("billflow_active_business_id") || "default";
-      // We record an in-app notification in Firestore if db is reachable or queue locally
+      const businessId = activeBusinessId || localStorage.getItem("billflow_active_business_id") || "default";
+
+      // The browser only sends the event to the protected server route. The
+      // server records admin visibility data and delivers the email, while the
+      // local copy keeps the alert visible if the network drops again.
+      if (navigator.onLine && businessId !== "default") {
+        await postAuthenticatedOfflineRequest("/api/offline-sync", {
+          action: "auto_switch",
+          businessId,
+        });
+      }
+
       const notifKey = "billflow_admin_notifications";
       const existingNotifs = JSON.parse(localStorage.getItem(notifKey) || "[]");
-      const newNotif = {
-        id: crypto.randomUUID(),
+      existingNotifs.unshift({
+        id: createOfflineId(),
         businessId,
         title: "Automatic Online Sync Triggered",
-        message: "The 3-day offline limit was reached. Account automatically switched back to Online mode and data sync has started.",
+        message: "The 3-day offline limit was reached. Account automatically switched back to Online mode.",
         type: "alert",
         read: false,
         createdAt: Date.now()
-      };
-      existingNotifs.unshift(newNotif);
+      });
       localStorage.setItem(notifKey, JSON.stringify(existingNotifs));
     } catch (e) {
       console.error("Failed to log admin notification:", e);

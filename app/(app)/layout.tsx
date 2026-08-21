@@ -7,14 +7,15 @@ import { useAuth } from "@/lib/auth-context";
 import Sidebar from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
 import { cn } from "@/lib/utils";
-import { checkLowStockAndNotify, clearOldNotifications, createInvoice, createPayment } from "@/lib/db";
-import { syncOfflineSales, syncOfflineInvoices, syncOfflinePayments } from "@/lib/offline-sync";
+import { checkLowStockAndNotify, clearOldNotifications } from "@/lib/db";
+import { syncAllOfflineData, reportOfflineSyncTelemetry, checkAndEnforceThreeDayOnlineAutoSwitch, postAuthenticatedOfflineRequest } from "@/lib/offline-sync";
 import { createPosSale } from "@/lib/pos-api";
+import toast from "react-hot-toast";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, businessId, role, permissions } = useAuth();
   const router = useRouter();
-  const pathname = usePathname();
+  const pathname = usePathname() ?? "/dashboard";
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   useEffect(() => {
@@ -49,25 +50,61 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [businessId, role]);
 
   useEffect(() => {
-    const syncAll = async () => {
-      const isOnline = navigator.onLine && localStorage.getItem("billflow_offline_mode") !== "true";
-      if (!isOnline) return;
+    if (!businessId) return;
+    let cancelled = false;
 
-      try {
-        await Promise.all([
-          syncOfflineSales(createPosSale),
-          syncOfflineInvoices(createInvoice),
-          syncOfflinePayments(createPayment)
-        ]);
-      } catch (err) {
-        console.error("Auto-sync failed:", err);
+    const enforceOfflineLimit = async () => {
+      const switched = await checkAndEnforceThreeDayOnlineAutoSwitch(businessId);
+      if (switched && !cancelled) {
+        toast.success("Automatic sync: 3-day offline limit reached. Switched back to Online mode.");
       }
     };
 
-    const interval = setInterval(syncAll, 30000); // Sync every 30 seconds
-    syncAll();
-    return () => clearInterval(interval);
-  }, []);
+    void enforceOfflineLimit();
+    const interval = window.setInterval(() => { void enforceOfflineLimit(); }, 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [businessId]);
+
+  useEffect(() => {
+    if (!businessId) return;
+    let syncInFlight = false;
+
+    const syncAll = async () => {
+      const isOnline = navigator.onLine && localStorage.getItem("billflow_offline_mode") !== "true";
+      if (!isOnline || syncInFlight) return;
+
+      syncInFlight = true;
+      try {
+        const result = await syncAllOfflineData({
+          sale: async (data: any) => createPosSale({ ...data, shiftId: data.shiftId }),
+          invoice: async (data: any) => postAuthenticatedOfflineRequest("/api/invoices", { ...data, businessId }),
+          payment: async (data: any) => postAuthenticatedOfflineRequest("/api/payments", { ...data, businessId }),
+          folio: async (data: any) => postAuthenticatedOfflineRequest("/api/hotel/folio-items", { ...data, businessId }),
+        });
+        await reportOfflineSyncTelemetry(businessId, result);
+      } catch (err) {
+        console.error("Auto-sync failed:", err);
+      } finally {
+        syncInFlight = false;
+      }
+    };
+
+    // Sync immediately on network restoration and when offline mode is disabled.
+    window.addEventListener("online", syncAll);
+    window.addEventListener("billflow_offline_change", syncAll);
+
+    const interval = window.setInterval(() => { void syncAll(); }, 30_000);
+    void syncAll();
+
+    return () => {
+      window.removeEventListener("online", syncAll);
+      window.removeEventListener("billflow_offline_change", syncAll);
+      window.clearInterval(interval);
+    };
+  }, [businessId]);
 
   if (loading || !user) {
     return (

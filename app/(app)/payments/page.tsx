@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { getPayments, getInvoices, getBusinessProfile, createPayment, getClients, deletePayment, Payment, Invoice, BusinessProfile, Client, PaymentMethod } from "@/lib/db";
-import { deleteOfflinePayment, deleteOfflinePOSSale } from "@/lib/offline-sync";
+import { deleteOfflinePayment, deleteOfflinePOSSale, queueOfflinePayment } from "@/lib/offline-sync";
 import { Download, ReceiptText, Trash2 } from "lucide-react";
 import { formatCedi, formatMoney } from "@/lib/utils";
 import { Timestamp } from "firebase/firestore";
@@ -122,23 +122,17 @@ export default function PaymentsPage() {
       const isOnline = navigator.onLine && localStorage.getItem("billflow_offline_mode") !== "true";
       
       if (!isOnline) {
-        const offlinePayments = JSON.parse(localStorage.getItem("billflow_offline_payments") || "[]");
-        const newOfflinePayment = {
-          id: crypto.randomUUID(),
-          data: {
-            userId: user.uid,
-            businessId,
-            clientId: form.clientId,
-            clientName: client?.name ?? "Unknown",
-            method: form.method,
-            reference: form.reference || `REF-OFFLINE-${Date.now()}`,
-            amount: parseFloat(form.amount),
-            status: "success",
-          },
-          timestamp: Date.now()
-        };
-        offlinePayments.push(newOfflinePayment);
-        localStorage.setItem("billflow_offline_payments", JSON.stringify(offlinePayments));
+        const queued = queueOfflinePayment({
+          userId: user.uid,
+          businessId,
+          clientId: form.clientId,
+          clientName: client?.name ?? "Unknown",
+          method: form.method,
+          reference: form.reference || `REF-OFFLINE-${Date.now()}`,
+          amount: parseFloat(form.amount),
+          status: "success",
+        });
+        if (!queued) throw new Error("Offline storage is unavailable");
         toast.success("Payment recorded offline! Will sync when online.");
       } else {
         await createPayment({

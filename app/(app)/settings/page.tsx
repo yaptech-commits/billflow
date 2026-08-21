@@ -8,7 +8,7 @@ import {
   DEFAULT_ACCENT_COLOR, MAX_LOGO_BYTES, CURRENCIES, DEFAULT_CURRENCY,
   DEFAULT_TAX_RATE, DEFAULT_TAX_LABEL,
 } from "@/lib/db";
-import { checkAndEnforceThreeDayOnlineAutoSwitch, getOfflineSummary, syncAllOfflineData } from "@/lib/offline-sync";
+import { checkAndEnforceThreeDayOnlineAutoSwitch, clearAllOfflineData, getOfflineSummary, postAuthenticatedOfflineRequest, syncAllOfflineData } from "@/lib/offline-sync";
 import { getDocs, collection, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import toast from "react-hot-toast";
@@ -145,16 +145,26 @@ export default function SettingsPage() {
   });
 
   useEffect(() => {
-    // Check 3-day automatic online transition rule on mount
-    const switched = checkAndEnforceThreeDayOnlineAutoSwitch();
-    if (switched) {
-      toast.success("Automatic sync: 3-day offline limit reached. Switched back to Online mode and syncing data!");
-    }
+    let cancelled = false;
 
-    const isOffline = localStorage.getItem("billflow_offline_mode") === "true";
-    setToggles(t => ({ ...t, offlineMode: isOffline }));
-    setOfflineSummary(getOfflineSummary());
-  }, []);
+    const initializeOfflineState = async () => {
+      // Enforce the three-day limit only for the authenticated business context.
+      const switched = businessId
+        ? await checkAndEnforceThreeDayOnlineAutoSwitch(businessId)
+        : false;
+      if (switched && !cancelled) {
+        toast.success("Automatic sync: 3-day offline limit reached. Switched back to Online mode and syncing data!");
+      }
+
+      if (cancelled) return;
+      const isOffline = localStorage.getItem("billflow_offline_mode") === "true";
+      setToggles(t => ({ ...t, offlineMode: isOffline }));
+      setOfflineSummary(getOfflineSummary());
+    };
+
+    void initializeOfflineState();
+    return () => { cancelled = true; };
+  }, [businessId]);
 
   const toggle = (key: keyof typeof toggles) => {
     const newValue = !toggles[key];
@@ -182,15 +192,13 @@ export default function SettingsPage() {
       return;
     }
 
-    localStorage.removeItem("billflow_offline_sales");
-    localStorage.removeItem("billflow_offline_invoices");
-    localStorage.removeItem("billflow_offline_payments");
+    clearAllOfflineData();
     toast.success("Offline data cleared successfully");
     window.dispatchEvent(new Event("billflow_refresh"));
   };
 
   const handleSave = async () => {
-    if (!auth.currentUser) return;
+    if (!auth?.currentUser) return;
     setSaving(true);
     await updateProfile(auth.currentUser, { displayName: name });
     toast.success("Profile updated ✅");
@@ -211,7 +219,7 @@ export default function SettingsPage() {
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || "Could not delete account data");
       toast.success("Your BillFlow account, email login, and business data were permanently deleted.");
-      await auth.signOut();
+      if (auth) await auth.signOut();
       window.location.href = "/auth/login";
     } catch (err: any) {
       toast.error(err.message || "Could not delete account data");
@@ -519,33 +527,10 @@ export default function SettingsPage() {
               const t = toast.loading("Syncing offline queue...");
               try {
                 const res = await syncAllOfflineData({
-                  sale: async (data: any) => {
-                    const r = await fetch("/api/pos/sales", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify(data),
-                    });
-                    if (!r.ok) throw new Error("Sync failed");
-                    return r.json();
-                  },
-                  invoice: async (data: any) => {
-                    const r = await fetch("/api/invoices", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify(data),
-                    });
-                    if (!r.ok) throw new Error("Sync failed");
-                    return r.json();
-                  },
-                  payment: async (data: any) => {
-                    const r = await fetch("/api/payments", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify(data),
-                    });
-                    if (!r.ok) throw new Error("Sync failed");
-                    return r.json();
-                  }
+                  sale: async (data: any) => postAuthenticatedOfflineRequest("/api/pos/sales", { ...data, businessId }),
+                  invoice: async (data: any) => postAuthenticatedOfflineRequest("/api/invoices", { ...data, businessId }),
+                  payment: async (data: any) => postAuthenticatedOfflineRequest("/api/payments", { ...data, businessId }),
+                  folio: async (data: any) => postAuthenticatedOfflineRequest("/api/hotel/folio-items", { ...data, businessId }),
                 });
                 setOfflineSummary(getOfflineSummary());
                 if (res.synced > 0) {
@@ -626,9 +611,11 @@ export default function SettingsPage() {
               }
               const t = toast.loading("Generating Excel workbook...");
               try {
-                const invSnap = await getDocs(query(collection(db, "invoices"), where("businessId", "==", businessId)));
-                const paySnap = await getDocs(query(collection(db, "payments"), where("businessId", "==", businessId)));
-                const prodSnap = await getDocs(query(collection(db, "products"), where("businessId", "==", businessId)));
+                if (!db) throw new Error("Firestore is not configured");
+                const firestore = db;
+                const invSnap = await getDocs(query(collection(firestore, "invoices"), where("businessId", "==", businessId)));
+                const paySnap = await getDocs(query(collection(firestore, "payments"), where("businessId", "==", businessId)));
+                const prodSnap = await getDocs(query(collection(firestore, "products"), where("businessId", "==", businessId)));
 
                 const startDate = exportStartDate ? new Date(exportStartDate).getTime() : 0;
                 const endDate = exportEndDate ? new Date(exportEndDate).getTime() + 86400000 : Infinity;
@@ -744,7 +731,9 @@ export default function SettingsPage() {
               }
               const t = toast.loading("Exporting invoices CSV...");
               try {
-                const snap = await getDocs(query(collection(db, "invoices"), where("businessId", "==", businessId)));
+                if (!db) throw new Error("Firestore is not configured");
+                const firestore = db;
+                const snap = await getDocs(query(collection(firestore, "invoices"), where("businessId", "==", businessId)));
                 const startDate = exportStartDate ? new Date(exportStartDate).getTime() : 0;
                 const endDate = exportEndDate ? new Date(exportEndDate).getTime() + 86400000 : Infinity;
 
@@ -797,7 +786,9 @@ export default function SettingsPage() {
               }
               const t = toast.loading("Exporting transactions CSV...");
               try {
-                const snap = await getDocs(query(collection(db, "payments"), where("businessId", "==", businessId)));
+                if (!db) throw new Error("Firestore is not configured");
+                const firestore = db;
+                const snap = await getDocs(query(collection(firestore, "payments"), where("businessId", "==", businessId)));
                 const startDate = exportStartDate ? new Date(exportStartDate).getTime() : 0;
                 const endDate = exportEndDate ? new Date(exportEndDate).getTime() + 86400000 : Infinity;
 

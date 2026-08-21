@@ -10,7 +10,8 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { BedDouble, CheckCircle2, CircleDollarSign, DoorOpen, LogOut, Plus, Printer, Search, UserRound, Users, X } from "lucide-react";
 import HotelAccessGuard, { useHotelContext } from "@/components/hotel/HotelAccessGuard";
-import { createPosSale, PosSaleResult } from "@/lib/pos-api";
+import { createPosSale, PosSaleResult, PosSaleRequest } from "@/lib/pos-api";
+import { queueOfflineSale } from "@/lib/offline-sync";
 import {
   FolioItem,
   GuestFolio,
@@ -185,7 +186,7 @@ function RoomPosContent() {
     setPosting(true);
     try {
       const idempotencyKey = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `room-pos-${Date.now()}`;
-      const result = await createPosSale({
+      const saleData: PosSaleRequest = {
         idempotencyKey,
         shiftId: activeShift.id,
         customerName: selectedReservation.guestName,
@@ -195,9 +196,31 @@ function RoomPosContent() {
         reference: `ROOM-${selectedRoom.roomNumber}-${Date.now().toString(36).toUpperCase()}`,
         roomCharge: includeRoomCharge && stayBalance > 0 ? { description: `Room ${selectedRoom.roomNumber} · ${nights} night${nights === 1 ? "" : "s"} stay balance`, quantity: 1, unitPrice: stayBalance } : undefined,
         hotelContext: { propertyId, reservationId: selectedReservation.id, guestId: selectedReservation.guestId, roomId: selectedRoom.id, roomNumber: selectedRoom.roomNumber, checkout: checkoutAfterPosting },
-      });
-      setLastSale(result);
-      toast.success(checkoutAfterPosting ? "Folio posted and guest checked out" : result.amountPaid && result.amountPaid < result.amount ? "Partial payment posted to folio" : "Charge posted to guest folio");
+      };
+      const offline = typeof window !== "undefined" && (!navigator.onLine || localStorage.getItem("billflow_offline_mode") === "true");
+      if (offline) {
+        const queued = queueOfflineSale({ ...saleData, businessId, userId: user.uid });
+        if (!queued) throw new Error("Offline queue is unavailable on this device");
+        const localResult: PosSaleResult = {
+          invoiceId: `OFFLINE-${queued.id.slice(0, 8)}`,
+          amount: totalDue,
+          subtotal,
+          taxAmount,
+          discountAmount: 0,
+          amountPaid: amountToApply,
+          items: [
+            ...(includeRoomCharge && stayBalance > 0 ? [{ productId: `room-${selectedRoom.id}`, productName: `Room ${selectedRoom.roomNumber} · ${nights} night${nights === 1 ? "" : "s"} stay balance`, quantity: 1, unitPrice: stayBalance } as any] : []),
+            ...extraLines.map(line => ({ productId: line.product.id!, productName: line.product.name, quantity: line.quantity, unitPrice: Number(line.product.price || 0) } as any)),
+          ],
+          duplicate: false,
+        };
+        setLastSale(localResult);
+        toast.success(checkoutAfterPosting ? "Folio charge queued; checkout will complete when online" : "Folio charge saved offline; it will sync when online");
+      } else {
+        const result = await createPosSale(saleData);
+        setLastSale(result);
+        toast.success(checkoutAfterPosting ? "Folio posted and guest checked out" : result.amountPaid && result.amountPaid < result.amount ? "Partial payment posted to folio" : "Charge posted to guest folio");
+      }
       setExtraLines([]);
       setProductSearch("");
       setAmountPaidInput("");

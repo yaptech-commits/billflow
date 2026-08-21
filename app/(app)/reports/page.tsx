@@ -18,27 +18,79 @@ export default function ReportsPage() {
     if (!user || !businessId) return;
     const invoiceOpts = role === "salesperson" ? { onlyUserId: user.uid } : undefined;
     Promise.all([getInvoices(businessId, invoiceOpts), getPayments(businessId)]).then(([inv, pay]) => {
-      // Merge with offline records
-      const offlineSales = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("billflow_offline_sales") || "[]") : [];
-      
-      const offlineInvoices: Invoice[] = offlineSales.map((s: any) => ({
-        id: s.id,
-        amount: s.data.amount || s.data.items.reduce((sum: number, l: any) => sum + (l.quantity * l.unitPrice), 0),
-        status: "paid",
-        issuedAt: { toDate: () => new Date(s.timestamp) } as any,
-        isOffline: true
-      } as any));
+      // Merge every unsynced queue into the report so offline activity remains
+      // visible until the authenticated reconnect worker removes it.
+      const parseQueue = (key: string) => {
+        if (typeof window === "undefined") return [];
+        try {
+          const parsed = JSON.parse(localStorage.getItem(key) || "[]");
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return [];
+        }
+      };
+      const offlineSales = parseQueue("billflow_offline_sales");
+      const manualOfflineInvoices = parseQueue("billflow_offline_invoices");
+      const manualOfflinePayments = parseQueue("billflow_offline_payments");
+      const isVisible = (record: any) => {
+        const data = record?.data || {};
+        return data.businessId === businessId && (role !== "salesperson" || data.userId === user.uid);
+      };
+      const offlineDate = (timestamp: unknown) => ({ toDate: () => new Date(typeof timestamp === "number" ? timestamp : Date.now()) }) as any;
+      const saleAmount = (s: any) => Number(s?.data?.amount) || (Array.isArray(s?.data?.items) ? s.data.items.reduce((sum: number, l: any) => sum + (Number(l.quantity) || 0) * (Number(l.unitPrice) || 0), 0) : 0);
 
-      const offlinePayments: Payment[] = offlineSales.map((s: any) => ({
-        id: s.id,
-        amount: s.data.amount || s.data.items.reduce((sum: number, l: any) => sum + (l.quantity * l.unitPrice), 0),
-        method: s.data.paymentMethod || s.data.method,
-        status: "success",
-        createdAt: { toDate: () => new Date(s.timestamp) } as any,
-        isOffline: true
-      } as any));
+      const offlineInvoices: Invoice[] = [
+        ...offlineSales.filter(isVisible).map((s: any) => ({
+          id: s.id,
+          businessId,
+          userId: s.data.userId || user.uid,
+          clientId: s.data.clientId || "",
+          clientName: s.data.customerName || "Walk-in Customer",
+          amount: saleAmount(s),
+          amountPaid: s.data.amountPaid ?? saleAmount(s),
+          status: "paid",
+          paymentMethod: s.data.paymentMethod || s.data.method || "cash",
+          issuedAt: offlineDate(s.timestamp),
+          dueAt: null,
+          isOffline: true,
+        } as any)),
+        ...manualOfflineInvoices.filter(isVisible).map((s: any) => ({
+          ...s.data,
+          id: s.id,
+          businessId,
+          userId: s.data.userId || user.uid,
+          amount: Number(s.data.amount) || 0,
+          issuedAt: offlineDate(s.timestamp),
+          dueAt: s.data.dueDate ? offlineDate(new Date(s.data.dueDate).getTime()) : null,
+          isOffline: true,
+        } as any)),
+      ];
 
-      setInvoices([...offlineInvoices, ...inv]); 
+      const offlinePayments: Payment[] = [
+        ...offlineSales.filter(isVisible).map((s: any) => ({
+          id: `sale-payment-${s.id}`,
+          businessId,
+          userId: s.data.userId || user.uid,
+          clientId: s.data.clientId || "",
+          clientName: s.data.customerName || "Walk-in Customer",
+          amount: saleAmount(s),
+          method: s.data.paymentMethod || s.data.method || "cash",
+          status: "success",
+          createdAt: offlineDate(s.timestamp),
+          isOffline: true,
+        } as any)),
+        ...manualOfflinePayments.filter(isVisible).map((s: any) => ({
+          ...s.data,
+          id: s.id,
+          businessId,
+          userId: s.data.userId || user.uid,
+          amount: Number(s.data.amount) || 0,
+          createdAt: offlineDate(s.timestamp),
+          isOffline: true,
+        } as any)),
+      ];
+
+      setInvoices([...offlineInvoices, ...inv]);
       setPayments([...offlinePayments, ...pay]);
     });
   };

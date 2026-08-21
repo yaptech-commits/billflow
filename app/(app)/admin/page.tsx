@@ -7,7 +7,7 @@ import {
 import { sendPasswordResetEmail } from "firebase/auth";
 import { db, auth } from "@/lib/firebase";
 import { approveBusinessAccount, BusinessProfile, BusinessModule, Staff, Product, Invoice } from "@/lib/db";
-import { SyncTelemetry } from "@/lib/offline-sync";
+import { postAuthenticatedOfflineRequest, SyncTelemetry } from "@/lib/offline-sync";
 import { formatMoney, cn } from "@/lib/utils";
 import { formatPlanPrice, getManagementPlanDetails, normalizeManagementPlan } from "@/lib/management-plans";
 import { 
@@ -62,6 +62,7 @@ export default function AdminPage() {
   const [search, setSearch] = useState("");
   const [activeAdminTab, setActiveAdminTab] = useState<"accounts" | "sync">("accounts");
   const [telemetryByBusiness, setTelemetryByBusiness] = useState<Record<string, SyncTelemetry>>({});
+  const [offlineAlerts, setOfflineAlerts] = useState<Array<{ id: string; businessId: string; type: string; title: string; message: string; severity: string; emailStatus?: string; createdAt?: string | null }>>([]);
   const [syncLoading, setSyncLoading] = useState(false);
 
   useEffect(() => {
@@ -74,16 +75,23 @@ export default function AdminPage() {
   const fetchSyncTelemetry = async () => {
     setSyncLoading(true);
     try {
-      const snapshot = await getDocs(collection(db, "syncTelemetry"));
-      const nextTelemetry: Record<string, SyncTelemetry> = {};
-      snapshot.docs.forEach(snapshotDoc => {
-        const data = snapshotDoc.data() as SyncTelemetry;
-        if (data.businessId) nextTelemetry[data.businessId] = data;
+      if (!user) throw new Error("Super Admin session is not ready");
+      const token = await user.getIdToken();
+      const response = await fetch("/api/offline-sync", {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
       });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || "Unable to load sync telemetry");
+      const nextTelemetry: Record<string, SyncTelemetry> = {};
+      for (const row of payload.businesses || []) {
+        if (row.telemetry?.businessId) nextTelemetry[row.telemetry.businessId] = row.telemetry as SyncTelemetry;
+      }
       setTelemetryByBusiness(nextTelemetry);
+      setOfflineAlerts(Array.isArray(payload.alerts) ? payload.alerts : []);
     } catch (error) {
       console.error("Failed to fetch sync telemetry:", error);
-      toast.error("Unable to load sync telemetry");
+      toast.error(error instanceof Error ? error.message : "Unable to load sync telemetry");
     } finally {
       setSyncLoading(false);
     }
@@ -92,11 +100,9 @@ export default function AdminPage() {
   const requestBusinessSync = async (business: BusinessProfile) => {
     const t = toast.loading(`Requesting sync for ${business.businessName}...`);
     try {
-      await addDoc(collection(db, "syncCommands"), {
+      await postAuthenticatedOfflineRequest("/api/offline-sync", {
+        action: "request_sync",
         businessId: business.businessId,
-        requestedBy: user?.uid || "super_admin",
-        status: "requested",
-        createdAt: serverTimestamp()
       });
       toast.success(`Sync request queued for ${business.businessName}`, { id: t });
     } catch (error) {
@@ -208,7 +214,9 @@ export default function AdminPage() {
     const newStatus = currentStatus === "suspended" ? "active" : "suspended";
     const t = toast.loading(`${newStatus === "suspended" ? "Suspending" : "Activating"} account...`);
     try {
-      await updateDoc(doc(db, "businessProfiles", id), { status: newStatus });
+      if (!db) throw new Error("Firestore is not configured");
+      const firestore = db;
+      await updateDoc(doc(firestore, "businessProfiles", id), { status: newStatus });
       toast.success(`Account ${newStatus}`, { id: t });
       fetchBusinesses();
     } catch (e) {
@@ -224,6 +232,8 @@ export default function AdminPage() {
   const offlineAccounts = telemetryRows.filter(row => row.telemetry?.offlineMode).length;
   const queuedItems = telemetryRows.reduce((total, row) => total + (row.telemetry?.total || 0), 0);
   const failedAccounts = telemetryRows.filter(row => (row.telemetry?.lastSyncResult?.failed || 0) > 0).length;
+  const alertAccounts = new Set(offlineAlerts.filter(alert => alert.severity === "warning" || alert.severity === "critical").map(alert => alert.businessId)).size;
+  const recentOfflineAlerts = offlineAlerts.slice(0, 8);
 
   return (
     <div className="space-y-6">
@@ -283,6 +293,11 @@ export default function AdminPage() {
               <p className={`text-2xl font-bold mt-1 ${failedAccounts > 0 ? "text-red-400" : "text-green-400"}`}>{failedAccounts}</p>
               <p className="text-xs text-muted mt-1">Last reported sync result</p>
             </div>
+            <div className="card">
+              <p className="text-xs text-muted uppercase font-mono">Alerting Accounts</p>
+              <p className={`text-2xl font-bold mt-1 ${alertAccounts > 0 ? "text-red-400" : "text-green-400"}`}>{alertAccounts}</p>
+              <p className="text-xs text-muted mt-1">Failed sync and low-stock alerts</p>
+            </div>
           </div>
 
           <div className="card">
@@ -306,6 +321,7 @@ export default function AdminPage() {
                     <th className="py-3 px-4">Queue</th>
                     <th className="py-3 px-4">Last Seen</th>
                     <th className="py-3 px-4">Last Result</th>
+                    <th className="py-3 px-4">Alerts</th>
                     <th className="py-3 px-4 text-right">Action</th>
                   </tr>
                 </thead>
@@ -335,6 +351,9 @@ export default function AdminPage() {
                         <td className="py-3 px-4 text-xs">
                           {!telemetry?.lastSyncResult ? <span className="text-muted">No sync result</span> : failedCount > 0 ? <span className="text-red-400">{telemetry.lastSyncResult.synced} synced · {failedCount} failed</span> : <span className="text-green-400">{telemetry.lastSyncResult.synced} synced</span>}
                         </td>
+                        <td className="py-3 px-4 text-xs">
+                          {(() => { const count = offlineAlerts.filter(alert => alert.businessId === business.businessId).length; return count > 0 ? <span className="text-gold">{count} recent</span> : <span className="text-muted">None</span>; })()}
+                        </td>
                         <td className="py-3 px-4 text-right">
                           <button onClick={() => requestBusinessSync(business)} className="btn-ghost text-xs border border-border px-2.5 py-1 hover:bg-gold/10 hover:text-gold">
                             Request Sync
@@ -347,6 +366,38 @@ export default function AdminPage() {
               </table>
             </div>
             {offlineAccounts > 0 && <p className="text-xs text-gold mt-4">{offlineAccounts} account{offlineAccounts === 1 ? " is" : "s are"} currently reporting offline mode. The 72-hour automatic online transition remains enforced on those clients.</p>}
+          </div>
+
+          <div className="card">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-lg font-bold text-white">Recent Offline Alerts</h2>
+                <p className="text-xs text-muted mt-1">Operational alerts are deduplicated by business and day to avoid notification spam.</p>
+              </div>
+              <span className="text-xs text-muted">{offlineAlerts.length} retained</span>
+            </div>
+            {recentOfflineAlerts.length === 0 ? (
+              <p className="py-6 text-sm text-muted text-center">No offline alerts have been reported.</p>
+            ) : (
+              <div className="space-y-3">
+                {recentOfflineAlerts.map(alert => (
+                  <div key={alert.id} className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-border pb-3 last:border-0 last:pb-0">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className={`h-2 w-2 rounded-full ${alert.severity === "critical" ? "bg-red-500" : alert.severity === "warning" ? "bg-gold" : "bg-green-400"}`} />
+                        <p className="text-sm font-medium text-white truncate">{alert.title}</p>
+                        <span className="text-[10px] uppercase text-muted">{alert.type.replaceAll("_", " ")}</span>
+                      </div>
+                      <p className="text-xs text-muted mt-1 truncate">{alert.businessId} · {alert.message}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className={`text-xs ${alert.emailStatus === "sent" ? "text-green-400" : alert.emailStatus === "failed" ? "text-red-400" : "text-muted"}`}>Email: {alert.emailStatus || "pending"}</p>
+                      <p className="text-[10px] text-muted mt-1">{formatSyncTimestamp(alert.createdAt)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       ) : (
@@ -491,11 +542,13 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
     }
 
     try {
+      if (!db) throw new Error("Firestore is not configured");
+      const firestore = db;
       const [p, i, s, pay] = await Promise.all([
-        getDocs(query(collection(db, "products"), where("businessId", "==", business.businessId))),
-        getDocs(query(collection(db, "invoices"), where("businessId", "==", business.businessId))),
-        getDocs(query(collection(db, "staff"), where("businessId", "==", business.businessId))),
-        getDocs(query(collection(db, "payments"), where("businessId", "==", business.businessId)))
+        getDocs(query(collection(firestore, "products"), where("businessId", "==", business.businessId))),
+        getDocs(query(collection(firestore, "invoices"), where("businessId", "==", business.businessId))),
+        getDocs(query(collection(firestore, "staff"), where("businessId", "==", business.businessId))),
+        getDocs(query(collection(firestore, "payments"), where("businessId", "==", business.businessId)))
       ]);
       
       const totalRevenue = pay.docs.reduce((acc, doc) => acc + (doc.data().amount || 0), 0);
@@ -528,6 +581,8 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
     if (!tab) return;
     setListLoading(true);
     try {
+      if (!db) throw new Error("Firestore is not configured");
+      const firestore = db;
       const collectionName = {
         products: "products",
         invoices: "invoices",
@@ -538,7 +593,7 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
         po: "purchaseOrders"
       }[tab];
 
-      const snap = await getDocs(query(collection(db, collectionName), where("businessId", "==", business.businessId)));
+      const snap = await getDocs(query(collection(firestore, collectionName), where("businessId", "==", business.businessId)));
       setListData(snap.docs.map(d => ({ ...d.data(), id: d.id })));
     } catch (e) {
       toast.error("Failed to fetch data");
@@ -555,6 +610,8 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
     if (!confirm("Are you sure you want to permanently delete this item?")) return;
     const t = toast.loading("Permanently deleting from database...");
     try {
+      if (!db) throw new Error("Firestore is not configured");
+      const firestore = db;
       const collectionName = {
         products: "products",
         invoices: "invoices",
@@ -564,7 +621,7 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
         payments: "payments",
         po: "purchaseOrders"
       }[activeTab!];
-      await deleteDoc(doc(db, collectionName, id));
+      await deleteDoc(doc(firestore, collectionName, id));
       toast.success("Permanently deleted", { id: t });
       await fetchTabData(activeTab);
       await fetchStats(true);
@@ -576,6 +633,8 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
   const handleSaveItem = async () => {
     const t = toast.loading("Saving...");
     try {
+      if (!db) throw new Error("Firestore is not configured");
+      const firestore = db;
       const collectionName = {
         products: "products",
         invoices: "invoices",
@@ -589,9 +648,9 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
       const { id, new: isNew, ...dataToSave } = itemForm;
       
       if (selectedItem?.id && !selectedItem.new) {
-        await updateDoc(doc(db, collectionName, selectedItem.id), dataToSave);
+        await updateDoc(doc(firestore, collectionName, selectedItem.id), dataToSave);
       } else {
-        await addDoc(collection(db, collectionName), {
+        await addDoc(collection(firestore, collectionName), {
           ...dataToSave,
           businessId: business.businessId,
           userId: user?.uid, // Link to superadmin who created it or business owner? Let's use current superadmin.
@@ -611,12 +670,14 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
     if (!editingStaff) return;
     const t = toast.loading("Updating permissions...");
     try {
-      await updateDoc(doc(db, "staff", editingStaff.id!), {
+      if (!db) throw new Error("Firestore is not configured");
+      const firestore = db;
+      await updateDoc(doc(firestore, "staff", editingStaff.id!), {
         permissions: editingStaff.permissions || []
       });
       // Also update staffIndex for real-time rules enforcement
       if (editingStaff.staffUid) {
-        await updateDoc(doc(db, "staffIndex", editingStaff.staffUid), {
+        await updateDoc(doc(firestore, "staffIndex", editingStaff.staffUid), {
           permissions: editingStaff.permissions || []
         });
       }
@@ -632,10 +693,12 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
     const newStatus = staff.status === "active" ? "pending" : "active";
     const t = toast.loading(`${newStatus === "pending" ? "Suspending" : "Activating"} staff...`);
     try {
-      const batch = writeBatch(db);
-      batch.update(doc(db, "staff", staff.id!), { status: newStatus });
+      if (!db) throw new Error("Firestore is not configured");
+      const firestore = db;
+      const batch = writeBatch(firestore);
+      batch.update(doc(firestore, "staff", staff.id!), { status: newStatus });
       if (staff.staffUid) {
-        batch.update(doc(db, "staffIndex", staff.staffUid), { status: newStatus });
+        batch.update(doc(firestore, "staffIndex", staff.staffUid), { status: newStatus });
       }
       await batch.commit();
       toast.success(`Staff ${newStatus === "pending" ? "suspended" : "activated"}`, { id: t });
@@ -672,6 +735,7 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
     if (!confirm(`Send password reset email to ${email}?`)) return;
     const t = toast.loading("Sending reset email...");
     try {
+      if (!auth) throw new Error("Authentication is not configured");
       await sendPasswordResetEmail(auth, email);
       toast.success("Reset email sent", { id: t });
     } catch (e: any) {
@@ -682,7 +746,9 @@ function BusinessCard({ business, user, onUpdate, onSuspend }: { business: Busin
   const handleUpdateBusiness = async () => {
     const t = toast.loading("Updating business profile...");
     try {
-      await updateDoc(doc(db, "businessProfiles", business.businessId), editForm);
+      if (!db) throw new Error("Firestore is not configured");
+      const firestore = db;
+      await updateDoc(doc(firestore, "businessProfiles", business.businessId), editForm);
       toast.success("Business profile updated", { id: t });
       setShowEdit(false);
       onUpdate();
