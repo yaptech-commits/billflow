@@ -336,3 +336,9 @@
 - [x] Verified `pnpm run build`, `git diff --check`, and the dependency tree.
 - [x] Confirmed the new Vercel deployment now serves `/api/health` and `/api/onboarding/payment/webhook` with HTTP 200; no real payment was initiated.
 - [x] Complete final Paystack shared-webhook rollout verification after confirming `BILLFLOW_WEBHOOK_URL` is present in Render; no real payment was initiated.
+
+## Selected Plan Handoff and Automatic Amount Population Follow-up
+- [x] Trace why the payment page reports that the selected plan could not be loaded after registration: the payment page depended only on a pricing API response and showed an empty field when that request failed or lagged.
+- [x] Preserve the selected plan and business identifier across registration-to-payment navigation through URL parameters and a session-scoped fallback for existing pending accounts.
+- [x] Automatically populate the Cash amount from the canonical plan price when available, with server-side invoice pricing remaining authoritative at submission.
+- [x] Verify the production route contract and build; `pnpm run build` and `git diff --check` pass. Commit and push remain pending.

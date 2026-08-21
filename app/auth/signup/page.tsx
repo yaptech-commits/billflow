@@ -89,7 +89,21 @@ export default function SignupPage() {
       // create an owner staff document here: staff is reserved for invited
       // salespeople and Firestore intentionally rejects owner-role staff writes.
       toast.success("Account created! Continue to payment.");
-      const onboardingUrl = `/auth/onboarding-payment?businessId=${encodeURIComponent(businessId)}`;
+      const onboardingQuery = new URLSearchParams({
+        businessId,
+        plan: selectedPlan,
+        ...(selectedPlan === "pro" ? { scale: proBusinessScale } : {}),
+      });
+      try {
+        sessionStorage.setItem("billflow:onboarding-plan", JSON.stringify({
+          businessId,
+          managementPlan: selectedPlan,
+          proBusinessScale: selectedPlan === "pro" ? proBusinessScale : null,
+        }));
+      } catch {
+        // Session storage is only a client-side fallback; server-side pricing remains authoritative.
+      }
+      const onboardingUrl = `/auth/onboarding-payment?${onboardingQuery.toString()}`;
       // Use a full navigation here so the new Firebase session and pending
       // profile cannot race with the App Router transition.
       window.location.replace(onboardingUrl);

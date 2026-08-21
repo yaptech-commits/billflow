@@ -11,21 +11,54 @@ import toast from "react-hot-toast";
 import { Banknote, CheckCircle2, CreditCard, Loader2, Smartphone } from "lucide-react";
 import { getManagementPlanDetails, type ManagementPlan } from "@/lib/management-plans";
 
+function isManagementPlan(value: string | null): value is ManagementPlan {
+  return value === "pro" || value === "standard" || value === "demo";
+}
+
 function PaymentPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const businessId = searchParams?.get("businessId") || "";
   const reference = searchParams?.get("reference") || searchParams?.get("trxref") || "";
+  const planParam = searchParams?.get("plan");
+  const scaleParam = searchParams?.get("scale");
+  const registrationPlan = useMemo(() => {
+    if (isManagementPlan(planParam)) {
+      return { managementPlan: planParam, proBusinessScale: scaleParam === "small" ? "small" as const : "large" as const };
+    }
+    if (typeof window !== "undefined") {
+      try {
+        const stored = JSON.parse(sessionStorage.getItem("billflow:onboarding-plan") || "null") as {
+          businessId?: unknown;
+          managementPlan?: unknown;
+          proBusinessScale?: unknown;
+        } | null;
+        if (stored?.businessId === businessId && isManagementPlan(typeof stored.managementPlan === "string" ? stored.managementPlan : null)) {
+          return {
+            managementPlan: stored.managementPlan,
+            proBusinessScale: stored.proBusinessScale === "small" ? "small" as const : "large" as const,
+          };
+        }
+      } catch {
+        // The URL and authenticated server summary remain the source of truth.
+      }
+    }
+    return null;
+  }, [businessId, planParam, scaleParam]);
+  const fallbackPlanDetails = useMemo(
+    () => (registrationPlan ? getManagementPlanDetails(registrationPlan.managementPlan, registrationPlan.proBusinessScale) : null),
+    [registrationPlan],
+  );
   const [user, setUser] = useState<User | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "momo" | "">("");
   const [loading, setLoading] = useState(false);
   const [confirmationState, setConfirmationState] = useState<"idle" | "confirming" | "approved" | "pending" | "error">(reference ? "confirming" : "idle");
   const [message, setMessage] = useState("");
-  const [amount, setAmount] = useState<number | null>(null);
+  const [amount, setAmount] = useState<number | null>(fallbackPlanDetails?.startupPrice ?? null);
   const [currency, setCurrency] = useState("GHS");
-  const [cashAmount, setCashAmount] = useState("");
-  const [managementPlan, setManagementPlan] = useState<ManagementPlan | null>(null);
-  const [proBusinessScale, setProBusinessScale] = useState<"large" | "small">("large");
+  const [cashAmount, setCashAmount] = useState(fallbackPlanDetails ? String(fallbackPlanDetails.startupPrice) : "");
+  const [managementPlan, setManagementPlan] = useState<ManagementPlan | null>(registrationPlan?.managementPlan ?? null);
+  const [proBusinessScale, setProBusinessScale] = useState<"large" | "small">(registrationPlan?.proBusinessScale ?? "large");
   const [planLoading, setPlanLoading] = useState(true);
   const [planLoadError, setPlanLoadError] = useState("");
 
@@ -60,21 +93,29 @@ function PaymentPageContent() {
         if (!response.ok) throw new Error(payload.error || "The selected plan could not be loaded.");
         if (cancelled) return;
         const trustedAmount = Number(payload.amount || 0);
-        setManagementPlan(payload.managementPlan || null);
-        setProBusinessScale(payload.proBusinessScale === "small" ? "small" : "large");
+        setManagementPlan(payload.managementPlan || registrationPlan?.managementPlan || null);
+        setProBusinessScale(payload.proBusinessScale === "small" ? "small" : registrationPlan?.proBusinessScale || "large");
         setAmount(trustedAmount);
         setCurrency(payload.currency || "GHS");
         setCashAmount(String(trustedAmount));
       } catch (error) {
         if (cancelled) return;
-        setPlanLoadError(error instanceof Error ? error.message : "The selected plan could not be loaded.");
+        if (registrationPlan && fallbackPlanDetails) {
+          setManagementPlan(registrationPlan.managementPlan);
+          setProBusinessScale(registrationPlan.proBusinessScale);
+          setAmount(fallbackPlanDetails.startupPrice);
+          setCashAmount(String(fallbackPlanDetails.startupPrice));
+          setPlanLoadError("The selected plan is being synced. The amount from registration will be checked again securely when you submit.");
+        } else {
+          setPlanLoadError(error instanceof Error ? error.message : "The selected plan could not be loaded.");
+        }
       } finally {
         if (!cancelled) setPlanLoading(false);
       }
     };
     void loadPlanSummary();
     return () => { cancelled = true; };
-  }, [businessId, user]);
+  }, [businessId, user, registrationPlan, fallbackPlanDetails]);
 
   useEffect(() => {
     if (!reference || !businessId || !user) return;
