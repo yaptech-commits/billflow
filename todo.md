@@ -296,3 +296,9 @@
 - [x] Fix the redirect using a route-scoped pending-onboarding exception with cancellation-safe auth lifecycle handling; tenant isolation and approval/payment safeguards remain enforced outside onboarding.
 - [x] Verify the redirect path, production build, and relevant error handling; `pnpm run build` and `git diff --check` pass.
 - [ ] Commit and push the correction with author email `ayindenabawisdom@gmail.com`.
+
+## Registration Redirect Follow-up
+- [x] Inspect the deployed signup/payment route and confirm whether the latest redirect fix is live.
+- [x] Trace the remaining auth, Firestore, and browser navigation risk after account creation; the destination route was healthy, while the client-router transition remained interruptible.
+- [x] Implement and verify a stronger redirect handoff with `window.location.replace()` after account creation; payment and approval controls remain preserved.
+- [ ] Commit and push the follow-up fix with author email `ayindenabawisdom@gmail.com`.

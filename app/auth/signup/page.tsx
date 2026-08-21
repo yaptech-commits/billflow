@@ -9,7 +9,6 @@ import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { getPagesForBusinessType } from "@/lib/business-type-config";
 import { ManagementPlan } from "@/lib/management-plans";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import toast from "react-hot-toast";
 import { Eye, EyeOff } from "lucide-react";
@@ -23,7 +22,6 @@ export default function SignupPage() {
   const [proBusinessScale, setProBusinessScale] = useState<"large" | "small">("large");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,7 +89,10 @@ export default function SignupPage() {
       // create an owner staff document here: staff is reserved for invited
       // salespeople and Firestore intentionally rejects owner-role staff writes.
       toast.success("Account created! Continue to payment.");
-      router.push(`/auth/onboarding-payment?businessId=${encodeURIComponent(businessId)}`);
+      const onboardingUrl = `/auth/onboarding-payment?businessId=${encodeURIComponent(businessId)}`;
+      // Use a full navigation here so the new Firebase session and pending
+      // profile cannot race with the App Router transition.
+      window.location.replace(onboardingUrl);
     } catch (err: unknown) {
       const firebaseError = err as { code?: unknown; message?: unknown } | null;
       const rawMessage = typeof firebaseError?.message === "string"
