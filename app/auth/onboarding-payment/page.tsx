@@ -9,6 +9,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import toast from "react-hot-toast";
 import { Banknote, CheckCircle2, CreditCard, Loader2, Smartphone } from "lucide-react";
+import { getManagementPlanDetails, type ManagementPlan } from "@/lib/management-plans";
 
 function PaymentPageContent() {
   const searchParams = useSearchParams();
@@ -23,6 +24,10 @@ function PaymentPageContent() {
   const [amount, setAmount] = useState<number | null>(null);
   const [currency, setCurrency] = useState("GHS");
   const [cashAmount, setCashAmount] = useState("");
+  const [managementPlan, setManagementPlan] = useState<ManagementPlan | null>(null);
+  const [proBusinessScale, setProBusinessScale] = useState<"large" | "small">("large");
+  const [planLoading, setPlanLoading] = useState(true);
+  const [planLoadError, setPlanLoadError] = useState("");
 
   useEffect(() => {
     if (!auth) return;
@@ -33,6 +38,43 @@ function PaymentPageContent() {
     if (amount == null) return "your onboarding amount";
     return `${amount.toLocaleString("en-GH")} ${currency === "GHS" ? "GH₵" : currency}`;
   }, [amount, currency]);
+
+  const planDetails = useMemo(
+    () => (managementPlan ? getManagementPlanDetails(managementPlan, proBusinessScale) : null),
+    [managementPlan, proBusinessScale],
+  );
+
+  useEffect(() => {
+    if (!businessId || !user) return;
+    let cancelled = false;
+    const loadPlanSummary = async () => {
+      try {
+        setPlanLoading(true);
+        setPlanLoadError("");
+        const token = await user.getIdToken();
+        const response = await fetch(`/api/onboarding/payment/details?businessId=${encodeURIComponent(businessId)}`, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || "The selected plan could not be loaded.");
+        if (cancelled) return;
+        const trustedAmount = Number(payload.amount || 0);
+        setManagementPlan(payload.managementPlan || null);
+        setProBusinessScale(payload.proBusinessScale === "small" ? "small" : "large");
+        setAmount(trustedAmount);
+        setCurrency(payload.currency || "GHS");
+        setCashAmount(String(trustedAmount));
+      } catch (error) {
+        if (cancelled) return;
+        setPlanLoadError(error instanceof Error ? error.message : "The selected plan could not be loaded.");
+      } finally {
+        if (!cancelled) setPlanLoading(false);
+      }
+    };
+    void loadPlanSummary();
+    return () => { cancelled = true; };
+  }, [businessId, user]);
 
   useEffect(() => {
     if (!reference || !businessId || !user) return;
@@ -77,8 +119,9 @@ function PaymentPageContent() {
     }
     if (method === "cash") {
       const parsedCashAmount = Number(cashAmount);
-      if (!cashAmount.trim() || !Number.isFinite(parsedCashAmount) || parsedCashAmount <= 0) {
-        toast.error("Enter the cash amount you are paying.");
+      const requiresPayment = (amount ?? 0) > 0;
+      if (requiresPayment && (!cashAmount.trim() || !Number.isFinite(parsedCashAmount) || parsedCashAmount <= 0)) {
+        toast.error("Enter a valid cash amount for the selected plan.");
         return;
       }
     }
@@ -160,10 +203,11 @@ function PaymentPageContent() {
         <p className="mt-2 text-white/70">Choose how you want to settle your BillFlow onboarding invoice.</p>
       </div>
 
-      {amount != null && amount > 0 && (
+      {amount != null && (
         <div className="mb-6 rounded-2xl border border-white/20 bg-white/10 p-5 text-white">
-          <p className="text-sm font-semibold uppercase tracking-wide text-white/60">Startup amount</p>
+          <p className="text-sm font-semibold uppercase tracking-wide text-white/60">{planDetails?.label || "Selected plan"} startup amount</p>
           <p className="mt-1 text-3xl font-bold">{money}</p>
+          {planDetails?.packageName && <p className="mt-1 text-sm text-white/70">{planDetails.packageName}</p>}
           <p className="mt-2 text-sm text-white/70">Your invoice receipt will be sent to the business email used during registration.</p>
         </div>
       )}
@@ -178,10 +222,16 @@ function PaymentPageContent() {
           inputMode="decimal"
           value={cashAmount}
           onChange={(event) => setCashAmount(event.target.value)}
-          placeholder="Enter the amount paid"
+          placeholder={planLoading ? "Loading selected plan amount…" : "Enter the amount paid"}
           className="mt-2 w-full rounded-xl border border-white/25 bg-white px-4 py-3 text-base font-semibold text-slate-900 outline-none ring-offset-2 placeholder:text-slate-400 focus:ring-2 focus:ring-white"
         />
-        <p className="mt-2 text-xs text-white/65">This field is used for Cash payments. Mobile Money is charged for the full onboarding invoice through Paystack.</p>
+        <p className="mt-2 text-xs text-white/65">
+          {planLoading
+            ? "Loading the amount for your selected plan…"
+            : planDetails
+              ? `Automatically set to ${money} for ${planDetails.label}. You may adjust the cash amount before submitting.`
+              : planLoadError || "This field is used for Cash payments. Mobile Money is charged for the full onboarding invoice through Paystack."}
+        </p>
       </div>
 
       <div className="space-y-4">

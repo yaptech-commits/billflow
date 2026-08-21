@@ -120,6 +120,20 @@ async function resolveOnboardingContext(
   };
 }
 
+export async function getOnboardingPaymentSummary(businessId: string) {
+  const context = await resolveOnboardingContext(businessId);
+  return {
+    businessId: context.businessId,
+    managementPlan: context.managementPlan,
+    proBusinessScale: context.proBusinessScale,
+    amount: context.details.startupPrice,
+    currency: safeString(context.profileData.currency) || "GHS",
+    businessName: context.businessName,
+    packageName: context.details.packageName,
+    recurringDescription: context.details.recurringDescription || null,
+  };
+}
+
 export async function prepareOnboardingInvoice(params: {
   businessId: string;
   paymentMethod: OnboardingPaymentMethod;

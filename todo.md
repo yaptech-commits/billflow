@@ -309,3 +309,9 @@
 - [x] Implement server-side deletion of the Firebase Auth user and all tenant-owned database records, indexes, invitations, payment/onboarding records, and business-scoped references; staff deletion also removes the linked login and access index.
 - [x] Verify deletion behavior without inserting test data; `pnpm run build` and `git diff --check` pass.
 - [x] Commit and push with author email `ayindenabawisdom@gmail.com`; commit `2d16b0ea7aef792b2e2c71ed1c09b09dc6f5af81`.
+
+## Plan-Based Onboarding Payment Amount
+- [x] Inspect the selected-plan pricing source and onboarding cash amount state.
+- [x] Populate the cash amount from the authenticated selected plan's trusted startup price and keep it synchronized with plan context.
+- [x] Preserve valid Cash handling and the full canonical Mobile Money invoice amount; invalid empty/zero Cash submissions remain blocked.
+- [x] Verify the payment route and production build; `pnpm run build` and `git diff --check` pass. Commit and push remain pending.
