@@ -240,3 +240,11 @@
 - [ ] Add secure property-scoped teacher profile creation using the existing staff model.
 - [ ] Add the create-teacher form and success/error feedback to `/school/teachers`.
 - [ ] Run production verification, commit, and push the implementation.
+
+## Registration Plan Selection
+- [x] Inspect the registration page (`app/auth/signup/page.tsx`)
+- [x] Add "Select Plan" section with "Pro Management", "Standard Management", and "Demo Management"
+- [x] Implement interactive pricing details for Pro Management (Lifetime Activation, Startup Price: 3,500 GHS, Monthly Database Upgrade: 500 GHS large scale / 300 GHS small scale)
+- [x] Implement interactive pricing details for Standard Management (Monthly Renewal, Startup Price: 1,500 GHS, Monthly Renewal: 300 GHS)
+- [x] Verify plan interactions in the browser and production build with `pnpm run build`
+- [ ] Commit and push with author email `ayindenabawisdom@gmail.com`

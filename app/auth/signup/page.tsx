@@ -1,5 +1,7 @@
 "use client";
 export const dynamic = "force-dynamic";
+
+// Style reminder: Preserve BillFlow's branded blue glassmorphism surface, white inputs, navy CTA, and mobile-first spacing.
 import { useState } from "react";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { auth } from "@/lib/firebase";
@@ -11,17 +13,25 @@ import Link from "next/link";
 import toast from "react-hot-toast";
 import { Eye, EyeOff } from "lucide-react";
 
+type ManagementPlan = "pro" | "standard" | "demo";
+
 export default function SignupPage() {
   const [businessName, setBusinessName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [businessType, setBusinessType] = useState<"general" | "pharmacy" | "hotel" | "coldstore" | "school">("general");
+  const [selectedPlan, setSelectedPlan] = useState<ManagementPlan | "">("");
+  const [proBusinessScale, setProBusinessScale] = useState<"large" | "small">("large");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedPlan) {
+      toast.error("Please select a management plan to continue.");
+      return;
+    }
     setLoading(true);
     try {
       // 1. Create User
@@ -44,6 +54,8 @@ export default function SignupPage() {
         status: "pending", // New accounts require approval
         allowedPages, // Auto-assign pages based on business type
         createdAt: serverTimestamp(),
+        managementPlan: selectedPlan,
+        proBusinessScale: selectedPlan === "pro" ? proBusinessScale : null,
         currency: "GHS",
         taxRate: 0,
         taxInclusive: false
@@ -154,6 +166,131 @@ export default function SignupPage() {
                   School
                 </button>
               </div>
+            </div>
+
+            <div className="space-y-3">
+              <label className="text-white text-lg font-medium block">Select Plan</label>
+              <div className="grid gap-3 sm:grid-cols-3" role="group" aria-label="Select a BillFlow management plan">
+                <button
+                  type="button"
+                  aria-pressed={selectedPlan === "pro"}
+                  onClick={() => setSelectedPlan("pro")}
+                  className={`min-h-[112px] rounded-xl border px-4 py-3 text-left transition-all ${
+                    selectedPlan === "pro"
+                      ? "border-white bg-white text-[#0066FF] shadow-md"
+                      : "border-white/30 bg-white/10 text-white hover:border-white/60"
+                  }`}
+                >
+                  <span className="block text-base font-bold">Pro Management</span>
+                  <span className={`mt-1 block text-xs ${selectedPlan === "pro" ? "text-[#0066FF]/75" : "text-white/70"}`}>
+                    Lifetime activation
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={selectedPlan === "standard"}
+                  onClick={() => setSelectedPlan("standard")}
+                  className={`min-h-[112px] rounded-xl border px-4 py-3 text-left transition-all ${
+                    selectedPlan === "standard"
+                      ? "border-white bg-white text-[#0066FF] shadow-md"
+                      : "border-white/30 bg-white/10 text-white hover:border-white/60"
+                  }`}
+                >
+                  <span className="block text-base font-bold">Standard Management</span>
+                  <span className={`mt-1 block text-xs ${selectedPlan === "standard" ? "text-[#0066FF]/75" : "text-white/70"}`}>
+                    Monthly renewal
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={selectedPlan === "demo"}
+                  onClick={() => setSelectedPlan("demo")}
+                  className={`min-h-[112px] rounded-xl border px-4 py-3 text-left transition-all ${
+                    selectedPlan === "demo"
+                      ? "border-white bg-white text-[#0066FF] shadow-md"
+                      : "border-white/30 bg-white/10 text-white hover:border-white/60"
+                  }`}
+                >
+                  <span className="block text-base font-bold">Demo Management</span>
+                  <span className={`mt-1 block text-xs ${selectedPlan === "demo" ? "text-[#0066FF]/75" : "text-white/70"}`}>
+                    Explore BillFlow first
+                  </span>
+                </button>
+              </div>
+
+              {selectedPlan === "pro" && (
+                <div className="rounded-2xl border border-white/20 bg-white/10 p-4 text-white">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="font-bold">Pro Management</p>
+                      <p className="mt-1 text-sm text-white/70">Package: Lifetime Activation (Monthly Database Upgrade)</p>
+                    </div>
+                    <span className="whitespace-nowrap text-lg font-bold">3,500 GH₵</span>
+                  </div>
+                  <div className="mt-4 space-y-2 text-sm">
+                    <div className="flex items-center justify-between gap-4 border-t border-white/10 pt-2">
+                      <span className="text-white/70">Startup Price</span>
+                      <span className="font-semibold">3,500 GH₵</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-white/70">Monthly Database Upgrade</span>
+                      <span className="font-semibold">{proBusinessScale === "large" ? "500" : "300"} GH₵ / month</span>
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-white/60">Business scale (optional)</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setProBusinessScale("large")}
+                        className={`rounded-lg border px-3 py-2 text-sm font-semibold transition-all ${
+                          proBusinessScale === "large" ? "border-white bg-white text-[#0066FF]" : "border-white/25 text-white hover:border-white/60"
+                        }`}
+                      >
+                        Large scale · 500 GH₵
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setProBusinessScale("small")}
+                        className={`rounded-lg border px-3 py-2 text-sm font-semibold transition-all ${
+                          proBusinessScale === "small" ? "border-white bg-white text-[#0066FF]" : "border-white/25 text-white hover:border-white/60"
+                        }`}
+                      >
+                        Small scale · 300 GH₵
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {selectedPlan === "standard" && (
+                <div className="rounded-2xl border border-white/20 bg-white/10 p-4 text-white">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="font-bold">Standard Management</p>
+                      <p className="mt-1 text-sm text-white/70">Package: Monthly Renewal</p>
+                    </div>
+                    <span className="whitespace-nowrap text-lg font-bold">1,500 GH₵</span>
+                  </div>
+                  <div className="mt-4 space-y-2 text-sm">
+                    <div className="flex items-center justify-between gap-4 border-t border-white/10 pt-2">
+                      <span className="text-white/70">Startup Price</span>
+                      <span className="font-semibold">1,500 GH₵</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-white/70">Monthly Renewal</span>
+                      <span className="font-semibold">300 GH₵ / month</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {selectedPlan === "demo" && (
+                <div className="rounded-2xl border border-white/20 bg-white/10 p-4 text-sm text-white/80">
+                  <p className="font-bold text-white">Demo Management selected</p>
+                  <p className="mt-1">Use this option to request a BillFlow demonstration before choosing a paid management plan.</p>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
