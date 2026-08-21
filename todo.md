@@ -307,4 +307,5 @@
 - [x] Audit existing owner, staff, and super-admin deletion paths and enumerate all email-linked Firestore collections and auth records.
 - [x] Define secure permanent-deletion rules: verified Firebase ID token, Super Admin or self-owner authorization, exact confirmation phrase, idempotent missing-auth handling, and protection for the Super Admin account.
 - [x] Implement server-side deletion of the Firebase Auth user and all tenant-owned database records, indexes, invitations, payment/onboarding records, and business-scoped references; staff deletion also removes the linked login and access index.
-- [x] Verify deletion behavior without inserting test data; `pnpm run build` and `git diff --check` pass. Commit and push remain pending.
+- [x] Verify deletion behavior without inserting test data; `pnpm run build` and `git diff --check` pass.
+- [x] Commit and push with author email `ayindenabawisdom@gmail.com`; commit `2d16b0ea7aef792b2e2c71ed1c09b09dc6f5af81`.
